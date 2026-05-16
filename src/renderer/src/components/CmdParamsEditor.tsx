@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react'
 import { useStore } from '../store/useStore'
-import { Box, Cpu, Zap, Database, Sliders, Wind, Server, FileText, GitBranch, Search, Star } from 'lucide-react'
+import { Box, Cpu, Zap, Database, Sliders, Wind, Server, FileText, GitBranch, Search, Star, Lock } from 'lucide-react'
 import type { CommandParam } from '../../../shared/types'
 const iconMap: Record<string, React.ReactNode> = {
   Box: <Box size={14} />,
@@ -21,14 +21,18 @@ interface Props {
   onChange?: (args: Record<string, any>) => void
   modelPathFallback?: string
   serverPortFallback?: number
+  disabled?: boolean
 }
-export default function CmdParamsEditor({ templateId, args, onChange, modelPathFallback, serverPortFallback }: Props) {
+export default function CmdParamsEditor({ templateId, args, onChange, modelPathFallback, serverPortFallback, disabled: disabledProp }: Props) {
   const { commandsSchema, updateCard, cards } = useStore()
   const [searchQuery, setSearchQuery] = useState('')
+
+  const card = templateId ? cards.find(c => c.template.id === templateId) : null
+  const isRunning = card?.status === 'running'
+  const disabled = disabledProp || isRunning
   const cmdPreview = useMemo(() => {
     const parts: React.ReactNode[] = []
     parts.push(<span key="base">llama-server</span>)
-    const card = templateId ? cards.find(c => c.template.id === templateId) : null
     const finalModelPath = card?.template.modelPath || modelPathFallback
     if (finalModelPath) {
         parts.push(' ', <span key="arg-m" className="arg">-m</span>, ' ', <span key="val-m" className="val">"{finalModelPath}"</span>)
@@ -108,8 +112,8 @@ export default function CmdParamsEditor({ templateId, args, onChange, modelPathF
         <div className="cmd-input-group">
           {cmd.type === 'boolean' && (
             <div className="toggle-wrap">
-              <label className="toggle">
-                <input type="checkbox" checked={!!val} onChange={(e) => handleUpdate(cmd.arg, e.target.checked)} />
+              <label className="toggle" style={disabled ? { opacity: 0.45, cursor: 'not-allowed' } : {}}>
+                <input type="checkbox" checked={!!val} onChange={(e) => handleUpdate(cmd.arg, e.target.checked)} disabled={disabled} />
                 <span className="toggle-track"></span>
                 <span className="toggle-thumb"></span>
               </label>
@@ -117,32 +121,45 @@ export default function CmdParamsEditor({ templateId, args, onChange, modelPathF
           )}
           {cmd.type === 'number' && (
             <div className="num-input-wrap">
-              <button className="num-btn" onClick={() => handleUpdate(cmd.arg, Math.max((cmd.min ?? -Infinity), (Number(val) || 0) - 1))}>-</button>
+              <button className="num-btn" onClick={() => handleUpdate(cmd.arg, Math.max((cmd.min ?? -Infinity), (Number(val) || 0) - 1))} disabled={disabled}>-</button>
               <input
                 type="number" className="cmd-input num" value={val} placeholder={cmd.default?.toString()} min={cmd.min} max={cmd.max}
                 onChange={(e) => handleUpdate(cmd.arg, e.target.value === '' ? '' : Number(e.target.value))}
+                disabled={disabled}
               />
-              <button className="num-btn" onClick={() => handleUpdate(cmd.arg, Math.min((cmd.max ?? Infinity), (Number(val) || 0) + 1))}>+</button>
+              <button className="num-btn" onClick={() => handleUpdate(cmd.arg, Math.min((cmd.max ?? Infinity), (Number(val) || 0) + 1))} disabled={disabled}>+</button>
             </div>
           )}
           {cmd.type === 'string' && (
-            <input type="text" className="cmd-input" value={val} placeholder={cmd.placeholder || cmd.default?.toString()} onChange={(e) => handleUpdate(cmd.arg, e.target.value)} />
+            <input type="text" className="cmd-input" value={val} placeholder={cmd.placeholder || cmd.default?.toString()} onChange={(e) => handleUpdate(cmd.arg, e.target.value)} disabled={disabled} />
           )}
           {cmd.type === 'select' && (
-            <select className="cmd-select" value={val} onChange={(e) => handleUpdate(cmd.arg, e.target.value)}>
+            <select className="cmd-select" value={val} onChange={(e) => handleUpdate(cmd.arg, e.target.value)} disabled={disabled}>
               <option value="">Default</option>
               {cmd.options?.map(opt => <option key={opt} value={opt}>{opt}</option>)}
             </select>
           )}
         </div>
         {cmd.type === 'text' && (
-          <textarea className="cmd-textarea" value={val} placeholder={cmd.placeholder} onChange={(e) => handleUpdate(cmd.arg, e.target.value)} />
+          <textarea className="cmd-textarea" value={val} placeholder={cmd.placeholder} onChange={(e) => handleUpdate(cmd.arg, e.target.value)} disabled={disabled} />
         )}
       </div>
     )
   }
   return (
     <div className="params-editor-container">
+      {disabled && isRunning && (
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 8,
+          padding: '8px 12px', marginBottom: 12, borderRadius: 8,
+          background: 'var(--surface-2, rgba(255,255,255,0.04))',
+          border: '1px solid var(--border, rgba(255,255,255,0.08))',
+          color: 'var(--text-muted)', fontSize: 12
+        }}>
+          <Lock size={13} style={{ flexShrink: 0, opacity: 0.7 }} />
+          Parameters are locked while the model is running. Stop it first to make changes.
+        </div>
+      )}
       <div className="params-search-box">
         <Search size={16} style={{ color: 'var(--text-muted)' }} />
         <input 
@@ -153,7 +170,7 @@ export default function CmdParamsEditor({ templateId, args, onChange, modelPathF
           onChange={e => setSearchQuery(e.target.value)}
         />
       </div>
-      <div className="params-scroll-area">
+      <div className="params-scroll-area" style={disabled ? { opacity: 0.55, pointerEvents: 'none', userSelect: 'none' } : {}}>
         {filteredCategories.length === 0 ? (
            <div className="text-center py-6 text-sm text-muted">No parameters matched your search.</div>
         ) : (

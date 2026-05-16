@@ -14,6 +14,7 @@ interface ModelDownloadInfo {
   totalBytes: number
   phase: 'downloading' | 'paused' | 'done' | 'error' | 'cancelled'
   percent: number
+  speed?: number
   repoId?: string
 }
 interface HfModelResult {
@@ -47,17 +48,19 @@ interface LlamaCppApi {
   onModelError: (cb: (data: { id: string; error: string }) => void) => void
   checkUpdates: () => Promise<ReleaseInfo>
   downloadRelease: (opts: { url: string; version: string; assetName: string }) => Promise<{ success: boolean; path?: string; error?: string }>
+  cancelBackendDownload: () => Promise<{ success: boolean }>
   onDownloadProgress: (callback: (data: { percent: number; phase: string }) => void) => void
   removeDownloadListener: () => void
   hfSearch: (query: string) => Promise<HfModelResult[] | { error: string }>
   hfGetFiles: (repoId: string) => Promise<HfFileResult[] | { error: string }>
   hfDownloadModel: (opts: { repoId: string; filename: string; downloadUrl: string }) => Promise<{ success: boolean; error?: string }>
   hfOpenModelsDir: () => Promise<void>
-  onHfDownloadProgress: (callback: (data: { percent: number; phase: string; filename: string; destPath: string }) => void) => void
+  onHfDownloadProgress: (callback: (data: { percent: number; phase: string; filename: string; destPath: string; speed?: number }) => void) => void
   removeHfDownloadListener: () => void
   openFolder: (path: string) => Promise<void>
   getPaths: () => Promise<{ models: string; templates: string; backend: string }>
   openExternal: (url: string) => Promise<void>
+  openChatWindow: (port: number) => Promise<void>
 }
 declare global {
   interface Window { api: LlamaCppApi }

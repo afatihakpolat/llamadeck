@@ -5,12 +5,13 @@ import type { CardState, CommandParam } from '../../../shared/types'
 import CmdParamsEditor from './CmdParamsEditor'
 interface Props { card: CardState }
 export default function ModelCard({ card }: Props) {
-  const { toggleCardExpanded, updateCard, setCardStatus, removeCard, backends, activeBackend, commandsSchema, setShowCreateModal } = useStore()
+  const { toggleCardExpanded, updateCard, setCardStatus, removeCard, backends, activeBackend, commandsSchema, setShowCreateModal, models } = useStore()
   const [showMenu, setShowMenu] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
   const isRunning = card.status === 'running'
   const isExpanded = card.expanded
   const launchMode = card.template.launchMode || 'chat'
+  const modelExists = !card.template.modelPath || models.some(m => m.path === card.template.modelPath)
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
       if (menuRef.current && !menuRef.current.contains(e.target as Node)) setShowMenu(false)
@@ -122,7 +123,7 @@ export default function ModelCard({ card }: Props) {
       <div className="card-meta">
         <span className="card-tag" title={card.template.modelPath}>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z" /><polyline points="14 2 14 8 20 8" /></svg>
-          {card.template.modelPath?.split(/[/\\]/).pop() || 'No model'}
+          {!modelExists ? <span style={{ color: 'var(--danger)' }}>Missing File</span> : (card.template.modelPath?.split(/[/\\]/).pop() || 'No model')}
         </span>
         <span className="card-tag">
           <span className={`status-dot ${isRunning ? 'running' : 'idle'}`} />
@@ -152,9 +153,22 @@ export default function ModelCard({ card }: Props) {
         <button
           className={`btn card-run-btn ${isRunning ? 'btn-danger' : 'btn-primary'}`}
           onClick={handleRunToggle}
+          disabled={!isRunning && !modelExists}
+          style={isRunning && launchMode === 'chat' ? { flex: 0.5 } : {}}
+          title={!isRunning && !modelExists ? 'Cannot start: model file is missing' : ''}
         >
           {isRunning ? <><Square size={14} /> Stop</> : <><Play size={14} /> Start</>}
         </button>
+        {isRunning && launchMode === 'chat' && (
+          <button
+            className="btn card-run-btn"
+            style={{ flex: 0.5, background: 'var(--accent)', color: 'var(--accent-fg)' }}
+            onClick={() => window.api.openChatWindow(card.template.serverPort || 8080)}
+            title="Open Chat Window"
+          >
+            <Globe size={14} /> Open Chat
+          </button>
+        )}
         <button
           className={`card-expand-btn ${isExpanded ? 'open' : ''}`}
           onClick={() => toggleCardExpanded(card.template.id)}

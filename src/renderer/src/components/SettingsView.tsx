@@ -1,18 +1,33 @@
 import React, { useState, useEffect } from 'react'
 import { useStore } from '../store/useStore'
-import { HardDrive, Download, Trash, RefreshCw, Loader2, ChevronDown, Terminal } from 'lucide-react'
+import { HardDrive, Download, Trash, RefreshCw, Loader2, ChevronDown, Terminal, Bell, BellOff } from 'lucide-react'
 import CommandsEditor from './CommandsEditor'
+
+const NOTIF_KEY = 'hexllama_update_notify'
+
+function getNotifPref(): 'banner' | 'manual' {
+  return (localStorage.getItem(NOTIF_KEY) as 'banner' | 'manual') || 'banner'
+}
+
 export default function SettingsView() {
   const { backends, activeBackend, setActiveBackend, setCommandsSchema, setBackends,
-          releaseInfo, checkingUpdate, downloadProgress, setDownloadProgress } = useStore()
+          releaseInfo, checkingUpdate, downloadProgress, setDownloadProgress, setCheckingUpdate, setReleaseInfo } = useStore()
   const [downloading, setDownloading] = useState(false)
   const [selectedAssetUrl, setSelectedAssetUrl] = useState('')
   const [expandedEditor, setExpandedEditor] = useState<string | null>(null)
+  const [notifPref, setNotifPref] = useState<'banner' | 'manual'>(getNotifPref())
+
   useEffect(() => {
     if (releaseInfo?.assets.length && !selectedAssetUrl) {
       setSelectedAssetUrl(releaseInfo.assets[0].downloadUrl)
     }
   }, [releaseInfo, selectedAssetUrl])
+
+  function handleNotifPref(pref: 'banner' | 'manual') {
+    setNotifPref(pref)
+    localStorage.setItem(NOTIF_KEY, pref)
+  }
+
   async function handleSwitchBackend(name: string) {
     const b = backends.find(x => x.name === name)
     if (!b) return
@@ -20,6 +35,7 @@ export default function SettingsView() {
     const cmds = await window.api.getCommands(name)
     if (cmds) setCommandsSchema(cmds)
   }
+
   async function handleDeleteBackend(name: string) {
     if (!confirm(`Delete backend "${name}"? This will remove all files in that folder.`)) return
     const res = await window.api.deleteBackend(name)
@@ -28,9 +44,17 @@ export default function SettingsView() {
       setBackends(updated)
     } else alert('Delete failed: ' + res.error)
   }
-  function handleCheckUpdates() {
-    document.querySelector<HTMLButtonElement>('header .btn-icon[title="Check for llama.cpp updates"]')?.click()
+
+  async function handleCheckUpdates() {
+    setCheckingUpdate(true)
+    try {
+      const info = await window.api.checkUpdates()
+      setReleaseInfo(info)
+    } finally {
+      setCheckingUpdate(false)
+    }
   }
+
   const handleDownload = async () => {
     if (!releaseInfo || !releaseInfo.assets.length) return
     const asset = releaseInfo.assets.find(a => a.downloadUrl === selectedAssetUrl) || releaseInfo.assets[0]
@@ -47,6 +71,7 @@ export default function SettingsView() {
       setBackends(backendsData)
     } else alert(`Download failed: ${res.error}`)
   }
+
   return (
     <div className="max-w-3xl">
       <div className="page-header">
@@ -55,6 +80,38 @@ export default function SettingsView() {
           <p className="page-subtitle">Manage llama.cpp backends and configurations</p>
         </div>
       </div>
+
+      {}
+      <div className="settings-section">
+        <div className="settings-section-title"><Bell /> Update Notifications</div>
+        <div className="settings-row" style={{ borderBottom: 'none', flexDirection: 'column', alignItems: 'flex-start', gap: 12 }}>
+          <p style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.6 }}>
+            Choose how you'd like to be informed when a new version of llama.cpp is available.
+          </p>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button
+              className={`launch-mode-btn ${notifPref === 'banner' ? 'active' : ''}`}
+              onClick={() => handleNotifPref('banner')}
+            >
+              <Bell size={13} />
+              Show Banner Automatically
+            </button>
+            <button
+              className={`launch-mode-btn ${notifPref === 'manual' ? 'active' : ''}`}
+              onClick={() => handleNotifPref('manual')}
+            >
+              <BellOff size={13} />
+              Check Manually Only
+            </button>
+          </div>
+          {notifPref === 'manual' && (
+            <p style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+              The update banner will not be shown automatically. Use "Check Now" below anytime.
+            </p>
+          )}
+        </div>
+      </div>
+
       {}
       <div className="settings-section">
         <div className="settings-section-title"><HardDrive /> Installed Backends</div>
@@ -100,7 +157,6 @@ export default function SettingsView() {
                     </button>
                   </div>
                 </div>
-                {}
                 {expandedEditor === b.name && (
                   <div className="ce-panel">
                     <CommandsEditor backendName={b.name} />
@@ -111,6 +167,7 @@ export default function SettingsView() {
           </div>
         )}
       </div>
+
       {}
       <div className="settings-section">
         <div className="settings-section-title"><Download /> Available Updates</div>
@@ -145,9 +202,16 @@ export default function SettingsView() {
                     ))}
                   </select>
                   {downloading || downloadProgress ? (
-                    <div className="text-sm flex items-center gap-2" style={{ color: 'var(--text-muted)' }}>
+                    <div className="text-sm flex items-center gap-3" style={{ color: 'var(--text-muted)' }}>
                       <Loader2 size={14} className="spin" />
                       {downloadProgress?.phase === 'extracting' ? 'Extracting...' : `Downloading... ${downloadProgress?.percent || 0}%`}
+                      <button 
+                        className="btn btn-ghost btn-sm text-danger" 
+                        onClick={() => { window.api.cancelBackendDownload(); setDownloading(false); setDownloadProgress(null); }}
+                        style={{ padding: '0 8px' }}
+                      >
+                        Cancel
+                      </button>
                     </div>
                   ) : (
                     <button className="btn btn-primary btn-sm" onClick={handleDownload}>Download</button>

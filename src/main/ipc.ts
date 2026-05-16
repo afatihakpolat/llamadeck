@@ -1,9 +1,9 @@
-import { ipcMain, dialog, shell } from 'electron'
+import { ipcMain, dialog, shell, BrowserWindow } from 'electron'
 import {
   existsSync, readdirSync, readFileSync, writeFileSync, mkdirSync,
   unlinkSync, createWriteStream, statSync, rmdirSync, renameSync
 } from 'fs'
-import { join, extname, basename, dirname } from 'path'
+import { join, extname, basename, dirname, resolve } from 'path'
 import { spawn, ChildProcess } from 'child_process'
 import https from 'https'
 import http from 'http'
@@ -16,19 +16,31 @@ const BACKEND_DIR   = join(APP_ROOT, 'backend')
 for (const dir of [MODELS_DIR, TEMPLATES_DIR, BACKEND_DIR]) {
   if (!existsSync(dir)) mkdirSync(dir, { recursive: true })
 }
+function isSafePath(base: string, target: string): boolean {
+  return resolve(target).startsWith(resolve(base))
+}
 const runningProcesses = new Map<string, ChildProcess>()
 interface DownloadTask {
-  id: string          
+  id: string
   url: string
   filename: string
   destPath: string
   receivedBytes: number
   totalBytes: number
+  speed: number
   phase: 'downloading' | 'paused' | 'done' | 'error' | 'cancelled'
   repoId?: string
   cancelFn?: () => void
 }
 const downloadTasks = new Map<string, DownloadTask>()
+const broadcastTimes = new Map<string, number>()
+const BROADCAST_THROTTLE_MS = 200
+function canBroadcast(id: string): boolean {
+  const now = Date.now()
+  const last = broadcastTimes.get(id) || 0
+  if (now - last >= BROADCAST_THROTTLE_MS) { broadcastTimes.set(id, now); return true }
+  return false
+}
 function fetchJson(url: string): Promise<unknown> {
   return new Promise((resolve, reject) => {
     const opts = { headers: { 'User-Agent': 'llamabox/1.0.0', Accept: 'application/json' } }
@@ -47,48 +59,76 @@ function startDownload(
   url: string,
   destPath: string,
   startByte: number,
-  onProgress: (received: number, total: number) => void,
+  onProgress: (received: number, total: number, speed: number) => void,
   onDone: () => void,
   onError: (err: Error) => void
 ): () => void {
   let destroyed = false
   let currentReq: ReturnType<typeof https.get> | null = null
-  const isAppend = startByte > 0
-  const file = isAppend
-    ? createWriteStream(destPath, { flags: 'a' })
-    : createWriteStream(destPath)
+  const flags = startByte > 0 ? 'a' : 'w'
+  const file = createWriteStream(destPath, { flags })
+
+  let speedBytes = 0
+  let lastSpeedCheck = Date.now()
+  let currentSpeed = 0
+
   const attempt = (currentUrl: string) => {
     const get = currentUrl.startsWith('https') ? https.get : http.get
-    const headers: Record<string, string> = { 'User-Agent': 'llamabox/1.0.0' }
+    const headers: Record<string, string> = { 'User-Agent': 'hexllama/1.0' }
     if (startByte > 0) headers['Range'] = `bytes=${startByte}-`
     currentReq = get(currentUrl, { headers }, (res) => {
+      if (destroyed) { res.destroy(); return }
       if (res.statusCode === 301 || res.statusCode === 302) {
         return attempt(res.headers.location!)
       }
       if (res.statusCode !== 200 && res.statusCode !== 206) {
-        file.close()
         if (!destroyed) onError(new Error(`HTTP ${res.statusCode}`))
         return
       }
       const contentLength = parseInt(res.headers['content-length'] || '0', 10)
       const totalBytes = contentLength + startByte
       let receivedBytes = startByte
-      res.on('data', (chunk) => {
+
+      res.on('data', (chunk: Buffer) => {
+        if (destroyed) return
+        file.write(chunk)
         receivedBytes += chunk.length
-        onProgress(receivedBytes, totalBytes)
+        speedBytes += chunk.length
+
+        const now = Date.now()
+        const elapsed = (now - lastSpeedCheck) / 1000
+        if (elapsed >= 0.5) {
+          currentSpeed = speedBytes / elapsed
+          speedBytes = 0
+          lastSpeedCheck = now
+        }
+        onProgress(receivedBytes, totalBytes, currentSpeed)
       })
-      res.pipe(file)
-      file.on('finish', () => { file.close(); if (!destroyed) onDone() })
-      res.on('error', (err) => { file.close(); if (!destroyed) onError(err) })
-    }).on('error', (err) => { file.close(); if (!destroyed) onError(err) })
+
+      res.on('end', () => {
+        if (destroyed) return
+        file.end(() => {
+          if (!destroyed) onDone()
+        })
+      })
+
+      res.on('error', (err) => {
+        if (!destroyed) { file.destroy(); onError(err) }
+      })
+    }).on('error', (err) => {
+      if (!destroyed) { file.destroy(); onError(err) }
+    })
   }
   attempt(url)
   return () => {
+    if (destroyed) return
     destroyed = true
     currentReq?.destroy()
-    file.close()
+    
+    file.end()
   }
 }
+
 export function registerIpcHandlers(): void {
   ipcMain.handle('list-models', () => {
     if (!existsSync(MODELS_DIR)) return []
@@ -98,7 +138,7 @@ export function registerIpcHandlers(): void {
       try {
         for (const e of readdirSync(dir, { withFileTypes: true })) {
           if (e.isDirectory()) scan(join(dir, e.name))
-          else if (exts.includes(extname(e.name).toLowerCase())) {
+          else if (exts.includes(extname(e.name).toLowerCase()) && !e.name.endsWith('.tmp')) {
             const fp = join(dir, e.name)
             results.push({ name: e.name, path: fp, size: statSync(fp).size, folder: basename(dir) })
           }
@@ -110,6 +150,7 @@ export function registerIpcHandlers(): void {
   })
   ipcMain.handle('delete-model', (_e, filePath: string) => {
     try {
+      if (!isSafePath(MODELS_DIR, filePath)) return { success: false, error: 'Access denied' }
       unlinkSync(filePath)
       const dir = dirname(filePath)
       if (dir !== MODELS_DIR) {
@@ -122,8 +163,10 @@ export function registerIpcHandlers(): void {
   })
   ipcMain.handle('rename-model', (_e, oldPath: string, newName: string) => {
     try {
+      if (!isSafePath(MODELS_DIR, oldPath)) return { success: false, error: 'Access denied' }
       const dir = dirname(oldPath)
       const newPath = join(dir, newName + extname(oldPath))
+      if (!isSafePath(MODELS_DIR, newPath)) return { success: false, error: 'Access denied' }
       renameSync(oldPath, newPath)
       return { success: true, newPath }
     } catch (err) {
@@ -134,7 +177,7 @@ export function registerIpcHandlers(): void {
     url: string
     filename: string
     repoId?: string
-    modelFolder?: string   
+    modelFolder?: string
   }) => {
     const id = opts.filename
     if (downloadTasks.has(id)) {
@@ -143,63 +186,98 @@ export function registerIpcHandlers(): void {
     }
     const folder = opts.modelFolder || opts.repoId?.split('/').pop() || 'downloads'
     const destDir = join(MODELS_DIR, folder)
+    if (!isSafePath(MODELS_DIR, destDir)) return { success: false, error: 'Access denied' }
     if (!existsSync(destDir)) mkdirSync(destDir, { recursive: true })
-    const destPath = join(destDir, opts.filename)
+    const finalPath = join(destDir, opts.filename)
+    const tmpPath = finalPath + '.tmp'
     const task: DownloadTask = {
       id, url: opts.url, filename: opts.filename,
-      destPath, receivedBytes: 0, totalBytes: 0,
+      destPath: finalPath, receivedBytes: 0, totalBytes: 0, speed: 0,
       phase: 'downloading', repoId: opts.repoId
     }
-    const emit = (t: DownloadTask) =>
-      event.sender.send('model-download-progress', {
-        id: t.id, filename: t.filename, percent: t.totalBytes > 0 ? Math.round((t.receivedBytes / t.totalBytes) * 100) : 0,
-        receivedBytes: t.receivedBytes, totalBytes: t.totalBytes, phase: t.phase, destPath: t.destPath
-      })
-    task.cancelFn = startDownload(
-      opts.url, destPath, 0,
-      (received, total) => {
-        task.receivedBytes = received; task.totalBytes = total
-        emit(task)
-      },
-      () => {
-        task.phase = 'done'; emit(task)
-        setTimeout(() => downloadTasks.delete(id), 5000)
-      },
-      (err) => {
-        task.phase = 'error'; emit(task)
-        console.error('Download error:', err)
+    const broadcastProgress = (t: DownloadTask, force = false) => {
+      if (!force && !canBroadcast(t.id)) return
+      const payload = {
+        id: t.id, filename: t.filename,
+        percent: t.totalBytes > 0 ? Math.round((t.receivedBytes / t.totalBytes) * 100) : 0,
+        receivedBytes: t.receivedBytes, totalBytes: t.totalBytes,
+        speed: t.speed, phase: t.phase, destPath: t.destPath,
+        repoId: t.repoId
       }
+      BrowserWindow.getAllWindows().forEach(win => {
+        if (!win.isDestroyed()) win.webContents.send('model-download-progress', payload)
+      })
+    }
+    task.cancelFn = startDownload(
+      opts.url, tmpPath, 0,
+      (received, total, speed) => { task.receivedBytes = received; task.totalBytes = total; task.speed = speed; broadcastProgress(task) },
+      () => {
+        try { renameSync(tmpPath, finalPath) } catch {}
+        task.phase = 'done'; task.speed = 0; broadcastProgress(task, true)
+        setTimeout(() => { downloadTasks.delete(id); broadcastTimes.delete(id) }, 5000)
+      },
+      (err) => { task.phase = 'error'; task.speed = 0; broadcastProgress(task, true); console.error('Download error:', err) }
     )
     downloadTasks.set(id, task)
-    emit(task)
+    broadcastProgress(task, true)
     return { success: true, id }
   })
-  ipcMain.handle('pause-model-download', (event, id: string) => {
+  ipcMain.handle('pause-model-download', (_e, id: string) => {
     const task = downloadTasks.get(id)
     if (!task || task.phase !== 'downloading') return { success: false, error: 'Not downloading' }
     task.cancelFn?.()
     task.phase = 'paused'
-    event.sender.send('model-download-progress', { id, filename: task.filename, phase: 'paused', percent: task.totalBytes > 0 ? Math.round((task.receivedBytes / task.totalBytes) * 100) : 0, receivedBytes: task.receivedBytes, totalBytes: task.totalBytes })
+    task.speed = 0
+    
+    broadcastTimes.delete(id)
+    const payload = {
+      id, filename: task.filename, phase: 'paused', speed: 0,
+      percent: task.totalBytes > 0 ? Math.round((task.receivedBytes / task.totalBytes) * 100) : 0,
+      receivedBytes: task.receivedBytes, totalBytes: task.totalBytes,
+      destPath: task.destPath, repoId: task.repoId
+    }
+    BrowserWindow.getAllWindows().forEach(win => { 
+      if (!win.isDestroyed()) {
+        win.webContents.send('model-download-progress', payload)
+        if (task.repoId) win.webContents.send('hf-download-progress', payload)
+      }
+    })
     return { success: true }
   })
-  ipcMain.handle('resume-model-download', (event, id: string) => {
+  ipcMain.handle('resume-model-download', (_e, id: string) => {
     const task = downloadTasks.get(id)
     if (!task || task.phase !== 'paused') return { success: false, error: 'Not paused' }
     task.phase = 'downloading'
-    const emit = (t: DownloadTask) =>
-      event.sender.send('model-download-progress', {
-        id: t.id, filename: t.filename, phase: t.phase,
+    const tmpPath = task.destPath + '.tmp'
+    
+    try { task.receivedBytes = statSync(tmpPath).size } catch {}
+    const broadcastProgress = (t: DownloadTask, force = false) => {
+      if (!force && !canBroadcast(t.id)) return
+      const payload = {
+        id: t.id, filename: t.filename, phase: t.phase, speed: t.speed,
         percent: t.totalBytes > 0 ? Math.round((t.receivedBytes / t.totalBytes) * 100) : 0,
-        receivedBytes: t.receivedBytes, totalBytes: t.totalBytes, destPath: t.destPath
+        receivedBytes: t.receivedBytes, totalBytes: t.totalBytes, destPath: t.destPath,
+        repoId: t.repoId
+      }
+      BrowserWindow.getAllWindows().forEach(win => { 
+        if (!win.isDestroyed()) {
+          win.webContents.send('model-download-progress', payload)
+          if (t.repoId) win.webContents.send('hf-download-progress', payload)
+        }
       })
+    }
     const startByte = task.receivedBytes
     task.cancelFn = startDownload(
-      task.url, task.destPath, startByte,
-      (received, total) => { task.receivedBytes = received; task.totalBytes = total; emit(task) },
-      () => { task.phase = 'done'; emit(task); setTimeout(() => downloadTasks.delete(id), 5000) },
-      (err) => { task.phase = 'error'; emit(task); console.error('Resume error:', err) }
+      task.url, tmpPath, startByte,
+      (received, total, speed) => { task.receivedBytes = received; task.totalBytes = total; task.speed = speed; broadcastProgress(task) },
+      () => {
+        try { renameSync(tmpPath, task.destPath) } catch {}
+        task.phase = 'done'; task.speed = 0; broadcastProgress(task, true)
+        setTimeout(() => { downloadTasks.delete(id); broadcastTimes.delete(id) }, 5000)
+      },
+      (err) => { task.phase = 'error'; task.speed = 0; broadcastProgress(task, true); console.error('Resume error:', err) }
     )
-    emit(task)
+    broadcastProgress(task, true)
     return { success: true }
   })
   ipcMain.handle('cancel-model-download', (event, id: string) => {
@@ -207,8 +285,16 @@ export function registerIpcHandlers(): void {
     if (!task) return { success: false, error: 'Not found' }
     task.cancelFn?.()
     task.phase = 'cancelled'
+    
+    try { unlinkSync(task.destPath + '.tmp') } catch {}
     try { unlinkSync(task.destPath) } catch {}
-    event.sender.send('model-download-progress', { id, filename: task.filename, phase: 'cancelled', percent: 0, receivedBytes: 0, totalBytes: 0 })
+    const payload = { id, filename: task.filename, phase: 'cancelled', percent: 0, receivedBytes: 0, totalBytes: 0, speed: 0 }
+    BrowserWindow.getAllWindows().forEach(win => {
+      if (!win.isDestroyed()) {
+        win.webContents.send('model-download-progress', payload)
+        if (task.repoId) win.webContents.send('hf-download-progress', payload)
+      }
+    })
     downloadTasks.delete(id)
     return { success: true }
   })
@@ -256,6 +342,7 @@ export function registerIpcHandlers(): void {
   ipcMain.handle('delete-backend', (_e, backendName: string) => {
     try {
       const backendPath = join(BACKEND_DIR, backendName)
+      if (!isSafePath(BACKEND_DIR, backendPath)) return { success: false, error: 'Access denied' }
       const rm = (dir: string) => {
         for (const e of readdirSync(dir, { withFileTypes: true })) {
           const p = join(dir, e.name)
@@ -271,6 +358,7 @@ export function registerIpcHandlers(): void {
   })
   ipcMain.handle('get-commands', (_e, backendName: string) => {
     const commandsPath = join(BACKEND_DIR, backendName, 'commands.json')
+    if (!isSafePath(BACKEND_DIR, commandsPath)) return null
     if (existsSync(commandsPath)) return JSON.parse(readFileSync(commandsPath, 'utf-8'))
     const defaultPath = join(APP_ROOT, 'resources', 'commands.json')
     if (existsSync(defaultPath)) return JSON.parse(readFileSync(defaultPath, 'utf-8'))
@@ -279,6 +367,7 @@ export function registerIpcHandlers(): void {
   ipcMain.handle('save-backend-commands', (_e, backendName: string, schema: unknown) => {
     try {
       const backendPath = join(BACKEND_DIR, backendName)
+      if (!isSafePath(BACKEND_DIR, backendPath)) return { success: false, error: 'Access denied' }
       if (!existsSync(backendPath)) mkdirSync(backendPath, { recursive: true })
       writeFileSync(join(backendPath, 'commands.json'), JSON.stringify(schema, null, 2))
       return { success: true }
@@ -303,6 +392,7 @@ export function registerIpcHandlers(): void {
   })
   ipcMain.handle('delete-template', (_e, id: string) => {
     const fp = join(TEMPLATES_DIR, `${id}.json`)
+    if (!isSafePath(TEMPLATES_DIR, fp)) return { success: false, error: 'Access denied' }
     if (existsSync(fp)) unlinkSync(fp)
     return { success: true }
   })
@@ -327,6 +417,7 @@ export function registerIpcHandlers(): void {
   ipcMain.handle('run-model', (_e, opts: { id: string; backendPath: string; exe: string; args: string[]; openBrowser: boolean; port: number }) => {
     if (runningProcesses.has(opts.id)) return { success: false, error: 'Already running' }
     const exePath = join(opts.backendPath, opts.exe)
+    if (!isSafePath(BACKEND_DIR, exePath)) return { success: false, error: 'Access denied' }
     if (!existsSync(exePath)) return { success: false, error: `Executable not found: ${exePath}` }
     try {
       const proc = spawn(exePath, opts.args, { detached: false, stdio: 'pipe', cwd: dirname(exePath), windowsHide: false })
@@ -343,7 +434,11 @@ export function registerIpcHandlers(): void {
       })
       runningProcesses.set(opts.id, proc)
       proc.on('exit', () => runningProcesses.delete(opts.id))
-      if (opts.openBrowser) setTimeout(() => shell.openExternal(`http://127.0.0.1:${opts.port}`), 2500)
+      if (opts.openBrowser) {
+        setTimeout(() => {
+          openChatWindow(opts.port)
+        }, 2500)
+      }
       return { success: true, pid: proc.pid }
     } catch (err: any) {
       if (err.code === 'UNKNOWN' && opts.backendPath.toLowerCase().includes('arm64') && process.arch !== 'arm64') {
@@ -352,15 +447,52 @@ export function registerIpcHandlers(): void {
       return { success: false, error: String(err) }
     }
   })
+  
+  function openChatWindow(port: number) {
+    const chatUrl = `http://127.0.0.1:${port}`
+    const candidates = [
+      join(process.cwd(), 'assets', 'icon.png'),                  
+      join(__dirname, '../../assets/icon.png'),                    
+      join(app.getAppPath(), 'assets', 'icon.png')                 
+    ]
+    const icon = candidates.find(existsSync)
+    
+    const chatWin = new BrowserWindow({
+      width: 1024, height: 768, show: true, autoHideMenuBar: true,
+      title: 'Hexllama - Llama-UI',
+      titleBarStyle: 'hiddenInset',
+      backgroundColor: '#ffffff',
+      ...(icon ? { icon } : {}),
+      webPreferences: {
+        preload: join(__dirname, '../preload/index.js'),
+        sandbox: false,
+        contextIsolation: true,
+        nodeIntegration: false
+      }
+    })
+    const rendererUrl = process.env['ELECTRON_RENDERER_URL']
+    if (rendererUrl) {
+      chatWin.loadURL(`${rendererUrl}?chat_url=${encodeURIComponent(chatUrl)}`)
+    } else {
+      chatWin.loadFile(join(__dirname, '../renderer/index.html'), { query: { chat_url: chatUrl } })
+    }
+  }
+
+  ipcMain.handle('open-chat-window', (_e, port: number) => {
+    openChatWindow(port)
+  })
   ipcMain.handle('stop-model', (_e, id: string) => {
     const proc = runningProcesses.get(id)
     if (!proc) return { success: false, error: 'Not running' }
     proc.kill(); runningProcesses.delete(id)
     return { success: true }
   })
+  let cancelBackendDl: (() => void) | null = null
+
   ipcMain.handle('check-updates', async () => {
     try {
-      const release = await fetchJson('https://api.github.com/repos/ggml-org/llama.cpp/releases/latest') as any
+      const release = await fetchJson('https://api.github.com/repos/ggerganov/llama.cpp/releases/latest') as any
+      if (!release || !release.assets) return { error: 'Invalid response from GitHub' }
       const windowsAssets = release.assets.filter((a: any) => {
         const lowerName = a.name.toLowerCase()
         const isWin = lowerName.endsWith('.zip') && !lowerName.startsWith('cudart-') && (lowerName.includes('win') || lowerName.includes('windows'))
@@ -386,17 +518,28 @@ export function registerIpcHandlers(): void {
     try {
       event.sender.send('download-progress', { percent: 0, phase: 'downloading' })
       await new Promise<void>((resolve, reject) => {
-        const cancel = startDownload(opts.url, zipPath, 0,
+        cancelBackendDl = startDownload(opts.url, zipPath, 0,
           (r, t) => event.sender.send('download-progress', { percent: t > 0 ? Math.round(r / t * 100) : 0, phase: 'downloading' }),
           resolve, reject)
-        void cancel
       })
+      cancelBackendDl = null
       event.sender.send('download-progress', { percent: 100, phase: 'extracting' })
       if (!existsSync(extractPath)) mkdirSync(extractPath, { recursive: true })
       await extract(zipPath, { dir: extractPath })
       try { unlinkSync(zipPath) } catch {}
       return { success: true, path: extractPath }
-    } catch (err) { return { success: false, error: String(err) } }
+    } catch (err) { 
+      cancelBackendDl = null
+      try { unlinkSync(zipPath) } catch {}
+      return { success: false, error: String(err) } 
+    }
+  })
+  ipcMain.handle('cancel-backend-download', () => {
+    if (cancelBackendDl) {
+      cancelBackendDl()
+      cancelBackendDl = null
+    }
+    return { success: true }
   })
   ipcMain.handle('open-folder', (_e, folderPath: string) => shell.openPath(folderPath))
   ipcMain.handle('get-paths', () => ({ models: MODELS_DIR, templates: TEMPLATES_DIR, backend: BACKEND_DIR }))
@@ -413,28 +556,51 @@ export function registerIpcHandlers(): void {
   })
   ipcMain.handle('hf-get-files', async (_e, repoId: string) => {
     try {
-      const data = await fetchJson(`https://huggingface.co/api/models/${repoId}`) as any
-      return (data.siblings || []).filter((f: any) => f.rfilename.endsWith('.gguf')).map((f: any) => ({ name: f.rfilename, size: f.size || 0, downloadUrl: `https://huggingface.co/${repoId}/resolve/main/${f.rfilename}` }))
+      const data = await fetchJson(`https://huggingface.co/api/models/${repoId}/tree/main`) as any[]
+      return data.filter((f: any) => f.type === 'file' && f.path.endsWith('.gguf')).map((f: any) => ({
+        name: f.path,
+        size: f.size || 0,
+        downloadUrl: `https://huggingface.co/${repoId}/resolve/main/${f.path}`
+      }))
     } catch (err) { return { error: String(err) } }
   })
-  ipcMain.handle('hf-download-model', (event, opts: { repoId: string; filename: string; downloadUrl: string }) => {
+  ipcMain.handle('hf-download-model', (_event, opts: { repoId: string; filename: string; downloadUrl: string }) => {
     const id = opts.filename
+    if (downloadTasks.has(id)) {
+      const existing = downloadTasks.get(id)!
+      if (existing.phase === 'downloading') return { success: false, error: 'Already downloading' }
+    }
     const folder = opts.repoId.split('/').pop() || 'downloads'
     const destDir = join(MODELS_DIR, folder)
     if (!existsSync(destDir)) mkdirSync(destDir, { recursive: true })
-    const destPath = join(destDir, opts.filename)
-    const task: DownloadTask = { id, url: opts.downloadUrl, filename: opts.filename, destPath, receivedBytes: 0, totalBytes: 0, phase: 'downloading', repoId: opts.repoId }
-    const emit = () => event.sender.send('hf-download-progress', {
-      percent: task.totalBytes > 0 ? Math.round(task.receivedBytes / task.totalBytes * 100) : 0,
-      phase: task.phase,
-      filename: task.filename,
-      destPath: task.destPath
-    })
+    const finalPath = join(destDir, opts.filename)
+    const tmpPath = finalPath + '.tmp'
+    const task: DownloadTask = { id, url: opts.downloadUrl, filename: opts.filename, destPath: finalPath, receivedBytes: 0, totalBytes: 0, speed: 0, phase: 'downloading', repoId: opts.repoId }
+    const broadcast = (force = false) => {
+      if (!force && !canBroadcast(task.id)) return
+      const percent = task.totalBytes > 0 ? Math.round(task.receivedBytes / task.totalBytes * 100) : 0
+
+      const payload = {
+        id: task.id, filename: task.filename, phase: task.phase,
+        percent, speed: task.speed, destPath: task.destPath,
+        receivedBytes: task.receivedBytes, totalBytes: task.totalBytes,
+        repoId: task.repoId
+      }
+      BrowserWindow.getAllWindows().forEach(win => {
+        if (!win.isDestroyed()) {
+          win.webContents.send('hf-download-progress', payload)
+        }
+      })
+    }
     task.cancelFn = startDownload(
-      opts.downloadUrl, destPath, 0,
-      (r, t) => { task.receivedBytes = r; task.totalBytes = t; emit() },
-      () => { task.phase = 'done'; emit(); setTimeout(() => downloadTasks.delete(id), 5000) },
-      (err) => { task.phase = 'error'; emit(); console.error('HF download error:', err) }
+      opts.downloadUrl, tmpPath, 0,
+      (r, t, speed) => { task.receivedBytes = r; task.totalBytes = t; task.speed = speed; broadcast() },
+      () => {
+        try { renameSync(tmpPath, finalPath) } catch {}
+        task.phase = 'done'; task.speed = 0; broadcast(true)
+        setTimeout(() => { downloadTasks.delete(id); broadcastTimes.delete(id) }, 10000)
+      },
+      (err) => { task.phase = 'error'; task.speed = 0; broadcast(true); console.error('HF download error:', err) }
     )
     downloadTasks.set(id, task)
     return { success: true }

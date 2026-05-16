@@ -9,32 +9,33 @@ import ModelsView from './components/ModelsView'
 import AboutView from './components/AboutView'
 import CreateModal from './components/CreateModal'
 import UpdateBanner from './components/UpdateBanner'
+import ChatWindow from './components/ChatWindow'
+import { buildDefaultTemplate } from './utils/defaultTemplate'
 import type { Template } from '../../shared/types'
 
 export default function App() {
+  const searchParams = new URLSearchParams(window.location.search)
+  const chatUrl = searchParams.get('chat_url')
+
+  if (chatUrl) {
+    return <ChatWindow url={chatUrl} />
+  }
+
   const [loading, setLoading] = React.useState(true)
 
   React.useEffect(() => {
-    const timer = setTimeout(() => {
-      setLoading(false)
-    }, 2000)
+    const timer = setTimeout(() => setLoading(false), 2000)
     return () => clearTimeout(timer)
   }, [])
 
   const {
-    view,
-    showCreateModal,
-    backends,
-    activeBackend,
-    setBackends,
-    setModels,
-    setActiveBackend,
-    setCommandsSchema,
-    setCards,
-    setPaths,
-    setReleaseInfo,
-    setCheckingUpdate
+    view, showCreateModal, activeBackend,
+    setBackends, setModels, setActiveBackend, setCommandsSchema,
+    setCards, setPaths, setReleaseInfo, setCheckingUpdate,
+    setHfDownload, removeHfDownload, addCard,
+    upsertModelDownload, removeModelDownload
   } = useStore()
+
   useEffect(() => {
     async function init() {
       try {
@@ -73,18 +74,99 @@ export default function App() {
       alert(`Model execution error:\n\n${data.error}`)
     })
   }, [])
+
+  useEffect(() => {
+    window.api.onHfDownloadProgress(async (data) => {
+
+      upsertModelDownload({
+        id: (data as any).id || data.filename,
+        url: '',
+        filename: data.filename,
+        destPath: data.destPath,
+        receivedBytes: (data as any).receivedBytes ?? 0,
+        totalBytes: (data as any).totalBytes ?? 0,
+        speed: (data as any).speed ?? 0,
+        percent: data.percent,
+        phase: data.phase as any,
+        repoId: (data as any).repoId
+      })
+
+      if (data.phase === 'done') {
+        
+        setHfDownload({ repoId: '', filename: data.filename, percent: 100, phase: 'saving' })
+
+        const models = await window.api.listModels()
+        useStore.getState().setModels(models)
+
+        setHfDownload({ repoId: '', filename: data.filename, percent: 100, phase: 'creating_template' })
+        const { cards, activeBackend: backend, addCard: add } = useStore.getState()
+        const template = buildDefaultTemplate(
+          data.filename,
+          data.destPath,
+          cards.map(c => c.template),
+          backend?.name || ''
+        )
+        const res = await window.api.saveTemplate(template)
+        if (res.success) add({ ...template, id: res.id })
+
+        setHfDownload({ repoId: '', filename: data.filename, percent: 100, phase: 'done' })
+        setTimeout(() => removeHfDownload(data.filename), 2500)
+      } else {
+        
+        setHfDownload({
+          repoId: '',
+          filename: data.filename,
+          percent: data.percent,
+          phase: data.phase as any,
+          speed: (data as any).speed
+        })
+      }
+    })
+    return () => window.api.removeHfDownloadListener()
+  }, [])
+
+  useEffect(() => {
+    window.api.onModelDownloadProgress(async (data: any) => {
+      
+      if (data.repoId) return
+      upsertModelDownload(data)
+      if (data.phase === 'done') {
+        const models = await window.api.listModels()
+        useStore.getState().setModels(models)
+        
+        const { cards, activeBackend: backend, addCard: add } = useStore.getState()
+        const template = buildDefaultTemplate(
+          data.filename,
+          data.destPath,
+          cards.map(c => c.template),
+          backend?.name || ''
+        )
+        const res = await window.api.saveTemplate(template)
+        if (res.success) add({ ...template, id: res.id })
+        setTimeout(() => removeModelDownload(data.id), 4000)
+      }
+    })
+    
+    window.api.listModelDownloads().then(list => {
+      list.forEach((dl: any) => upsertModelDownload(dl))
+    })
+    return () => window.api.removeModelDownloadListener()
+  }, [])
+
   useEffect(() => {
     if (!activeBackend) return
     window.api.getCommands(activeBackend.name).then((cmds) => {
       if (cmds) setCommandsSchema(cmds)
     })
   }, [activeBackend, setCommandsSchema])
+
   useEffect(() => {
     window.api.onDownloadProgress((data) => {
       useStore.getState().setDownloadProgress(data)
     })
     return () => window.api.removeDownloadListener()
   }, [])
+
   async function checkUpdates() {
     setCheckingUpdate(true)
     try {
@@ -94,6 +176,7 @@ export default function App() {
       setCheckingUpdate(false)
     }
   }
+
   function renderView() {
     if (view === 'hub') return <HuggingFaceView />
     if (view === 'settings') return <SettingsView />
@@ -101,6 +184,7 @@ export default function App() {
     if (view === 'about') return <AboutView />
     return <CardsView />
   }
+
   if (loading) {
     return (
       <div style={{
@@ -125,8 +209,8 @@ export default function App() {
         </main>
       </div>
       {showCreateModal && <CreateModal />}
-      
-      <div 
+
+      <div
         onClick={() => window.api.openExternal('https://andercoder.com')}
         style={{
           position: 'fixed', bottom: 16, right: 16, zIndex: 999, cursor: 'pointer',

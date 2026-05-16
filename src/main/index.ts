@@ -25,7 +25,7 @@ function createWindow(): void {
     ...(icon ? { icon } : {}),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
-      sandbox: false,
+      sandbox: true,
       contextIsolation: true,
       nodeIntegration: false
     }
@@ -38,6 +38,11 @@ function createWindow(): void {
       shell.openExternal(details.url)
     }
     return { action: 'deny' }
+  })
+  mainWindow.webContents.on('will-navigate', (event, url) => {
+    if (!url.startsWith('file://') && !url.includes('localhost:') && !url.includes('127.0.0.1:')) {
+      event.preventDefault()
+    }
   })
   if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
     mainWindow.loadURL(process.env['ELECTRON_RENDERER_URL'])

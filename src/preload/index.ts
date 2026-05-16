@@ -10,6 +10,7 @@ const api = {
   cancelModelDownload: (id: string) => ipcRenderer.invoke('cancel-model-download', id),
   listModelDownloads: () => ipcRenderer.invoke('list-model-downloads'),
   onModelDownloadProgress: (cb: (data: object) => void) => {
+    ipcRenderer.removeAllListeners('model-download-progress')
     ipcRenderer.on('model-download-progress', (_e, data) => cb(data))
   },
   removeModelDownloadListener: () => ipcRenderer.removeAllListeners('model-download-progress'),
@@ -26,11 +27,14 @@ const api = {
   runModel: (opts: object) => ipcRenderer.invoke('run-model', opts),
   stopModel: (id: string) => ipcRenderer.invoke('stop-model', id),
   onModelError: (cb: (data: { id: string; error: string }) => void) => {
+    ipcRenderer.removeAllListeners('model-error')
     ipcRenderer.on('model-error', (_e, data) => cb(data))
   },
   checkUpdates: () => ipcRenderer.invoke('check-updates'),
   downloadRelease: (opts: object) => ipcRenderer.invoke('download-release', opts),
+  cancelBackendDownload: () => ipcRenderer.invoke('cancel-backend-download'),
   onDownloadProgress: (callback: (data: { percent: number; phase: string }) => void) => {
+    ipcRenderer.removeAllListeners('download-progress')
     ipcRenderer.on('download-progress', (_event, data) => callback(data))
   },
   removeDownloadListener: () => ipcRenderer.removeAllListeners('download-progress'),
@@ -39,12 +43,14 @@ const api = {
   hfDownloadModel: (opts: object) => ipcRenderer.invoke('hf-download-model', opts),
   hfOpenModelsDir: () => ipcRenderer.invoke('hf-open-models-dir'),
   onHfDownloadProgress: (callback: (data: { percent: number; phase: string; filename: string; destPath: string }) => void) => {
+    ipcRenderer.removeAllListeners('hf-download-progress')
     ipcRenderer.on('hf-download-progress', (_event, data) => callback(data))
   },
   removeHfDownloadListener: () => ipcRenderer.removeAllListeners('hf-download-progress'),
   openFolder: (path: string) => ipcRenderer.invoke('open-folder', path),
   getPaths: () => ipcRenderer.invoke('get-paths'),
   openExternal: (url: string) => ipcRenderer.invoke('open-external', url),
+  openChatWindow: (port: number) => ipcRenderer.invoke('open-chat-window', port),
 }
 if (process.contextIsolated) {
   try {

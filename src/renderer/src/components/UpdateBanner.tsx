@@ -10,7 +10,8 @@ export default function UpdateBanner() {
       setSelectedAssetUrl(releaseInfo.assets[0].downloadUrl)
     }
   }, [releaseInfo, selectedAssetUrl])
-  if (!releaseInfo || releaseInfo.error || updateDismissed || releaseInfo.isNewer === false) return null
+  const notifPref = localStorage.getItem('hexllama_update_notify') || 'banner'
+  if (!releaseInfo || releaseInfo.error || updateDismissed || releaseInfo.isNewer === false || notifPref === 'manual') return null
   const handleDownload = async () => {
     if (!releaseInfo.assets.length) return
     const asset = releaseInfo.assets.find(a => a.downloadUrl === selectedAssetUrl) || releaseInfo.assets[0]
@@ -67,9 +68,19 @@ export default function UpdateBanner() {
           </>
         )}
       </span>
-      <button className="dismiss" onClick={() => setUpdateDismissed(true)} title="Dismiss">
-        <X size={14} />
-      </button>
+      {downloadProgress || downloading ? (
+        <button 
+          className="dismiss text-danger" 
+          onClick={() => { window.api.cancelBackendDownload(); setDownloading(false); setDownloadProgress(null); }} 
+          title="Cancel Download"
+        >
+          Cancel
+        </button>
+      ) : (
+        <button className="dismiss" onClick={() => setUpdateDismissed(true)} title="Dismiss">
+          <X size={14} />
+        </button>
+      )}
     </div>
   )
 }

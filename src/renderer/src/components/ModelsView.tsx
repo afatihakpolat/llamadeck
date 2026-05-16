@@ -4,12 +4,16 @@ import {
   HardDrive, Download, Trash, Pause, Play, X, Link, FolderOpen,
   Pencil, Check, AlertCircle, Loader2, RefreshCw
 } from 'lucide-react'
-import { buildDefaultTemplate } from '../utils/defaultTemplate'
 function formatBytes(b: number) {
   if (!b) return '—'
   if (b < 1024 * 1024) return `${(b / 1024).toFixed(1)} KB`
   if (b < 1024 ** 3) return `${(b / 1024 ** 2).toFixed(1)} MB`
   return `${(b / 1024 ** 3).toFixed(2)} GB`
+}
+function formatSpeed(bps?: number) {
+  if (!bps) return ''
+  const mbps = bps / (1024 * 1024)
+  return `${mbps.toFixed(1)} MB/s`
 }
 function UrlDownloadModal({ onClose }: { onClose: () => void }) {
   const { upsertModelDownload } = useStore()
@@ -94,29 +98,68 @@ function DownloadRow({ dl }: { dl: ModelDownloadInfo }) {
   const isPaused = dl.phase === 'paused'
   const isDone = dl.phase === 'done'
   const isErr = dl.phase === 'error'
+  
+  const [pending, setPending] = useState<'pausing' | 'resuming' | null>(null)
+
   async function togglePause() {
-    if (isPaused) await window.api.resumeModelDownload(dl.id)
-    else await window.api.pauseModelDownload(dl.id)
+    if (isPaused) {
+      setPending('resuming')
+      await window.api.resumeModelDownload(dl.id)
+    } else {
+      setPending('pausing')
+      await window.api.pauseModelDownload(dl.id)
+    }
+    
+    setTimeout(() => setPending(null), 1500)
   }
   async function cancel() {
     await window.api.cancelModelDownload(dl.id)
     removeModelDownload(dl.id)
   }
+
+  const showSpeed = dl.phase === 'downloading' && !pending && dl.speed && dl.speed > 0
+  const statusLabel = pending === 'pausing'
+    ? 'Pausando…'
+    : pending === 'resuming'
+    ? 'Retomando…'
+    : isPaused
+    ? 'Pausado'
+    : isErr
+    ? 'Erro'
+    : isDone
+    ? 'Concluído'
+    : showSpeed
+    ? formatSpeed(dl.speed)
+    : `${dl.percent}%`
+
   return (
     <div className={`models-dl-row ${isDone ? 'done' : ''} ${isErr ? 'error' : ''}`}>
       <div className="models-dl-meta">
         <span className="models-dl-name">{dl.filename}</span>
-        <span className="models-dl-size">{formatBytes(dl.receivedBytes)} / {formatBytes(dl.totalBytes)}</span>
+        <span className="models-dl-size">
+          {formatBytes(dl.receivedBytes)} / {formatBytes(dl.totalBytes)}
+        </span>
       </div>
       <div className="models-dl-bar-row">
         <div className="models-dl-bar">
-          <div className="models-dl-fill" style={{ width: `${dl.percent}%`, background: isErr ? 'var(--danger)' : isDone ? 'var(--success)' : 'var(--accent)' }} />
+          <div className="models-dl-fill" style={{ width: `${dl.percent}%`, background: isErr ? 'var(--danger)' : isDone ? 'var(--success)' : 'var(--accent)', opacity: isPaused || pending ? 0.5 : 1, transition: 'width 0.3s ease' }} />
         </div>
-        <span className="models-dl-pct">{dl.percent}%</span>
+        <span className="models-dl-pct" style={{ minWidth: 80, textAlign: 'right', color: isPaused ? 'var(--text-muted)' : 'inherit' }}>
+          {statusLabel}
+        </span>
         {!isDone && !isErr && (
           <>
-            <button className="btn btn-ghost btn-icon" onClick={togglePause} title={isPaused ? 'Resume' : 'Pause'}>
-              {isPaused ? <Play size={13} /> : <Pause size={13} />}
+            <button
+              className="btn btn-ghost btn-icon"
+              onClick={togglePause}
+              disabled={!!pending}
+              title={isPaused ? 'Resume' : 'Pause'}
+            >
+              {pending
+                ? <Loader2 size={13} className="spin" />
+                : isPaused
+                ? <Play size={13} />
+                : <Pause size={13} />}
             </button>
             <button className="btn btn-ghost btn-icon text-danger" onClick={cancel} title="Cancel">
               <X size={13} />
@@ -134,6 +177,7 @@ function DownloadRow({ dl }: { dl: ModelDownloadInfo }) {
     </div>
   )
 }
+
 function ModelFileRow({ model, onDeleted }: { model: ModelFileInfo; onDeleted: () => void }) {
   const [editing, setEditing] = useState(false)
   const [newName, setNewName] = useState(model.name.replace(/\.[^.]+$/, ''))
@@ -176,7 +220,7 @@ function ModelFileRow({ model, onDeleted }: { model: ModelFileInfo; onDeleted: (
   )
 }
 export default function ModelsView() {
-  const { models, setModels, modelDownloads, upsertModelDownload, removeModelDownload } = useStore()
+  const { models, setModels, modelDownloads, upsertModelDownload } = useStore()
   const [showUrlModal, setShowUrlModal] = useState(false)
   const [loading, setLoading] = useState(false)
   const refresh = useCallback(async () => {
@@ -185,29 +229,13 @@ export default function ModelsView() {
     setModels(m)
     setLoading(false)
   }, [setModels])
-  const autoCreateTemplate = useCallback(async (filename: string, destPath: string) => {
-    const { cards, activeBackend, addCard } = useStore.getState()
-    const existingTemplates = cards.map(c => c.template)
-    const template = buildDefaultTemplate(filename, destPath, existingTemplates, activeBackend?.name || '')
-    const res = await window.api.saveTemplate(template)
-    if (res.success) {
-      addCard({ ...template, id: res.id })
-    }
-  }, [])
+
   useEffect(() => {
     refresh()
-    window.api.onModelDownloadProgress(async (data: any) => {
-      upsertModelDownload(data)
-      if (data.phase === 'done') {
-        refresh()
-        autoCreateTemplate(data.filename, data.destPath)
-        setTimeout(() => removeModelDownload(data.id), 4000)
-      }
-    })
-    window.api.listModelDownloads().then(list => {
+
+    window.api.listModelDownloads().then((list: any[]) => {
       list.forEach(dl => upsertModelDownload(dl))
     })
-    return () => window.api.removeModelDownloadListener()
   }, [])
   const downloads = Object.values(modelDownloads)
   const activeDownloads = downloads.filter(d => d.phase !== 'cancelled')

@@ -13,7 +13,7 @@ export interface ModelDownloadInfo {
   id: string; url: string; filename: string; destPath: string
   receivedBytes: number; totalBytes: number
   phase: 'downloading' | 'paused' | 'done' | 'error' | 'cancelled'
-  percent: number; repoId?: string
+  percent: number; repoId?: string; speed?: number
 }
 interface AppStore {
   cards: CardState[]
@@ -31,7 +31,10 @@ interface AppStore {
   downloadProgress: { percent: number; phase: string } | null
   templateSearch: string
   modelDownloads: Record<string, ModelDownloadInfo>
-  hfDownloads: { repoId: string; filename: string; percent: number; phase: string }[]
+  hfDownloads: { repoId: string; filename: string; percent: number; phase: 'downloading' | 'paused' | 'saving' | 'creating_template' | 'done' | 'error' | 'starting'; speed?: number }[]
+  hubQuery: string
+  hubResults: any[]
+  hubSelectedModelId: string | null
   setView: (v: AppStore['view']) => void
   setShowCreateModal: (show: boolean, template?: Template | null) => void
   setActiveBackend: (b: BackendVersion) => void
@@ -47,8 +50,11 @@ interface AppStore {
   setTemplateSearch: (q: string) => void
   upsertModelDownload: (d: ModelDownloadInfo) => void
   removeModelDownload: (id: string) => void
-  setHfDownload: (d: { repoId: string; filename: string; percent: number; phase: string }) => void
+  setHfDownload: (d: { repoId: string; filename: string; percent: number; phase: 'downloading' | 'paused' | 'saving' | 'creating_template' | 'done' | 'error' | 'starting'; speed?: number }) => void
   removeHfDownload: (filename: string) => void
+  setHubQuery: (q: string) => void
+  setHubResults: (r: any[]) => void
+  setHubSelectedModelId: (id: string | null) => void
   addCard: (template: Template) => void
   updateCard: (id: string, template: Partial<Template>) => void
   removeCard: (id: string) => void
@@ -62,6 +68,7 @@ export const useStore = create<AppStore>((set) => ({
   view: 'cards', showCreateModal: false, editingTemplate: null,
   updateDismissed: false, checkingUpdate: false, downloadProgress: null,
   templateSearch: '', modelDownloads: {}, hfDownloads: [],
+  hubQuery: '', hubResults: [], hubSelectedModelId: null,
   setView: (v) => set({ view: v }),
   setShowCreateModal: (show, template = null) => set({ showCreateModal: show, editingTemplate: template }),
   setActiveBackend: (b) => set({ activeBackend: b }),
@@ -84,6 +91,9 @@ export const useStore = create<AppStore>((set) => ({
     return { hfDownloads: [...arr, d] }
   }),
   removeHfDownload: (filename) => set((s) => ({ hfDownloads: s.hfDownloads.filter(x => x.filename !== filename) })),
+  setHubQuery: (q) => set({ hubQuery: q }),
+  setHubResults: (r) => set({ hubResults: r }),
+  setHubSelectedModelId: (id) => set({ hubSelectedModelId: id }),
   addCard: (template) => set((s) => ({ cards: [...s.cards, { template, status: 'idle', expanded: false }] })),
   updateCard: (id, partial) => set((s) => ({
     cards: s.cards.map(c => c.template.id === id ? { ...c, template: { ...c.template, ...partial, updatedAt: new Date().toISOString() } } : c)

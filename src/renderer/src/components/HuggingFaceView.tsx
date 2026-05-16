@@ -2,9 +2,8 @@ import React, { useState, useEffect, useCallback } from 'react'
 import { useStore } from '../store/useStore'
 import {
   Search, Download, Heart, ChevronDown, ChevronLeft,
-  FolderOpen, CheckCircle, Loader2, X, AlertCircle, Box
+  FolderOpen, CheckCircle, Loader2, X, AlertCircle, Box, Pause, Play
 } from 'lucide-react'
-import { buildDefaultTemplate } from '../utils/defaultTemplate'
 interface HfModel {
   id: string
   author: string
@@ -25,6 +24,11 @@ function formatBytes(bytes: number): string {
   if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
   return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`
 }
+function formatSpeed(bps?: number): string {
+  if (!bps) return ''
+  const mbps = bps / (1024 * 1024)
+  return `${mbps.toFixed(1)} MB/s`
+}
 function formatNumber(n: number): string {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
   if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`
@@ -44,53 +48,47 @@ function quantLabel(filename: string): { label: string; color: string } {
   return { label: 'GGUF', color: '#6b7280' }
 }
 export default function HuggingFaceView() {
-  const { hfDownloads, setHfDownload, removeHfDownload, setModels } = useStore()
-  const [query, setQuery] = useState('')
-  const [results, setResults] = useState<HfModel[]>([])
+  const {
+    hfDownloads, setHfDownload, removeHfDownload,
+    hubQuery, hubResults, hubSelectedModelId,
+    setHubQuery, setHubResults, setHubSelectedModelId
+  } = useStore()
+
+  const selectedModel = (hubResults as HfModel[]).find(m => m.id === hubSelectedModelId) ?? null
+
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
-  const [selectedModel, setSelectedModel] = useState<HfModel | null>(null)
   const [files, setFiles] = useState<HfFile[]>([])
   const [filesLoading, setFilesLoading] = useState(false)
+
+  const [inputValue, setInputValue] = useState(hubQuery)
+
   useEffect(() => {
-    window.api.onHfDownloadProgress(async (data) => {
-      if (data.phase === 'done') {
-        window.api.listModels().then((m) => setModels(m))
-        const { cards, activeBackend, addCard } = useStore.getState()
-        const existingTemplates = cards.map(c => c.template)
-        const template = buildDefaultTemplate(
-          data.filename,
-          data.destPath,
-          existingTemplates,
-          activeBackend?.name || ''
-        )
-        const res = await window.api.saveTemplate(template)
-        if (res.success) addCard({ ...template, id: res.id })
-        setTimeout(() => removeHfDownload(data.filename), 2000)
-      } else {
-        setHfDownload({ repoId: '', filename: data.filename, percent: data.percent, phase: data.phase })
-      }
-    })
-    return () => window.api.removeHfDownloadListener()
+    if (hubSelectedModelId && hubResults.length > 0 && files.length === 0) {
+      const model = (hubResults as HfModel[]).find(m => m.id === hubSelectedModelId)
+      if (model) fetchFiles(model)
+    }
   }, [])
+
   const doSearch = useCallback(async (q: string) => {
     if (!q.trim()) return
+    setHubQuery(q)          
     setLoading(true)
     setError('')
-    setResults([])
-    setSelectedModel(null)
+    setHubResults([])
+    setHubSelectedModelId(null)
     try {
       const res = await window.api.hfSearch(q.trim())
       if ('error' in res) throw new Error((res as any).error)
-      setResults(res as HfModel[])
+      setHubResults(res as HfModel[])
     } catch (e: any) {
       setError(e.message || 'Search failed')
     } finally {
       setLoading(false)
     }
   }, [])
-  async function handleSelectModel(model: HfModel) {
-    setSelectedModel(model)
+
+  async function fetchFiles(model: HfModel) {
     setFiles([])
     setFilesLoading(true)
     try {
@@ -103,6 +101,12 @@ export default function HuggingFaceView() {
       setFilesLoading(false)
     }
   }
+
+  async function handleSelectModel(model: HfModel) {
+    setHubSelectedModelId(model.id)
+    fetchFiles(model)
+  }
+
   async function handleDownload(file: HfFile) {
     if (!selectedModel) return
     setHfDownload({ repoId: selectedModel.id, filename: file.name, percent: 0, phase: 'starting' })
@@ -116,6 +120,7 @@ export default function HuggingFaceView() {
       alert(`Download failed: ${res.error}`)
     }
   }
+
   const isDownloading = (filename: string) => hfDownloads.some(d => d.filename === filename)
   const getProgress = (filename: string) => hfDownloads.find(d => d.filename === filename)
   const popularQueries = ['llama', 'mistral', 'phi', 'qwen', 'gemma', 'deepseek', 'falcon']
@@ -138,26 +143,26 @@ export default function HuggingFaceView() {
           className="hub-search-input"
           type="text"
           placeholder="Search GGUF models on HuggingFace..."
-          value={query}
-          onChange={e => setQuery(e.target.value)}
-          onKeyDown={e => e.key === 'Enter' && doSearch(query)}
+          value={inputValue}
+          onChange={e => setInputValue(e.target.value)}
+          onKeyDown={e => e.key === 'Enter' && doSearch(inputValue)}
         />
-        {query && (
-          <button className="hub-search-clear" onClick={() => { setQuery(''); setResults([]); setSelectedModel(null) }}>
+        {inputValue && (
+          <button className="hub-search-clear" onClick={() => { setInputValue(''); setHubQuery(''); setHubResults([]); setHubSelectedModelId(null) }}>
             <X size={14} />
           </button>
         )}
-        <button className="btn btn-primary" onClick={() => doSearch(query)} disabled={loading || !query.trim()}>
+        <button className="btn btn-primary" onClick={() => doSearch(inputValue)} disabled={loading || !inputValue.trim()}>
           {loading ? <Loader2 size={14} className="spin" /> : <Search size={14} />}
           Search
         </button>
       </div>
       {}
-      {!results.length && !loading && (
+      {!hubResults.length && !loading && (
         <div className="hub-tags">
           <span style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 600 }}>Popular:</span>
           {popularQueries.map(q => (
-            <button key={q} className="hub-tag-btn" onClick={() => { setQuery(q); doSearch(q) }}>
+            <button key={q} className="hub-tag-btn" onClick={() => { setInputValue(q); doSearch(q) }}>
               {q}
             </button>
           ))}
@@ -182,11 +187,11 @@ export default function HuggingFaceView() {
         </div>
       )}
       {}
-      {!loading && results.length > 0 && (
+      {!loading && hubResults.length > 0 && (
         <div className={`hub-results-layout ${selectedModel ? 'has-detail' : ''}`}>
           {}
           <div className="hub-grid">
-            {results.map(model => (
+            {(hubResults as HfModel[]).map(model => (
               <button
                 key={model.id}
                 className={`hub-card ${selectedModel?.id === model.id ? 'selected' : ''}`}
@@ -211,7 +216,7 @@ export default function HuggingFaceView() {
           {selectedModel && (
             <div className="hub-detail-panel">
               <div className="hub-detail-header">
-                <button className="btn btn-ghost btn-icon" onClick={() => setSelectedModel(null)} title="Back">
+                <button className="btn btn-ghost btn-icon" onClick={() => setHubSelectedModelId(null)} title="Back">
                   <ChevronLeft size={16} />
                 </button>
                 <div style={{ flex: 1, minWidth: 0 }}>
@@ -256,9 +261,37 @@ export default function HuggingFaceView() {
                     {downloading && !done ? (
                       <div className="hub-file-progress">
                         <div className="hub-progress-bar">
-                          <div className="hub-progress-fill" style={{ width: `${dl?.percent || 0}%` }} />
+                          <div className="hub-progress-fill" style={{ width: `${dl?.percent || 0}%`, opacity: dl?.phase === 'paused' ? 0.45 : 1, transition: 'width 0.3s ease' }} />
                         </div>
-                        <span className="hub-progress-label">{dl?.percent || 0}%</span>
+                        <span className="hub-progress-label">
+                          {dl?.phase === 'saving'
+                            ? 'Salvando...'
+                            : dl?.phase === 'creating_template'
+                            ? 'Criando template...'
+                            : dl?.phase === 'paused'
+                            ? `Pausado • ${dl?.percent || 0}%`
+                            : `${dl?.percent || 0}%${dl?.speed ? ` • ${formatSpeed(dl.speed)}` : ''}`
+                          }
+                        </span>
+                        {dl?.phase === 'paused' ? (
+                          <button
+                            className="btn btn-ghost btn-icon"
+                            style={{ marginLeft: 4 }}
+                            onClick={() => window.api.resumeModelDownload(file.name)}
+                            title="Resume"
+                          >
+                            <Play size={12} />
+                          </button>
+                        ) : dl?.phase === 'downloading' ? (
+                          <button
+                            className="btn btn-ghost btn-icon"
+                            style={{ marginLeft: 4 }}
+                            onClick={() => window.api.pauseModelDownload(file.name)}
+                            title="Pause"
+                          >
+                            <Pause size={12} />
+                          </button>
+                        ) : null}
                       </div>
                     ) : done ? (
                       <div className="hub-file-done">
@@ -283,16 +316,26 @@ export default function HuggingFaceView() {
       {}
       {hfDownloads.filter(d => d.phase !== 'done').length > 0 && (
         <div className="hub-downloads-strip">
-          {hfDownloads.filter(d => d.phase !== 'done').map(dl => (
-            <div key={dl.filename} className="hub-dl-strip-item">
-              <Loader2 size={12} className="spin" />
-              <span className="hub-dl-strip-name">{dl.filename}</span>
-              <div className="hub-dl-strip-bar">
-                <div className="hub-dl-strip-fill" style={{ width: `${dl.percent}%` }} />
+          {hfDownloads.filter(d => d.phase !== 'done').map(dl => {
+            const isPaused = dl.phase === 'paused'
+            let statusText = `${dl.percent}%`
+            if (dl.phase === 'downloading') statusText = dl.speed ? `${dl.percent}% • ${formatSpeed(dl.speed)}` : `Baixando [${dl.percent}%]`
+            if (dl.phase === 'saving') statusText = 'Salvando em /models...'
+            if (dl.phase === 'creating_template') statusText = 'Criando template...'
+            if (isPaused) statusText = `Pausado • ${dl.percent}%`
+            return (
+              <div key={dl.filename} className="hub-dl-strip-item">
+                {isPaused
+                  ? <Pause size={12} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
+                  : <Loader2 size={12} className="spin" style={{ flexShrink: 0 }} />}
+                <span className="hub-dl-strip-name">{dl.filename}</span>
+                <div className="hub-dl-strip-bar">
+                  <div className="hub-dl-strip-fill" style={{ width: `${dl.percent}%`, opacity: isPaused ? 0.45 : 1, transition: 'width 0.3s ease' }} />
+                </div>
+                <span className="hub-dl-strip-pct">{statusText}</span>
               </div>
-              <span className="hub-dl-strip-pct">{dl.percent}%</span>
-            </div>
-          ))}
+            )
+          })}
         </div>
       )}
     </div>
