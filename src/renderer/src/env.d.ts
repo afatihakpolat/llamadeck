@@ -1,4 +1,4 @@
-import type { Template, BackendVersion, CommandsSchema, LiteLlmChatMessage, LiteLlmInstallStatus, LiteLlmManagerSettingsInput, LiteLlmManagerSnapshot, LiteLlmModelEntry, LiteLlmSettingsInput, LiteLlmSettingsSnapshot, ReleaseInfo } from '../../shared/types'
+import type { Template, BackendVersion, CommandsSchema, LiteLlmInstallStatus, LiteLlmManagerSettingsInput, LiteLlmManagerSnapshot, LiteLlmModelEntry, LiteLlmSettingsInput, LiteLlmSettingsSnapshot, ReleaseInfo } from '../../shared/types'
 interface ModelFileInfo {
   name: string
   path: string
@@ -91,8 +91,6 @@ interface LlamaCppApi {
   setAppFolder: (kind: 'models' | 'backend', path: string) => Promise<{ success: true; snapshot: FilesystemSnapshot } | { success: false; error?: string }>
   openExternal: (url: string) => Promise<void>
   openChatWindow: (port: number) => Promise<void>
-  openLiteLlmChatWindow: (templateId: string) => Promise<{ success: boolean; error?: string }>
-  liteLlmChatCompletion: (opts: { templateId: string; messages: LiteLlmChatMessage[] }) => Promise<{ success: true; message: LiteLlmChatMessage } | { success: false; error?: string }>
 }
 declare global {
   interface Window { api: LlamaCppApi }

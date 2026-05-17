@@ -10,7 +10,6 @@ import http from 'http'
 import { app } from 'electron'
 import extract from 'extract-zip'
 import type {
-  LiteLlmChatMessage,
   LiteLlmInstallStatus,
   LiteLlmLogLevel,
   LiteLlmManagerSettings,
@@ -289,7 +288,11 @@ function normalizeLiteLlmHost(value: string): string {
     throw new Error('LiteLLM host is required')
   }
 
-  return trimmedValue
+  if (!['127.0.0.1', 'localhost'].includes(trimmedValue)) {
+    throw new Error('LiteLLM host must stay on loopback: use 127.0.0.1 or localhost.')
+  }
+
+  return '127.0.0.1'
 }
 
 function normalizeLiteLlmPort(value: number): number {
@@ -308,6 +311,10 @@ function normalizeLiteLlmLogLevel(value: LiteLlmLogLevel): LiteLlmLogLevel {
 
 function buildManagedLiteLlmBaseUrl(settings: Pick<LiteLlmManagerStoredSettings, 'host' | 'port'>): string {
   return `http://${settings.host}:${settings.port}`
+}
+
+function getManagedLiteLlmBaseUrl(): string {
+  return buildManagedLiteLlmBaseUrl({ host: '127.0.0.1', port: liteLlmManagerSettings.port })
 }
 
 function loadLiteLlmStoredSettings(): LiteLlmStoredSettings {
@@ -404,6 +411,16 @@ let liteLlmProxyProcess: ChildProcess | null = null
 const liteLlmLogBuffer: string[] = []
 let latestLiteLlmVersionCache: { version: string | null; checkedAt: number } | null = null
 
+function syncLiteLlmSettingsToManagedProxy(): void {
+  const managedBaseUrl = getManagedLiteLlmBaseUrl()
+  if (liteLlmSettings.baseUrl !== managedBaseUrl || liteLlmSettings.apiKey) {
+    liteLlmSettings = { ...liteLlmSettings, baseUrl: managedBaseUrl, apiKey: '' }
+    persistLiteLlmStoredSettings(liteLlmSettings)
+  }
+}
+
+syncLiteLlmSettingsToManagedProxy()
+
 function getAppPaths(): AppPaths {
   return appPaths
 }
@@ -422,6 +439,7 @@ function updateAppPath(kind: ConfigurablePathKind, nextPath: string): AppPaths {
 }
 
 function getLiteLlmSettingsSnapshot(): LiteLlmSettingsSnapshot {
+  syncLiteLlmSettingsToManagedProxy()
   return buildLiteLlmSettingsSnapshot(liteLlmSettings)
 }
 
@@ -682,9 +700,8 @@ function saveLiteLlmManagerSettings(input: LiteLlmManagerSettingsInput): LiteLlm
   ensureLiteLlmConfigFile()
 
   const nextManagedBaseUrl = buildManagedLiteLlmBaseUrl(liteLlmManagerSettings)
-  if (!liteLlmSettings.baseUrl || liteLlmSettings.baseUrl === previousManagedBaseUrl) {
-    liteLlmSettings = { ...liteLlmSettings, baseUrl: nextManagedBaseUrl }
-    persistLiteLlmStoredSettings(liteLlmSettings)
+  if (liteLlmSettings.baseUrl === previousManagedBaseUrl || liteLlmSettings.baseUrl !== nextManagedBaseUrl) {
+    syncLiteLlmSettingsToManagedProxy()
   }
 
   return buildLiteLlmManagerSettingsSnapshot()
@@ -758,6 +775,7 @@ async function startLiteLlmProxyProcess(): Promise<{ success: true; snapshot: Li
   }
 
   const configPath = ensureLiteLlmConfigFile()
+  syncLiteLlmSettingsToManagedProxy()
   const args = [
     ...runtime.argsPrefix,
     '-m',
@@ -799,7 +817,7 @@ async function startLiteLlmProxyProcess(): Promise<{ success: true; snapshot: Li
 
   liteLlmProxyProcess = child
   try {
-    await waitForLiteLlmServerReady(buildManagedLiteLlmBaseUrl(liteLlmManagerSettings), child)
+    await waitForLiteLlmServerReady(getManagedLiteLlmBaseUrl(), child)
   } catch (error) {
     appendLiteLlmLog(String(error))
     if (child.pid && !child.killed) {
@@ -827,14 +845,7 @@ async function stopLiteLlmProxyProcess(): Promise<{ success: true; snapshot: Lit
 }
 
 function saveLiteLlmSettings(input: LiteLlmSettingsInput): LiteLlmSettingsSnapshot {
-  const baseUrl = normalizeLiteLlmBaseUrl(input.baseUrl)
-  const nextApiKey = input.clearApiKey
-    ? ''
-    : typeof input.apiKey === 'string' && input.apiKey.trim()
-      ? input.apiKey.trim()
-      : liteLlmSettings.apiKey
-
-  liteLlmSettings = { baseUrl, apiKey: nextApiKey }
+  liteLlmSettings = { baseUrl: getManagedLiteLlmBaseUrl(), apiKey: '' }
   persistLiteLlmStoredSettings(liteLlmSettings)
   return getLiteLlmSettingsSnapshot()
 }
@@ -1076,28 +1087,6 @@ async function killProcessTree(pid: number): Promise<void> {
   })
 }
 
-function resolveLiteLlmChatContent(content: unknown): string {
-  if (typeof content === 'string') {
-    return content
-  }
-
-  if (Array.isArray(content)) {
-    return content
-      .map((part) => {
-        if (typeof part === 'string') return part
-        if (part && typeof part === 'object' && 'text' in part && typeof part.text === 'string') {
-          return part.text
-        }
-
-        return ''
-      })
-      .filter(Boolean)
-      .join('\n')
-  }
-
-  return ''
-}
-
 function resolveAppIconPath(): string | undefined {
   const candidates = [
     join(process.cwd(), 'assets', 'icon.png'),
@@ -1219,11 +1208,11 @@ function fetchJson(url: string): Promise<unknown> {
 }
 
 async function listLiteLlmModelsFromSettings(): Promise<LiteLlmModelEntry[]> {
-  if (!liteLlmSettings.baseUrl) {
-    throw new Error('LiteLLM base URL is not configured.')
+  if (!isLiteLlmProxyRunning()) {
+    throw new Error('LiteLLM proxy is not running.')
   }
 
-  const response = await requestJson(buildLiteLlmApiUrl(liteLlmSettings.baseUrl, '/models'), {
+  const response = await requestJson(buildLiteLlmApiUrl(getManagedLiteLlmBaseUrl(), '/models'), {
     headers: buildLiteLlmRequestHeaders(liteLlmSettings)
   }) as { data?: Array<{ id?: string }> } | null
 
@@ -1347,10 +1336,9 @@ export function registerIpcHandlers(): void {
     return stopLiteLlmProxyProcess()
   })
   ipcMain.handle('save-litellm-settings', (_e, input: LiteLlmSettingsInput) => {
-    try {
-      return { success: true, settings: saveLiteLlmSettings(input) }
-    } catch (err) {
-      return { success: false, error: String(err) }
+    return {
+      success: false,
+      error: 'Separate LiteLLM connection settings are no longer supported. Hexllama always uses the managed local proxy.'
     }
   })
   ipcMain.handle('test-litellm-connection', async () => {
@@ -1679,104 +1667,8 @@ export function registerIpcHandlers(): void {
     }
   }
 
-  function openLiteLlmChatWindow(templateId: string, title: string) {
-    const icon = resolveAppIconPath()
-
-    const chatWin = new BrowserWindow({
-      width: 1024,
-      height: 768,
-      show: true,
-      autoHideMenuBar: true,
-      title,
-      titleBarStyle: 'hiddenInset',
-      backgroundColor: '#ffffff',
-      ...(icon ? { icon } : {}),
-      webPreferences: {
-        preload: join(__dirname, '../preload/index.js'),
-        sandbox: false,
-        contextIsolation: true,
-        nodeIntegration: false
-      }
-    })
-
-    const rendererUrl = process.env['ELECTRON_RENDERER_URL']
-    if (rendererUrl) {
-      chatWin.loadURL(`${rendererUrl}?litellm_template=${encodeURIComponent(templateId)}`)
-    } else {
-      chatWin.loadFile(join(__dirname, '../renderer/index.html'), { query: { litellm_template: templateId } })
-    }
-  }
-
   ipcMain.handle('open-chat-window', (_e, port: number) => {
     openChatWindow(port)
-  })
-  ipcMain.handle('open-litellm-chat-window', (_e, templateId: string) => {
-    const template = getTemplateById(templateId)
-    if (!template) {
-      return { success: false, error: 'Template not found.' }
-    }
-
-    if ((template.providerType || 'local') !== 'litellm') {
-      return { success: false, error: 'Template is not configured for LiteLLM.' }
-    }
-
-    if (!liteLlmSettings.baseUrl) {
-      return { success: false, error: 'LiteLLM base URL is not configured.' }
-    }
-
-    if (!template.remoteModel?.trim()) {
-      return { success: false, error: 'LiteLLM remote model is not configured for this template.' }
-    }
-
-    openLiteLlmChatWindow(templateId, `Hexllama - ${template.name}`)
-    return { success: true }
-  })
-  ipcMain.handle('litellm-chat-completion', async (_e, opts: { templateId: string; messages: LiteLlmChatMessage[] }) => {
-    try {
-      const template = getTemplateById(opts.templateId)
-      if (!template) {
-        return { success: false, error: 'Template not found.' }
-      }
-
-      if ((template.providerType || 'local') !== 'litellm') {
-        return { success: false, error: 'Template is not configured for LiteLLM.' }
-      }
-
-      if (!liteLlmSettings.baseUrl) {
-        return { success: false, error: 'LiteLLM base URL is not configured.' }
-      }
-
-      if (!template.remoteModel?.trim()) {
-        return { success: false, error: 'LiteLLM remote model is not configured for this template.' }
-      }
-
-      const payload = {
-        model: template.remoteModel.trim(),
-        messages: opts.messages,
-        stream: false
-      }
-
-      const response = await requestJson(buildLiteLlmApiUrl(liteLlmSettings.baseUrl, '/chat/completions'), {
-        method: 'POST',
-        headers: buildLiteLlmRequestHeaders(liteLlmSettings, true),
-        body: JSON.stringify(payload)
-      }) as { choices?: Array<{ message?: { content?: unknown } }> } | null
-
-      const assistantContent = resolveLiteLlmChatContent(response?.choices?.[0]?.message?.content)
-      if (!assistantContent.trim()) {
-        return { success: false, error: 'LiteLLM returned no assistant message.' }
-      }
-
-      return {
-        success: true,
-        message: {
-          role: 'assistant',
-          content: assistantContent
-        } satisfies LiteLlmChatMessage
-      }
-    } catch (err) {
-      return { success: false, error: String(err) }
-    }
   })
   ipcMain.handle('stop-model', (_e, id: string) => {
     const proc = runningProcesses.get(id)

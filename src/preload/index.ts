@@ -66,8 +66,6 @@ const api = {
   setAppFolder: (kind: 'models' | 'backend', path: string) => ipcRenderer.invoke('set-app-folder', kind, path),
   openExternal: (url: string) => ipcRenderer.invoke('open-external', url),
   openChatWindow: (port: number) => ipcRenderer.invoke('open-chat-window', port),
-  openLiteLlmChatWindow: (templateId: string) => ipcRenderer.invoke('open-litellm-chat-window', templateId),
-  liteLlmChatCompletion: (opts: object) => ipcRenderer.invoke('litellm-chat-completion', opts),
 }
 if (process.contextIsolated) {
   try {

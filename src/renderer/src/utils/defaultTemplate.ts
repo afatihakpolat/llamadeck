@@ -115,7 +115,6 @@ export function buildDefaultTemplate(
     id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
     name: cleanName(filename) || filename,
     description: settings.description,
-    providerType: 'local',
     modelPath,
     serverPort: port,
     backendVersion: backendName,

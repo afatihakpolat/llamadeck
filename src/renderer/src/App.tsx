@@ -10,21 +10,15 @@ import LiteLlmView from './components/LiteLlmView'
 import CreateModal from './components/CreateModal'
 import UpdateBanner from './components/UpdateBanner'
 import ChatWindow from './components/ChatWindow'
-import LiteLlmChatWindow from './components/LiteLlmChatWindow'
 import { buildDefaultTemplate } from './utils/defaultTemplate'
 import type { Template } from '../../shared/types'
 
 export default function App() {
   const searchParams = new URLSearchParams(window.location.search)
   const chatUrl = searchParams.get('chat_url')
-  const liteLlmTemplateId = searchParams.get('litellm_template')
 
   if (chatUrl) {
     return <ChatWindow url={chatUrl} />
-  }
-
-  if (liteLlmTemplateId) {
-    return <LiteLlmChatWindow templateId={liteLlmTemplateId} />
   }
 
   const [loading, setLoading] = React.useState(true)

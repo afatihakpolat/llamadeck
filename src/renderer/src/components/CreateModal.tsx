@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { useStore } from '../store/useStore'
 import { FolderOpen, ChevronDown, Terminal, Globe, Server } from 'lucide-react'
-import type { LiteLlmModelEntry, Template, TemplateProvider } from '../../../shared/types'
+import type { Template } from '../../../shared/types'
 import CmdParamsEditor from './CmdParamsEditor'
 function parseCommand(cmd: string): {
   modelPath: string
@@ -40,63 +40,30 @@ export default function CreateModal() {
   const { setShowCreateModal, editingTemplate, backends, activeBackend, addCard, updateCard, models } = useStore()
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
-  const [providerType, setProviderType] = useState<TemplateProvider>('local')
   const [backendVersion, setBackendVersion] = useState('')
   const [modelPath, setModelPath] = useState('')
-  const [remoteModel, setRemoteModel] = useState('')
   const [serverPort, setServerPort] = useState(8080)
   const [args, setArgs] = useState<Record<string, any>>({})
   const [launchMode, setLaunchMode] = useState<'chat' | 'api'>('chat')
   const [showAdvanced, setShowAdvanced] = useState(false)
   const [showImport, setShowImport] = useState(false)
   const [importCmd, setImportCmd] = useState('')
-  const [remoteModels, setRemoteModels] = useState<LiteLlmModelEntry[]>([])
-  const [loadingRemoteModels, setLoadingRemoteModels] = useState(false)
-  const [remoteModelError, setRemoteModelError] = useState('')
-
-  useEffect(() => {
-    if (providerType === 'litellm') {
-      void loadRemoteModels()
-    }
-  }, [providerType])
 
   useEffect(() => {
     if (editingTemplate) {
       setName(editingTemplate.name)
       setDescription(editingTemplate.description || '')
-      setProviderType(editingTemplate.providerType || 'local')
       setBackendVersion(editingTemplate.backendVersion || '')
       setModelPath(editingTemplate.modelPath || '')
-      setRemoteModel(editingTemplate.remoteModel || '')
       setServerPort(editingTemplate.serverPort || 8080)
       setArgs(editingTemplate.args || {})
       setLaunchMode(editingTemplate.launchMode || 'chat')
     } else {
-      setProviderType('local')
       if (activeBackend) setBackendVersion(activeBackend.name)
-      setRemoteModel('')
       setArgs({})
       setLaunchMode('chat')
     }
   }, [editingTemplate, activeBackend])
-
-  async function loadRemoteModels() {
-    setLoadingRemoteModels(true)
-    setRemoteModelError('')
-    try {
-      const result = await window.api.listLiteLlmModels()
-      if (!result.success) {
-        throw new Error(result.error || 'Failed to load LiteLLM models.')
-      }
-
-      setRemoteModels(result.models)
-    } catch (error) {
-      setRemoteModels([])
-      setRemoteModelError(String(error))
-    } finally {
-      setLoadingRemoteModels(false)
-    }
-  }
 
   async function handlePickModel() {
     const file = await window.api.pickModelFile()
@@ -114,16 +81,13 @@ export default function CreateModal() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     if (!name.trim()) return alert('Name is required')
-    if (providerType === 'local' && !modelPath.trim()) return alert('Model file is required for local templates')
-    if (providerType === 'litellm' && !remoteModel.trim()) return alert('Remote model is required for LiteLLM templates')
+    if (!modelPath.trim()) return alert('Model file is required')
 
     const templateData: Partial<Template> = {
       name,
       description,
-      providerType,
-      backendVersion: providerType === 'local' ? backendVersion : '',
-      modelPath: providerType === 'local' ? modelPath : '',
-      remoteModel: providerType === 'litellm' ? remoteModel.trim() : '',
+      backendVersion,
+      modelPath,
       serverPort,
       args,
       launchMode
@@ -217,152 +181,93 @@ export default function CreateModal() {
               />
             </div>
             <div className="form-group">
-              <label className="form-label">Provider</label>
-              <div className="launch-mode-row">
-                <button type="button" className={`launch-mode-btn ${providerType === 'local' ? 'active' : ''}`} onClick={() => setProviderType('local')}>
-                  <Server size={13} /> Local llama.cpp
-                </button>
-                <button type="button" className={`launch-mode-btn ${providerType === 'litellm' ? 'active' : ''}`} onClick={() => { setProviderType('litellm'); setLaunchMode('chat') }}>
-                  <Globe size={13} /> LiteLLM Proxy
-                </button>
-              </div>
-              <div className="form-hint">Use local backends for GGUF files, or LiteLLM for remote OpenAI-compatible proxy models.</div>
+              <label className="form-label">Backend</label>
+              <div className="form-hint">Templates launch local llama.cpp backends. LiteLLM is managed separately from the LiteLLM page.</div>
             </div>
-            {providerType === 'local' ? (
-              <>
-                <div className="form-row">
-                  <div className="form-group">
-                    <label className="form-label">Backend Version</label>
-                    <select
-                      className="form-select"
-                      value={backendVersion}
-                      onChange={e => setBackendVersion(e.target.value)}
-                    >
-                      <option value="">Default (Active)</option>
-                      {backends.map(b => (
-                        <option key={b.name} value={b.name}>{b.displayName}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="form-group">
-                    <label className="form-label">Server Port</label>
-                    <input
-                      type="number"
-                      className="form-input"
-                      value={serverPort}
-                      onChange={e => setServerPort(Number(e.target.value))}
-                      min={1024}
-                      max={65535}
-                    />
-                  </div>
-                </div>
-                <div className="form-group">
-                  <label className="form-label">Launch Mode</label>
-                  <div className="launch-mode-row">
-                    <button type="button" className={`launch-mode-btn ${launchMode === 'chat' ? 'active' : ''}`} onClick={() => setLaunchMode('chat')}>
-                      <Globe size={13} /> Chat UI
-                    </button>
-                    <button type="button" className={`launch-mode-btn ${launchMode === 'api' ? 'active' : ''}`} onClick={() => setLaunchMode('api')}>
-                      <Server size={13} /> API Only
-                    </button>
-                  </div>
-                  <div className="form-hint">Chat UI opens the browser. API Only serves at the port without opening the web UI.</div>
-                </div>
-                <div className="form-group mb-0">
-                  <label className="form-label">Model File</label>
-                  <div className="file-picker">
-                    <select
-                      className="form-select mono text-sm flex-1"
-                      value={modelPath}
-                      onChange={e => setModelPath(e.target.value)}
-                    >
-                      <option value="">-- Select a model --</option>
-                      {models.map(m => (
-                        <option key={m.path} value={m.path}>{m.name}</option>
-                      ))}
-                      {modelPath && !models.find(m => m.path === modelPath) && (
-                        <option value={modelPath}>{modelPath.split(/[/\\]/).pop()}</option>
-                      )}
-                    </select>
-                    <button type="button" className="btn btn-secondary" onClick={handlePickModel}>
-                      <FolderOpen size={16} />
-                      Browse
-                    </button>
-                  </div>
-                  <div className="form-hint">Select a file from /models or browse your computer.</div>
-                </div>
-              </>
-            ) : (
-              <>
-                <div className="form-row">
-                  <div className="form-group">
-                    <label className="form-label">Remote Model</label>
-                    <select
-                      className="form-select"
-                      value={remoteModel}
-                      onChange={(event) => setRemoteModel(event.target.value)}
-                      disabled={loadingRemoteModels}
-                    >
-                      <option value="">-- Select a remote model --</option>
-                      {remoteModels.map((model) => (
-                        <option key={model.id} value={model.id}>{model.label}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="form-group">
-                    <label className="form-label">Manual Remote Model</label>
-                    <input
-                      type="text"
-                      className="form-input"
-                      value={remoteModel}
-                      onChange={(event) => setRemoteModel(event.target.value)}
-                      placeholder="gpt-4o-mini or your-proxy-model-id"
-                    />
-                  </div>
-                </div>
-                <div className="flex gap-2" style={{ marginTop: -4, marginBottom: 8, flexWrap: 'wrap' }}>
-                  <button type="button" className="btn btn-secondary btn-sm" onClick={() => void loadRemoteModels()} disabled={loadingRemoteModels}>
-                    {loadingRemoteModels ? <ChevronDown size={14} className="spin" /> : <RefreshCw size={14} />}
-                    Refresh Remote Models
-                  </button>
-                </div>
-                {remoteModelError && <div className="text-danger text-sm">{remoteModelError}</div>}
-                <div className="form-group">
-                  <label className="form-label">Run Behavior</label>
-                  <div className="launch-mode-row">
-                    <button type="button" className={`launch-mode-btn ${launchMode === 'chat' ? 'active' : ''}`} onClick={() => setLaunchMode('chat')}>
-                      <Globe size={13} /> In-App Chat
-                    </button>
-                  </div>
-                  <div className="form-hint">LiteLLM templates always open the in-app chat window and do not launch a local server process.</div>
-                </div>
-              </>
-            )}
-            {providerType === 'local' && (
-              <div className="collapsible-section" style={{ marginTop: 20 }}>
-                <button
-                  type="button"
-                  className="collapsible-toggle"
-                  onClick={() => setShowAdvanced(!showAdvanced)}
+            <div className="form-row">
+              <div className="form-group">
+                <label className="form-label">Backend Version</label>
+                <select
+                  className="form-select"
+                  value={backendVersion}
+                  onChange={e => setBackendVersion(e.target.value)}
                 >
-                  <span>Advanced Parameters</span>
-                  <ChevronDown
-                    size={14}
-                    style={{ marginLeft: 'auto', transform: showAdvanced ? 'rotate(180deg)' : 'none', transition: 'transform 180ms' }}
-                  />
-                </button>
-                {showAdvanced && (
-                  <div className="collapsible-body">
-                    <CmdParamsEditor
-                      args={args}
-                      onChange={setArgs}
-                      modelPathFallback={modelPath}
-                      serverPortFallback={serverPort}
-                    />
-                  </div>
-                )}
+                  <option value="">Default (Active)</option>
+                  {backends.map(b => (
+                    <option key={b.name} value={b.name}>{b.displayName}</option>
+                  ))}
+                </select>
               </div>
-            )}
+              <div className="form-group">
+                <label className="form-label">Server Port</label>
+                <input
+                  type="number"
+                  className="form-input"
+                  value={serverPort}
+                  onChange={e => setServerPort(Number(e.target.value))}
+                  min={1024}
+                  max={65535}
+                />
+              </div>
+            </div>
+            <div className="form-group">
+              <label className="form-label">Launch Mode</label>
+              <div className="launch-mode-row">
+                <button type="button" className={`launch-mode-btn ${launchMode === 'chat' ? 'active' : ''}`} onClick={() => setLaunchMode('chat')}>
+                  <Globe size={13} /> Chat UI
+                </button>
+                <button type="button" className={`launch-mode-btn ${launchMode === 'api' ? 'active' : ''}`} onClick={() => setLaunchMode('api')}>
+                  <Server size={13} /> API Only
+                </button>
+              </div>
+              <div className="form-hint">Chat UI opens the browser. API Only serves at the port without opening the web UI.</div>
+            </div>
+            <div className="form-group mb-0">
+              <label className="form-label">Model File</label>
+              <div className="file-picker">
+                <select
+                  className="form-select mono text-sm flex-1"
+                  value={modelPath}
+                  onChange={e => setModelPath(e.target.value)}
+                >
+                  <option value="">-- Select a model --</option>
+                  {models.map(m => (
+                    <option key={m.path} value={m.path}>{m.name}</option>
+                  ))}
+                  {modelPath && !models.find(m => m.path === modelPath) && (
+                    <option value={modelPath}>{modelPath.split(/[/\\]/).pop()}</option>
+                  )}
+                </select>
+                <button type="button" className="btn btn-secondary" onClick={handlePickModel}>
+                  <FolderOpen size={16} />
+                  Browse
+                </button>
+              </div>
+              <div className="form-hint">Select a file from /models or browse your computer.</div>
+            </div>
+            <div className="collapsible-section" style={{ marginTop: 20 }}>
+              <button
+                type="button"
+                className="collapsible-toggle"
+                onClick={() => setShowAdvanced(!showAdvanced)}
+              >
+                <span>Advanced Parameters</span>
+                <ChevronDown
+                  size={14}
+                  style={{ marginLeft: 'auto', transform: showAdvanced ? 'rotate(180deg)' : 'none', transition: 'transform 180ms' }}
+                />
+              </button>
+              {showAdvanced && (
+                <div className="collapsible-body">
+                  <CmdParamsEditor
+                    args={args}
+                    onChange={setArgs}
+                    modelPathFallback={modelPath}
+                    serverPortFallback={serverPort}
+                  />
+                </div>
+              )}
+            </div>
           </div>
           <div className="modal-footer">
             <button type="button" className="btn btn-ghost" onClick={() => setShowCreateModal(false)}>

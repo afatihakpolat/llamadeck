@@ -10,10 +10,9 @@ export default function ModelCard({ card }: Props) {
   const menuRef = useRef<HTMLDivElement>(null)
   const isRunning = card.status === 'running'
   const isExpanded = card.expanded
-  const providerType = card.template.providerType || 'local'
   const launchMode = card.template.launchMode || 'chat'
   const modelExists = !card.template.modelPath || models.some(m => m.path === card.template.modelPath)
-  const canStart = providerType === 'litellm' ? Boolean(card.template.remoteModel?.trim()) : modelExists
+  const canStart = modelExists
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
       if (menuRef.current && !menuRef.current.contains(e.target as Node)) setShowMenu(false)
@@ -26,19 +25,6 @@ export default function ModelCard({ card }: Props) {
       const res = await window.api.stopModel(card.template.id)
       if (res.success) setCardStatus(card.template.id, 'idle')
       else alert(`Failed to stop: ${res.error}`)
-      return
-    }
-
-    if (providerType === 'litellm') {
-      if (!card.template.remoteModel?.trim()) {
-        alert('LiteLLM template is missing a remote model.')
-        return
-      }
-
-      const res = await window.api.openLiteLlmChatWindow(card.template.id)
-      if (!res.success) {
-        alert(`Failed to open LiteLLM chat: ${res.error}`)
-      }
       return
     }
 
@@ -121,11 +107,9 @@ export default function ModelCard({ card }: Props) {
           <h3 className="card-name" title={card.template.name}>{card.template.name}</h3>
           <p className="card-desc" title={card.template.description}>{card.template.description || 'No description'}</p>
           <p className="card-desc" style={{ marginTop: 4 }}>
-            {providerType === 'litellm'
-              ? `LiteLLM${card.template.remoteModel ? ` · ${card.template.remoteModel}` : ''}`
-              : card.template.modelPath
-                ? card.template.modelPath.split(/[/\\]/).pop()
-                : 'No model selected'}
+            {card.template.modelPath
+              ? card.template.modelPath.split(/[/\\]/).pop()
+              : 'No model selected'}
           </p>
         </div>
         <div className="card-menu-btn" ref={menuRef} style={{ position: 'relative', zIndex: 10 }}>
@@ -144,13 +128,11 @@ export default function ModelCard({ card }: Props) {
         </div>
       </div>
       <div className="card-meta">
-        <span className="card-tag" title={providerType === 'litellm' ? card.template.remoteModel : card.template.modelPath}>
+        <span className="card-tag" title={card.template.modelPath}>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z" /><polyline points="14 2 14 8 20 8" /></svg>
-          {providerType === 'litellm'
-            ? (card.template.remoteModel || 'No remote model')
-            : card.template.modelPath
-              ? (!modelExists ? <span style={{ color: 'var(--danger)' }}>Missing File</span> : (card.template.modelPath?.split(/[/\\]/).pop() || 'No model'))
-              : 'No model'}
+          {card.template.modelPath
+            ? (!modelExists ? <span style={{ color: 'var(--danger)' }}>Missing File</span> : (card.template.modelPath?.split(/[/\\]/).pop() || 'No model'))
+            : 'No model'}
         </span>
         <span className="card-tag">
           <span className={`status-dot ${isRunning ? 'running' : 'idle'}`} />
@@ -158,55 +140,41 @@ export default function ModelCard({ card }: Props) {
         </span>
       </div>
       <div className="card-launch-mode">
-        {providerType === 'local' ? (
-          <>
-            <button
-              className={`launch-mode-btn ${launchMode === 'chat' ? 'active' : ''}`}
-              onClick={() => setLaunchMode('chat')}
-              title="Open chat web UI when started"
-              disabled={isRunning}
-            >
-              <Globe size={12} /> Chat UI
-            </button>
-            <button
-              className={`launch-mode-btn ${launchMode === 'api' ? 'active' : ''}`}
-              onClick={() => setLaunchMode('api')}
-              title="Serve API only, no web UI"
-              disabled={isRunning}
-            >
-              <Server size={12} /> API Only
-            </button>
-          </>
-        ) : (
-          <div className="form-hint" style={{ margin: 0 }}>LiteLLM templates open the in-app chat window.</div>
-        )}
+        <>
+          <button
+            className={`launch-mode-btn ${launchMode === 'chat' ? 'active' : ''}`}
+            onClick={() => setLaunchMode('chat')}
+            title="Open chat web UI when started"
+            disabled={isRunning}
+          >
+            <Globe size={12} /> Chat UI
+          </button>
+          <button
+            className={`launch-mode-btn ${launchMode === 'api' ? 'active' : ''}`}
+            onClick={() => setLaunchMode('api')}
+            title="Serve API only, no web UI"
+            disabled={isRunning}
+          >
+            <Server size={12} /> API Only
+          </button>
+        </>
       </div>
       <div className="card-actions">
         <button
           className={`btn card-run-btn ${isRunning ? 'btn-danger' : 'btn-primary'}`}
           onClick={handleRunToggle}
           disabled={!isRunning && !canStart}
-          title={!isRunning && !canStart ? (providerType === 'litellm' ? 'Cannot start: remote model is missing' : 'Cannot start: local configuration is missing') : ''}
+          title={!isRunning && !canStart ? 'Cannot start: local configuration is missing' : ''}
           style={isRunning && launchMode === 'chat' ? { flex: 0.5 } : {}}
         >
           {isRunning ? <><Square size={14} /> Stop</> : <><Play size={14} /> Start</>}
         </button>
-        {isRunning && launchMode === 'chat' && providerType === 'local' && (
+        {isRunning && launchMode === 'chat' && (
           <button
             className="btn card-run-btn"
             style={{ flex: 0.5, background: 'var(--accent)', color: 'var(--accent-fg)' }}
             onClick={() => window.api.openChatWindow(card.template.serverPort || 8080)}
             title="Open Chat Window"
-          >
-            <Globe size={14} /> Open Chat
-          </button>
-        )}
-        {providerType === 'litellm' && card.template.remoteModel?.trim() && (
-          <button
-            className="btn card-run-btn"
-            style={{ flex: 0.5, background: 'var(--accent)', color: 'var(--accent-fg)' }}
-            onClick={() => void window.api.openLiteLlmChatWindow(card.template.id)}
-            title="Open LiteLLM Chat Window"
           >
             <Globe size={14} /> Open Chat
           </button>

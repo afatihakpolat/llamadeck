@@ -1,12 +1,11 @@
-import React, { useEffect, useState } from 'react'
-import { Globe, RefreshCw, Loader2, Download, Upload, Play, Square, Save, Terminal, FileText, Package, AlertCircle } from 'lucide-react'
+import React, { useEffect, useRef, useState } from 'react'
+import { RefreshCw, Loader2, Download, Upload, Play, Square, Save, Terminal, FileText, Package, AlertCircle } from 'lucide-react'
 import type { LiteLlmLogLevel, LiteLlmManagerSnapshot, LiteLlmModelEntry } from '../../../shared/types'
 
-type BusyAction = 'refresh' | 'save-runtime' | 'save-config' | 'install' | 'update' | 'start' | 'stop' | 'save-connection' | 'test' | 'models' | 'clear' | null
+type BusyAction = 'refresh' | 'save-runtime' | 'save-config' | 'install' | 'update' | 'start' | 'stop' | 'test' | 'models' | null
 
-function buildLocalBaseUrl(host: string, port: number): string {
-  const normalizedHost = host.trim() || '127.0.0.1'
-  return `http://${normalizedHost}:${port}`
+function buildLocalBaseUrl(port: number): string {
+  return `http://127.0.0.1:${port}`
 }
 
 export default function LiteLlmView() {
@@ -17,25 +16,26 @@ export default function LiteLlmView() {
   const [configText, setConfigText] = useState('')
   const [managerDraftDirty, setManagerDraftDirty] = useState(false)
   const [configDirty, setConfigDirty] = useState(false)
-  const [liteLlmBaseUrl, setLiteLlmBaseUrl] = useState('')
-  const [liteLlmApiKey, setLiteLlmApiKey] = useState('')
-  const [liteLlmHasApiKey, setLiteLlmHasApiKey] = useState(false)
+  const managerDraftDirtyRef = useRef(false)
+  const configDirtyRef = useRef(false)
   const [liteLlmModels, setLiteLlmModels] = useState<LiteLlmModelEntry[]>([])
   const [busyAction, setBusyAction] = useState<BusyAction>(null)
   const [managerStatus, setManagerStatus] = useState<{ tone: 'muted' | 'success' | 'danger'; text: string } | null>(null)
-  const [connectionStatus, setConnectionStatus] = useState<{ tone: 'muted' | 'success' | 'danger'; text: string } | null>(null)
+  const [proxyStatus, setProxyStatus] = useState<{ tone: 'muted' | 'success' | 'danger'; text: string } | null>(null)
 
   function applyManagerSnapshot(snapshot: LiteLlmManagerSnapshot, syncDrafts = false) {
     setManager(snapshot)
-    if (syncDrafts || !managerDraftDirty) {
+    if (syncDrafts || !managerDraftDirtyRef.current) {
       setHost(snapshot.settings.host)
       setPort(snapshot.settings.port)
       setLogLevel(snapshot.settings.logLevel)
       setManagerDraftDirty(false)
+      managerDraftDirtyRef.current = false
     }
-    if (syncDrafts || !configDirty) {
+    if (syncDrafts || !configDirtyRef.current) {
       setConfigText(snapshot.configText)
       setConfigDirty(false)
+      configDirtyRef.current = false
     }
   }
 
@@ -44,15 +44,8 @@ export default function LiteLlmView() {
     applyManagerSnapshot(snapshot, syncDrafts)
   }
 
-  async function loadLiteLlmSettings() {
-    const settings = await window.api.getLiteLlmSettings()
-    setLiteLlmBaseUrl(settings.baseUrl)
-    setLiteLlmHasApiKey(settings.hasApiKey)
-  }
-
   useEffect(() => {
     void loadManager(true)
-    void loadLiteLlmSettings()
 
     const interval = window.setInterval(() => {
       void loadManager(false)
@@ -60,24 +53,6 @@ export default function LiteLlmView() {
 
     return () => window.clearInterval(interval)
   }, [])
-
-  async function persistLiteLlmSettings(extra: { clearApiKey?: boolean } = {}) {
-    const result = await window.api.saveLiteLlmSettings({
-      baseUrl: liteLlmBaseUrl,
-      apiKey: liteLlmApiKey,
-      clearApiKey: extra.clearApiKey
-    })
-
-    if (!result.success) {
-      throw new Error(result.error || 'Failed to save LiteLLM settings.')
-    }
-
-    setLiteLlmBaseUrl(result.settings.baseUrl)
-    setLiteLlmHasApiKey(result.settings.hasApiKey)
-    if (extra.clearApiKey || liteLlmApiKey.trim()) {
-      setLiteLlmApiKey('')
-    }
-  }
 
   async function handleRefreshManager() {
     setBusyAction('refresh')
@@ -100,9 +75,6 @@ export default function LiteLlmView() {
       }
 
       applyManagerSnapshot(result.snapshot, true)
-      if (!liteLlmBaseUrl.trim() || liteLlmBaseUrl.trim() === buildLocalBaseUrl(manager?.settings.host || host, manager?.settings.port || port)) {
-        setLiteLlmBaseUrl(buildLocalBaseUrl(result.snapshot.settings.host, result.snapshot.settings.port))
-      }
       setManagerStatus({ tone: 'success', text: 'LiteLLM runtime settings saved.' })
     } catch (error) {
       setManagerStatus({ tone: 'danger', text: String(error) })
@@ -121,6 +93,7 @@ export default function LiteLlmView() {
 
       applyManagerSnapshot(result.snapshot, false)
       setConfigDirty(false)
+      configDirtyRef.current = false
       setManagerStatus({ tone: 'success', text: 'LiteLLM config saved.' })
     } catch (error) {
       setManagerStatus({ tone: 'danger', text: String(error) })
@@ -165,42 +138,17 @@ export default function LiteLlmView() {
     }
   }
 
-  async function handleSaveConnection() {
-    setBusyAction('save-connection')
-    try {
-      await persistLiteLlmSettings()
-      setConnectionStatus({ tone: 'success', text: 'Hexllama LiteLLM connection settings saved.' })
-    } catch (error) {
-      setConnectionStatus({ tone: 'danger', text: String(error) })
-    } finally {
-      setBusyAction(null)
-    }
-  }
-
-  async function handleClearApiKey() {
-    setBusyAction('clear')
-    try {
-      await persistLiteLlmSettings({ clearApiKey: true })
-      setConnectionStatus({ tone: 'success', text: 'Saved LiteLLM API key cleared.' })
-    } catch (error) {
-      setConnectionStatus({ tone: 'danger', text: String(error) })
-    } finally {
-      setBusyAction(null)
-    }
-  }
-
-  async function handleTestConnection() {
+  async function handleTestProxy() {
     setBusyAction('test')
     try {
-      await persistLiteLlmSettings()
       const result = await window.api.testLiteLlmConnection()
       if (!result.success) {
         throw new Error(result.error || 'Connection test failed.')
       }
 
-      setConnectionStatus({ tone: 'success', text: `LiteLLM connection OK. ${result.modelCount} remote model${result.modelCount === 1 ? '' : 's'} reported.` })
+      setProxyStatus({ tone: 'success', text: `LiteLLM proxy OK. ${result.modelCount} model${result.modelCount === 1 ? '' : 's'} reported.` })
     } catch (error) {
-      setConnectionStatus({ tone: 'danger', text: String(error) })
+      setProxyStatus({ tone: 'danger', text: String(error) })
     } finally {
       setBusyAction(null)
     }
@@ -209,22 +157,22 @@ export default function LiteLlmView() {
   async function handleRefreshModels() {
     setBusyAction('models')
     try {
-      await persistLiteLlmSettings()
       const result = await window.api.listLiteLlmModels()
       if (!result.success) {
         throw new Error(result.error || 'Failed to load LiteLLM models.')
       }
 
       setLiteLlmModels(result.models)
-      setConnectionStatus({ tone: 'success', text: `Loaded ${result.models.length} LiteLLM model${result.models.length === 1 ? '' : 's'}.` })
+      setProxyStatus({ tone: 'success', text: `Loaded ${result.models.length} LiteLLM model${result.models.length === 1 ? '' : 's'}.` })
     } catch (error) {
-      setConnectionStatus({ tone: 'danger', text: String(error) })
+      setProxyStatus({ tone: 'danger', text: String(error) })
     } finally {
       setBusyAction(null)
     }
   }
 
-  const localBaseUrl = buildLocalBaseUrl(host, port)
+  const localBaseUrl = buildLocalBaseUrl(port)
+  const activeLocalBaseUrl = buildLocalBaseUrl(manager?.settings.port ?? port)
   const install = manager?.install
 
   return (
@@ -259,9 +207,10 @@ export default function LiteLlmView() {
                 type="text"
                 className="form-input mono"
                 value={host}
-                onChange={(event) => { setHost(event.target.value); setManagerDraftDirty(true) }}
+                onChange={(event) => { setHost(event.target.value); setManagerDraftDirty(true); managerDraftDirtyRef.current = true }}
                 placeholder="127.0.0.1"
               />
+              <div className="form-hint">Loopback only. Use `127.0.0.1` or `localhost`.</div>
             </div>
             <div className="form-group">
               <label className="form-label">Port</label>
@@ -269,7 +218,7 @@ export default function LiteLlmView() {
                 type="number"
                 className="form-input mono"
                 value={port}
-                onChange={(event) => { setPort(Number(event.target.value)); setManagerDraftDirty(true) }}
+                onChange={(event) => { setPort(Number(event.target.value)); setManagerDraftDirty(true); managerDraftDirtyRef.current = true }}
                 min={1}
                 max={65535}
               />
@@ -279,7 +228,7 @@ export default function LiteLlmView() {
               <select
                 className="form-select"
                 value={logLevel}
-                onChange={(event) => { setLogLevel(event.target.value as LiteLlmLogLevel); setManagerDraftDirty(true) }}
+                onChange={(event) => { setLogLevel(event.target.value as LiteLlmLogLevel); setManagerDraftDirty(true); managerDraftDirtyRef.current = true }}
               >
                 <option value="info">Info</option>
                 <option value="debug">Debug</option>
@@ -288,7 +237,10 @@ export default function LiteLlmView() {
             </div>
           </div>
           <div className="settings-row-sub mono">Config file: {manager?.settings.configPath || 'Loading...'}</div>
-          <div className="settings-row-sub">Managed local proxy URL: {localBaseUrl}</div>
+          <div className="settings-row-sub">Hexllama is currently using the saved local proxy URL {activeLocalBaseUrl}</div>
+          {managerDraftDirty && localBaseUrl !== activeLocalBaseUrl && (
+            <div className="settings-row-sub">Unsaved runtime draft would switch the local proxy URL to {localBaseUrl}</div>
+          )}
           <div className="flex gap-2" style={{ flexWrap: 'wrap' }}>
             <button className="btn btn-primary btn-sm" onClick={handleSaveRuntime} disabled={busyAction !== null}>
               {busyAction === 'save-runtime' ? <Loader2 size={14} className="spin" /> : <Save size={14} />}
@@ -313,6 +265,14 @@ export default function LiteLlmView() {
               {busyAction === 'refresh' ? <Loader2 size={14} className="spin" /> : <RefreshCw size={14} />}
               Refresh Status
             </button>
+            <button className="btn btn-secondary btn-sm" onClick={handleTestProxy} disabled={busyAction !== null}>
+              {busyAction === 'test' ? <Loader2 size={14} className="spin" /> : <RefreshCw size={14} />}
+              Test Local Proxy
+            </button>
+            <button className="btn btn-secondary btn-sm" onClick={handleRefreshModels} disabled={busyAction !== null}>
+              {busyAction === 'models' ? <Loader2 size={14} className="spin" /> : <Download size={14} />}
+              Refresh Models
+            </button>
             {!install?.pythonCommand && (
               <button className="btn btn-ghost btn-sm" onClick={() => void window.api.openExternal('https://www.python.org/downloads/windows/')} disabled={busyAction !== null}>
                 <Download size={14} /> Get Python
@@ -324,64 +284,15 @@ export default function LiteLlmView() {
               {managerStatus.text}
             </div>
           )}
-        </div>
-      </div>
-
-      <div className="settings-section">
-        <div className="settings-section-title"><Globe /> Hexllama Connection</div>
-        <div className="settings-row" style={{ borderBottom: 'none', flexDirection: 'column', alignItems: 'stretch', gap: 12 }}>
-          <div className="form-group" style={{ marginBottom: 0 }}>
-            <label className="form-label">Base URL</label>
-            <input
-              type="text"
-              className="form-input mono"
-              value={liteLlmBaseUrl}
-              onChange={(event) => setLiteLlmBaseUrl(event.target.value)}
-              placeholder={localBaseUrl}
-            />
-            <div className="form-hint">Hexllama uses this OpenAI-compatible LiteLLM base URL for model discovery and chat requests.</div>
-          </div>
-          <div className="form-group" style={{ marginBottom: 0 }}>
-            <label className="form-label">API Key</label>
-            <input
-              type="password"
-              className="form-input"
-              value={liteLlmApiKey}
-              onChange={(event) => setLiteLlmApiKey(event.target.value)}
-              placeholder={liteLlmHasApiKey ? 'Saved key present. Enter a new key to replace it.' : 'Optional API key'}
-            />
-            <div className="form-hint">{liteLlmHasApiKey ? 'A LiteLLM API key is already saved.' : 'No LiteLLM API key is saved yet.'}</div>
-          </div>
-          <div className="flex gap-2" style={{ flexWrap: 'wrap' }}>
-            <button className="btn btn-primary btn-sm" onClick={handleSaveConnection} disabled={busyAction !== null}>
-              {busyAction === 'save-connection' ? <Loader2 size={14} className="spin" /> : <Save size={14} />}
-              Save Connection
-            </button>
-            <button className="btn btn-secondary btn-sm" onClick={() => setLiteLlmBaseUrl(localBaseUrl)} disabled={busyAction !== null}>
-              <Globe size={14} /> Use Local Proxy URL
-            </button>
-            <button className="btn btn-secondary btn-sm" onClick={handleTestConnection} disabled={busyAction !== null}>
-              {busyAction === 'test' ? <Loader2 size={14} className="spin" /> : <RefreshCw size={14} />}
-              Test Connection
-            </button>
-            <button className="btn btn-secondary btn-sm" onClick={handleRefreshModels} disabled={busyAction !== null}>
-              {busyAction === 'models' ? <Loader2 size={14} className="spin" /> : <Download size={14} />}
-              Refresh Models
-            </button>
-            <button className="btn btn-ghost btn-sm" onClick={handleClearApiKey} disabled={busyAction !== null || !liteLlmHasApiKey}>
-              {busyAction === 'clear' ? <Loader2 size={14} className="spin" /> : <Square size={14} />}
-              Clear Saved Key
-            </button>
-          </div>
-          {connectionStatus && (
-            <div className={`text-sm ${connectionStatus.tone === 'danger' ? 'text-danger' : ''}`} style={{ color: connectionStatus.tone === 'success' ? 'var(--success)' : connectionStatus.tone === 'danger' ? 'var(--danger)' : 'var(--text-muted)' }}>
-              {connectionStatus.text}
+          {proxyStatus && (
+            <div className={`text-sm ${proxyStatus.tone === 'danger' ? 'text-danger' : ''}`} style={{ color: proxyStatus.tone === 'success' ? 'var(--success)' : proxyStatus.tone === 'danger' ? 'var(--danger)' : 'var(--text-muted)' }}>
+              {proxyStatus.text}
             </div>
           )}
           <div>
-            <div className="settings-row-label">Discovered Remote Models</div>
+            <div className="settings-row-label">Discovered Models</div>
             <div className="settings-row-sub">
-              {liteLlmModels.length > 0 ? `${liteLlmModels.length} model${liteLlmModels.length === 1 ? '' : 's'} loaded from LiteLLM.` : 'No remote models loaded yet. Use Refresh Models to fetch the current list.'}
+              {liteLlmModels.length > 0 ? `${liteLlmModels.length} model${liteLlmModels.length === 1 ? '' : 's'} loaded from the managed LiteLLM proxy.` : 'No LiteLLM models loaded yet. Start the local proxy, then use Refresh Models.'}
             </div>
             {liteLlmModels.length > 0 && (
               <div style={{ marginTop: 10, display: 'flex', flexWrap: 'wrap', gap: 8 }}>
@@ -404,7 +315,7 @@ export default function LiteLlmView() {
           <textarea
             className="form-textarea mono"
             value={configText}
-            onChange={(event) => { setConfigText(event.target.value); setConfigDirty(true) }}
+            onChange={(event) => { setConfigText(event.target.value); setConfigDirty(true); configDirtyRef.current = true }}
             rows={16}
             style={{ fontSize: 12, fontFamily: "'SF Mono','Fira Code',monospace" }}
           />

@@ -3,8 +3,6 @@ export interface ModelFile {
   path: string
 }
 
-export type TemplateProvider = 'local' | 'litellm'
-
 export interface BackendVersion {
   name: string
   displayName: string
@@ -39,10 +37,8 @@ export interface Template {
   id: string
   name: string
   description?: string
-  providerType?: TemplateProvider
   backendVersion?: string
   modelPath?: string
-  remoteModel?: string
   serverPort: number
   args: Record<string, string | number | boolean | null>
   launchMode?: 'chat' | 'api'
@@ -101,10 +97,6 @@ export interface LiteLlmModelEntry {
   label: string
 }
 
-export interface LiteLlmChatMessage {
-  role: 'system' | 'user' | 'assistant'
-  content: string
-}
 export interface ReleaseInfo {
   tagName: string
   name: string
