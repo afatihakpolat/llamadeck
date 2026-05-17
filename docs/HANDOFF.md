@@ -12,6 +12,8 @@
 - Removed the LiteLLM provider option from the template modal so template creation is local-only again; LiteLLM is managed separately from the LiteLLM page.
 - Kept existing local templates working unchanged while keeping new template creation local-only.
 - Removed the remaining LiteLLM-template code paths from cards, the dedicated chat route, preload, shared template types, and main IPC.
+- Normalized loaded, saved, and imported templates to strip removed LiteLLM-only fields, and made invalid legacy templates show missing configuration instead of appearing ready to start.
+- Removed the stale external LiteLLM settings API surface from preload, renderer typings, and unused main-process helpers.
 
 ## Verification
 - `npm run build`
@@ -19,6 +21,7 @@
 - `npm run build` after LiteLLM provider implementation and review fixes
 - `npm run build` after the dedicated LiteLLM manager page and local proxy control flow
 - `npm run build` after removing the remaining LiteLLM-template runtime path
+- `npm run build` after normalizing legacy templates and removing the stale LiteLLM settings API surface
 
 ## Next Recommended Check
 - Manual smoke test in the running app: point the backend folder at a llama.cpp repo, run "Check Now", trigger "Build From Source", confirm a new `b####` folder appears without deleting older builds, confirm pinned templates move to the new backend, and confirm cancel stops without an error alert.

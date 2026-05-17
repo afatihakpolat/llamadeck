@@ -47,17 +47,6 @@ export interface Template {
   _file?: string
 }
 
-export interface LiteLlmSettingsSnapshot {
-  baseUrl: string
-  hasApiKey: boolean
-}
-
-export interface LiteLlmSettingsInput {
-  baseUrl: string
-  apiKey?: string
-  clearApiKey?: boolean
-}
-
 export type LiteLlmLogLevel = 'info' | 'debug' | 'detailed_debug'
 
 export interface LiteLlmManagerSettings {

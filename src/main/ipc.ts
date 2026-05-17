@@ -16,8 +16,6 @@ import type {
   LiteLlmManagerSettingsInput,
   LiteLlmManagerSnapshot,
   LiteLlmModelEntry,
-  LiteLlmSettingsInput,
-  LiteLlmSettingsSnapshot,
   Template
 } from '../shared/types'
 
@@ -369,13 +367,6 @@ function persistLiteLlmManagerStoredSettings(settings: LiteLlmManagerStoredSetti
   writeFileSync(LITELLM_MANAGER_FILE, JSON.stringify(settings, null, 2))
 }
 
-function buildLiteLlmSettingsSnapshot(settings: LiteLlmStoredSettings): LiteLlmSettingsSnapshot {
-  return {
-    baseUrl: settings.baseUrl,
-    hasApiKey: Boolean(settings.apiKey)
-  }
-}
-
 function buildLiteLlmApiUrl(baseUrl: string, endpointPath: string): string {
   const normalizedBaseUrl = normalizeLiteLlmBaseUrl(baseUrl)
   return /\/v1$/i.test(normalizedBaseUrl)
@@ -436,11 +427,6 @@ function updateAppPath(kind: ConfigurablePathKind, nextPath: string): AppPaths {
   appPaths = ensureAppPaths({ ...appPaths, [kind]: resolvedPath })
   persistPathOverrides(appPaths)
   return appPaths
-}
-
-function getLiteLlmSettingsSnapshot(): LiteLlmSettingsSnapshot {
-  syncLiteLlmSettingsToManagedProxy()
-  return buildLiteLlmSettingsSnapshot(liteLlmSettings)
 }
 
 function ensureLiteLlmConfigFile(): string {
@@ -844,12 +830,6 @@ async function stopLiteLlmProxyProcess(): Promise<{ success: true; snapshot: Lit
   return { success: true, snapshot: await buildLiteLlmManagerSnapshot() }
 }
 
-function saveLiteLlmSettings(input: LiteLlmSettingsInput): LiteLlmSettingsSnapshot {
-  liteLlmSettings = { baseUrl: getManagedLiteLlmBaseUrl(), apiKey: '' }
-  persistLiteLlmStoredSettings(liteLlmSettings)
-  return getLiteLlmSettingsSnapshot()
-}
-
 function isSafePath(base: string, target: string): boolean {
   const resolvedBase = resolve(base)
   const resolvedTarget = resolve(target)
@@ -1036,7 +1016,8 @@ function listTemplatesFromDirectory(templatesDir: string): Template[] {
     .filter((fileName) => fileName.endsWith('.json'))
     .map((fileName) => {
       try {
-        return { ...JSON.parse(readFileSync(join(templatesDir, fileName), 'utf-8')), _file: fileName } as Template
+        const parsed = JSON.parse(readFileSync(join(templatesDir, fileName), 'utf-8')) as Record<string, unknown>
+        return normalizeTemplateRecord(parsed, { fileName, idFallback: basename(fileName, '.json') })
       } catch {
         return null
       }
@@ -1048,8 +1029,54 @@ function getTemplateById(templateId: string): Template | null {
   return listTemplatesFromDirectory(getAppPaths().templates).find((template) => template.id === templateId) ?? null
 }
 
+function normalizeTemplateRecord(
+  template: Record<string, unknown>,
+  options: { fileName?: string; idFallback?: string } = {}
+): Template {
+  const id = typeof template.id === 'string' && template.id.trim()
+    ? template.id.trim()
+    : (options.idFallback || Date.now().toString())
+  const name = typeof template.name === 'string' && template.name.trim()
+    ? template.name.trim()
+    : 'Untitled Template'
+  const description = typeof template.description === 'string' && template.description.trim()
+    ? template.description
+    : undefined
+  const backendVersion = typeof template.backendVersion === 'string' && template.backendVersion.trim()
+    ? template.backendVersion.trim()
+    : undefined
+  const modelPath = typeof template.modelPath === 'string' && template.modelPath.trim()
+    ? template.modelPath.trim()
+    : undefined
+  const args = template.args && typeof template.args === 'object' && !Array.isArray(template.args)
+    ? template.args as Template['args']
+    : {}
+  const createdAt = typeof template.createdAt === 'string' && template.createdAt.trim()
+    ? template.createdAt
+    : new Date().toISOString()
+  const updatedAt = typeof template.updatedAt === 'string' && template.updatedAt.trim()
+    ? template.updatedAt
+    : createdAt
+
+  return {
+    id,
+    name,
+    ...(description ? { description } : {}),
+    ...(backendVersion ? { backendVersion } : {}),
+    ...(modelPath ? { modelPath } : {}),
+    serverPort: typeof template.serverPort === 'number' && Number.isInteger(template.serverPort)
+      ? template.serverPort
+      : 8080,
+    args,
+    launchMode: template.launchMode === 'api' ? 'api' : 'chat',
+    createdAt,
+    updatedAt,
+    ...(options.fileName ? { _file: options.fileName } : {})
+  }
+}
+
 function saveTemplateToDirectory(templatesDir: string, template: Template): void {
-  const { _file, ...persisted } = template as Template & { _file?: string }
+  const { _file, ...persisted } = normalizeTemplateRecord(template as unknown as Record<string, unknown>) as Template & { _file?: string }
   writeFileSync(join(templatesDir, `${template.id}.json`), JSON.stringify(persisted, null, 2))
 }
 
@@ -1300,9 +1327,6 @@ function startDownload(
 }
 
 export function registerIpcHandlers(): void {
-  ipcMain.handle('get-litellm-settings', () => {
-    return getLiteLlmSettingsSnapshot()
-  })
   ipcMain.handle('get-litellm-manager', async () => {
     return buildLiteLlmManagerSnapshot()
   })
@@ -1334,12 +1358,6 @@ export function registerIpcHandlers(): void {
   })
   ipcMain.handle('stop-litellm-proxy', async () => {
     return stopLiteLlmProxyProcess()
-  })
-  ipcMain.handle('save-litellm-settings', (_e, input: LiteLlmSettingsInput) => {
-    return {
-      success: false,
-      error: 'Separate LiteLLM connection settings are no longer supported. Hexllama always uses the managed local proxy.'
-    }
   })
   ipcMain.handle('test-litellm-connection', async () => {
     try {
@@ -1563,23 +1581,16 @@ export function registerIpcHandlers(): void {
   })
   ipcMain.handle('list-templates', () => {
     const templatesDir = getAppPaths().templates
-    if (!existsSync(templatesDir)) return []
-    return readdirSync(templatesDir)
-      .filter(f => f.endsWith('.json'))
-      .map(f => {
-        try { return { ...JSON.parse(readFileSync(join(templatesDir, f), 'utf-8')), _file: f } }
-        catch { return null }
-      })
-      .filter(Boolean)
+    return listTemplatesFromDirectory(templatesDir)
   })
   ipcMain.handle('get-template', (_e, templateId: string) => {
     return getTemplateById(templateId)
   })
   ipcMain.handle('save-template', (_e, template: Record<string, unknown>) => {
     const templatesDir = getAppPaths().templates
-    const id = (template.id as string) || Date.now().toString()
-    writeFileSync(join(templatesDir, `${id}.json`), JSON.stringify({ ...template, id }, null, 2))
-    return { success: true, id }
+    const normalized = normalizeTemplateRecord(template)
+    saveTemplateToDirectory(templatesDir, normalized)
+    return { success: true, id: normalized.id }
   })
   ipcMain.handle('delete-template', (_e, id: string) => {
     const templatesDir = getAppPaths().templates
@@ -1592,10 +1603,10 @@ export function registerIpcHandlers(): void {
     const templatesDir = getAppPaths().templates
     const r = await dialog.showOpenDialog({ title: 'Import Template', filters: [{ name: 'JSON Template', extensions: ['json'] }], properties: ['openFile'] })
     if (r.canceled || !r.filePaths.length) return null
-    const data = JSON.parse(readFileSync(r.filePaths[0], 'utf-8'))
-    const id = Date.now().toString(); data.id = id
-    writeFileSync(join(templatesDir, `${id}.json`), JSON.stringify(data, null, 2))
-    return data
+    const data = JSON.parse(readFileSync(r.filePaths[0], 'utf-8')) as Record<string, unknown>
+    const normalized = normalizeTemplateRecord(data, { idFallback: Date.now().toString() })
+    saveTemplateToDirectory(templatesDir, normalized)
+    return normalized
   })
   ipcMain.handle('export-template', async (_e, template: Record<string, unknown>) => {
     const r = await dialog.showSaveDialog({ title: 'Export Template', defaultPath: `${template.name ?? 'template'}.json`, filters: [{ name: 'JSON Template', extensions: ['json'] }] })

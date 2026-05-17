@@ -11,8 +11,9 @@ export default function ModelCard({ card }: Props) {
   const isRunning = card.status === 'running'
   const isExpanded = card.expanded
   const launchMode = card.template.launchMode || 'chat'
-  const modelExists = !card.template.modelPath || models.some(m => m.path === card.template.modelPath)
-  const canStart = modelExists
+  const hasModelPath = Boolean(card.template.modelPath?.trim())
+  const modelExists = hasModelPath && models.some(m => m.path === card.template.modelPath)
+  const canStart = hasModelPath && modelExists
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
       if (menuRef.current && !menuRef.current.contains(e.target as Node)) setShowMenu(false)
@@ -34,9 +35,13 @@ export default function ModelCard({ card }: Props) {
       alert('Backend not found or has no executable.')
       return
     }
+    if (!card.template.modelPath?.trim()) {
+      alert('Model file is required.')
+      return
+    }
     const args: string[] = []
     const tArgs = card.template.args
-    if (card.template.modelPath) args.push('-m', card.template.modelPath)
+    args.push('-m', card.template.modelPath)
     if (commandsSchema) {
       for (const cat of commandsSchema.categories) {
         for (const cmd of cat.commands) {
@@ -136,7 +141,7 @@ export default function ModelCard({ card }: Props) {
         </span>
         <span className="card-tag">
           <span className={`status-dot ${isRunning ? 'running' : 'idle'}`} />
-          {isRunning ? `Port ${card.template.serverPort}` : 'Ready'}
+          {isRunning ? `Port ${card.template.serverPort}` : (canStart ? 'Ready' : 'Missing Config')}
         </span>
       </div>
       <div className="card-launch-mode">

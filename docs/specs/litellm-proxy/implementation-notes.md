@@ -10,3 +10,5 @@
 - The default generated LiteLLM config intentionally omits a master key so a fresh local install works immediately without hidden authorization coupling.
 - Hexllama always talks to the managed LiteLLM proxy through loopback and normalizes the saved host to `127.0.0.1`.
 - The template editor is now local-only; LiteLLM is served from its own page rather than represented as a template provider.
+- Template load/save/import now normalize template JSON to strip removed LiteLLM-only fields so older exports cannot resurrect the deleted provider path.
+- Cards without a valid local model path now surface missing configuration instead of appearing ready to launch.

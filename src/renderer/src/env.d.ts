@@ -1,4 +1,4 @@
-import type { Template, BackendVersion, CommandsSchema, LiteLlmInstallStatus, LiteLlmManagerSettingsInput, LiteLlmManagerSnapshot, LiteLlmModelEntry, LiteLlmSettingsInput, LiteLlmSettingsSnapshot, ReleaseInfo } from '../../shared/types'
+import type { Template, BackendVersion, CommandsSchema, LiteLlmInstallStatus, LiteLlmManagerSettingsInput, LiteLlmManagerSnapshot, LiteLlmModelEntry, ReleaseInfo } from '../../shared/types'
 interface ModelFileInfo {
   name: string
   path: string
@@ -38,7 +38,6 @@ interface BackendSourceUpdateResult {
   activeBackendName: string
 }
 interface LlamaCppApi {
-  getLiteLlmSettings: () => Promise<LiteLlmSettingsSnapshot>
   getLiteLlmManager: () => Promise<LiteLlmManagerSnapshot>
   saveLiteLlmManagerSettings: (settings: LiteLlmManagerSettingsInput) => Promise<{ success: true; snapshot: LiteLlmManagerSnapshot } | { success: false; error?: string }>
   saveLiteLlmConfig: (configText: string) => Promise<{ success: true; snapshot: LiteLlmManagerSnapshot } | { success: false; error?: string }>
@@ -46,7 +45,6 @@ interface LlamaCppApi {
   updateLiteLlm: () => Promise<{ success: true; snapshot: LiteLlmManagerSnapshot; output: string } | { success: false; error?: string; output?: string; install?: LiteLlmInstallStatus }>
   startLiteLlmProxy: () => Promise<{ success: true; snapshot: LiteLlmManagerSnapshot } | { success: false; error?: string; snapshot?: LiteLlmManagerSnapshot }>
   stopLiteLlmProxy: () => Promise<{ success: true; snapshot: LiteLlmManagerSnapshot } | { success: false; error?: string; snapshot?: LiteLlmManagerSnapshot }>
-  saveLiteLlmSettings: (settings: LiteLlmSettingsInput) => Promise<{ success: true; settings: LiteLlmSettingsSnapshot } | { success: false; error?: string }>
   testLiteLlmConnection: () => Promise<{ success: true; modelCount: number } | { success: false; error?: string }>
   listLiteLlmModels: () => Promise<{ success: true; models: LiteLlmModelEntry[] } | { success: false; error?: string }>
   listModels: () => Promise<ModelFileInfo[]>

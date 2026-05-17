@@ -1,7 +1,6 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import { electronAPI } from '@electron-toolkit/preload'
 const api = {
-  getLiteLlmSettings: () => ipcRenderer.invoke('get-litellm-settings'),
   getLiteLlmManager: () => ipcRenderer.invoke('get-litellm-manager'),
   saveLiteLlmManagerSettings: (settings: object) => ipcRenderer.invoke('save-litellm-manager-settings', settings),
   saveLiteLlmConfig: (configText: string) => ipcRenderer.invoke('save-litellm-config', configText),
@@ -9,7 +8,6 @@ const api = {
   updateLiteLlm: () => ipcRenderer.invoke('update-litellm'),
   startLiteLlmProxy: () => ipcRenderer.invoke('start-litellm-proxy'),
   stopLiteLlmProxy: () => ipcRenderer.invoke('stop-litellm-proxy'),
-  saveLiteLlmSettings: (settings: object) => ipcRenderer.invoke('save-litellm-settings', settings),
   testLiteLlmConnection: () => ipcRenderer.invoke('test-litellm-connection'),
   listLiteLlmModels: () => ipcRenderer.invoke('list-litellm-models'),
   listModels: () => ipcRenderer.invoke('list-models'),
