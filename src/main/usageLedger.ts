@@ -17,10 +17,70 @@ export function getEffectiveCacheTokens(record: Pick<UsageRequestRecord, 'cacheT
   return Math.max(storedCacheTokens, timingCacheTokens)
 }
 
+function getNonNegativeNumber(value: number | undefined): number {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : 0
+}
+
+function getEffectivePromptTokens(record: Pick<UsageRequestRecord, 'promptTokens' | 'cacheTokens' | 'completionTokens' | 'totalTokens' | 'timings'>): number {
+  const timingPromptTokens = typeof record.timings?.promptN === 'number' ? record.timings.promptN : null
+  if (typeof timingPromptTokens === 'number' && Number.isFinite(timingPromptTokens) && timingPromptTokens >= 0) {
+    return timingPromptTokens
+  }
+
+  const promptTokens = getNonNegativeNumber(record.promptTokens)
+  const cacheTokens = getEffectiveCacheTokens(record)
+  const completionTokens = getNonNegativeNumber(record.completionTokens)
+  const totalTokens = getNonNegativeNumber(record.totalTokens)
+
+  if (promptTokens < cacheTokens) {
+    return promptTokens
+  }
+
+  if (totalTokens === promptTokens + completionTokens) {
+    return Math.max(promptTokens - cacheTokens, 0)
+  }
+
+  return promptTokens
+}
+
+function getCanonicalTotalTokens(record: Pick<UsageRequestRecord, 'promptTokens' | 'cacheTokens' | 'completionTokens'>): number {
+  return getNonNegativeNumber(record.promptTokens) + getNonNegativeNumber(record.cacheTokens) + getNonNegativeNumber(record.completionTokens)
+}
+
+export function normalizeUsageSummaryRollup<T extends UsageSummaryRollup>(rollup: T): T {
+  const cacheTokens = getNonNegativeNumber(rollup.cacheTokens)
+  const completionTokens = getNonNegativeNumber(rollup.completionTokens)
+  const storedPromptTokens = getNonNegativeNumber(rollup.promptTokens)
+  const storedTotalTokens = getNonNegativeNumber(rollup.totalTokens)
+
+  let promptTokens = storedPromptTokens
+
+  if (storedPromptTokens >= cacheTokens && storedTotalTokens === storedPromptTokens + completionTokens) {
+    promptTokens = Math.max(storedPromptTokens - cacheTokens, 0)
+  }
+
+  const totalTokens = promptTokens + cacheTokens + completionTokens
+
+  return {
+    ...rollup,
+    promptTokens,
+    cacheTokens,
+    completionTokens,
+    totalTokens
+  }
+}
+
 export function normalizeUsageRecord(record: UsageRequestRecord): UsageRequestRecord {
+  const cacheTokens = getEffectiveCacheTokens(record)
+  const completionTokens = getNonNegativeNumber(record.completionTokens)
+  const promptTokens = getEffectivePromptTokens(record)
+
   return {
     ...record,
-    cacheTokens: getEffectiveCacheTokens(record)
+    promptTokens,
+    cacheTokens,
+    completionTokens,
+    totalTokens: getCanonicalTotalTokens({ promptTokens, cacheTokens, completionTokens })
   }
 }
 

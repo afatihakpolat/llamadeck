@@ -142,7 +142,7 @@ function formatRatePerMillion(value: number, currency: string): string {
 }
 
 function getUncachedInputTokens(record: Pick<UsageSummaryRollup, 'promptTokens' | 'cacheTokens'>): number {
-  return Math.max(record.promptTokens - record.cacheTokens, 0)
+  return Math.max(record.promptTokens, 0)
 }
 
 function createUsageCostDraft(settings: UsageCostSettings): UsageCostDraft {

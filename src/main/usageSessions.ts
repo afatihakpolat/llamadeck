@@ -11,7 +11,7 @@ import type {
   UsageSummaryRollup,
   UsageTemplateRollup
 } from '../shared/types'
-import { loadUsageLedger, normalizeUsageRecord } from './usageLedger'
+import { loadUsageLedger, normalizeUsageRecord, normalizeUsageSummaryRollup } from './usageLedger'
 
 export interface UsagePersistedSession extends UsageSummaryRollup {
   launchId: string
@@ -146,7 +146,7 @@ function normalizeDailyRollup(raw: unknown): UsageDailyRollup | null {
   const value = raw as Partial<UsageDailyRollup>
   if (typeof value.day !== 'string') return null
 
-  return {
+  return normalizeUsageSummaryRollup({
     day: value.day,
     requestCount: typeof value.requestCount === 'number' ? value.requestCount : 0,
     successCount: typeof value.successCount === 'number' ? value.successCount : 0,
@@ -156,7 +156,7 @@ function normalizeDailyRollup(raw: unknown): UsageDailyRollup | null {
     cacheTokens: typeof value.cacheTokens === 'number' ? value.cacheTokens : 0,
     completionTokens: typeof value.completionTokens === 'number' ? value.completionTokens : 0,
     totalTokens: typeof value.totalTokens === 'number' ? value.totalTokens : 0
-  }
+  })
 }
 
 function normalizePersistedSession(raw: unknown): UsagePersistedSession | null {
@@ -171,7 +171,7 @@ function normalizePersistedSession(raw: unknown): UsagePersistedSession | null {
     ? session.dailyRollups.map(normalizeDailyRollup).filter((value): value is UsageDailyRollup => value !== null)
     : []
 
-  return {
+  return normalizeUsageSummaryRollup({
     launchId: session.launchId,
     templateId: session.templateId,
     templateName: session.templateName,
@@ -194,7 +194,7 @@ function normalizePersistedSession(raw: unknown): UsagePersistedSession | null {
     cacheTokens: typeof session.cacheTokens === 'number' ? session.cacheTokens : 0,
     completionTokens: typeof session.completionTokens === 'number' ? session.completionTokens : 0,
     totalTokens: typeof session.totalTokens === 'number' ? session.totalTokens : 0
-  }
+  })
 }
 
 function updateSessionDailyRollups(session: UsagePersistedSession, record: UsageRequestRecord): void {
