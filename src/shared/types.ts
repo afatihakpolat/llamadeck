@@ -33,6 +33,9 @@ export interface CommandsSchema {
   version: string
   categories: CommandCategory[]
 }
+export interface AppWindowBehaviorSettings {
+  minimizeToTray: boolean
+}
 export interface Template {
   id: string
   name: string

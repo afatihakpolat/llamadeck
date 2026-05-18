@@ -3,6 +3,9 @@ import { useStore } from '../store/useStore'
 import { FolderOpen, ChevronDown, Terminal, Globe, Server } from 'lucide-react'
 import type { Template } from '../../../shared/types'
 import CmdParamsEditor from './CmdParamsEditor'
+import { DEFAULT_TEMPLATE_SERVER_PORT } from '../utils/defaultTemplate'
+import { normalizeCommandArgs } from '../utils/commandArgs'
+
 function parseCommand(cmd: string): {
   modelPath: string
   serverPort: number
@@ -15,14 +18,14 @@ function parseCommand(cmd: string): {
     parts.push(m[0].replace(/^['"]|['"]$/g, ''))
   }
   let modelPath = ''
-  let serverPort = 8080
+  let serverPort = DEFAULT_TEMPLATE_SERVER_PORT
   const args: Record<string, string | number | boolean> = {}
   for (let i = 0; i < parts.length; i++) {
     const p = parts[i]
     if (p === '-m' || p === '--model') {
       modelPath = parts[++i] || ''
     } else if (p === '--port') {
-      serverPort = parseInt(parts[++i] || '8080', 10)
+      serverPort = parseInt(parts[++i] || String(DEFAULT_TEMPLATE_SERVER_PORT), 10)
     } else if (p.startsWith('--') || p.startsWith('-')) {
       const next = parts[i + 1]
       if (next && !next.startsWith('-')) {
@@ -37,12 +40,12 @@ function parseCommand(cmd: string): {
   return { modelPath, serverPort, args }
 }
 export default function CreateModal() {
-  const { setShowCreateModal, editingTemplate, backends, activeBackend, addCard, updateCard, models } = useStore()
+  const { setShowCreateModal, editingTemplate, backends, activeBackend, addCard, updateCard, models, commandsSchema } = useStore()
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
   const [backendVersion, setBackendVersion] = useState('')
   const [modelPath, setModelPath] = useState('')
-  const [serverPort, setServerPort] = useState(8080)
+  const [serverPort, setServerPort] = useState(DEFAULT_TEMPLATE_SERVER_PORT)
   const [args, setArgs] = useState<Record<string, any>>({})
   const [launchMode, setLaunchMode] = useState<'chat' | 'api'>('chat')
   const [showAdvanced, setShowAdvanced] = useState(false)
@@ -55,15 +58,16 @@ export default function CreateModal() {
       setDescription(editingTemplate.description || '')
       setBackendVersion(editingTemplate.backendVersion || '')
       setModelPath(editingTemplate.modelPath || '')
-      setServerPort(editingTemplate.serverPort || 8080)
-      setArgs(editingTemplate.args || {})
+      setServerPort(editingTemplate.serverPort || DEFAULT_TEMPLATE_SERVER_PORT)
+      setArgs(normalizeCommandArgs(editingTemplate.args || {}, commandsSchema))
       setLaunchMode(editingTemplate.launchMode || 'chat')
     } else {
       if (activeBackend) setBackendVersion(activeBackend.name)
+      setServerPort(DEFAULT_TEMPLATE_SERVER_PORT)
       setArgs({})
       setLaunchMode('chat')
     }
-  }, [editingTemplate, activeBackend])
+  }, [editingTemplate, activeBackend, commandsSchema])
 
   async function handlePickModel() {
     const file = await window.api.pickModelFile()
@@ -74,7 +78,7 @@ export default function CreateModal() {
     const parsed = parseCommand(importCmd)
     if (parsed.modelPath) setModelPath(parsed.modelPath)
     if (parsed.serverPort) setServerPort(parsed.serverPort)
-    setArgs((prev) => ({ ...prev, ...parsed.args }))
+    setArgs((prev) => normalizeCommandArgs({ ...prev, ...parsed.args }, commandsSchema))
     setShowImport(false)
     setImportCmd('')
   }
@@ -89,7 +93,7 @@ export default function CreateModal() {
       backendVersion,
       modelPath,
       serverPort,
-      args,
+      args: normalizeCommandArgs(args, commandsSchema),
       launchMode
     }
     if (editingTemplate) {
@@ -143,7 +147,7 @@ export default function CreateModal() {
                     rows={3}
                     value={importCmd}
                     onChange={e => setImportCmd(e.target.value)}
-                    placeholder="llama-server -m /models/model.gguf --port 8080 --ctx-size 4096 ..."
+                    placeholder={`llama-server -m /models/model.gguf --port ${DEFAULT_TEMPLATE_SERVER_PORT} --ctx-size 4096 ...`}
                     style={{ fontSize: 12, fontFamily: "'SF Mono','Fira Code',monospace" }}
                   />
                   <button

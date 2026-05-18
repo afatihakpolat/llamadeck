@@ -1,5 +1,19 @@
 import { create } from 'zustand'
 import type { Template, BackendVersion, CommandsSchema, ReleaseInfo, RunningStatus } from '../../../shared/types'
+
+export type ThemeMode = 'system' | 'light' | 'dark'
+
+const THEME_STORAGE_KEY = 'hexllama_theme'
+
+function getInitialThemeMode(): ThemeMode {
+  if (typeof window === 'undefined') return 'system'
+
+  const storedValue = window.localStorage.getItem(THEME_STORAGE_KEY)
+  return storedValue === 'light' || storedValue === 'dark' || storedValue === 'system'
+    ? storedValue
+    : 'system'
+}
+
 interface CardState {
   template: Template
   status: RunningStatus
@@ -24,6 +38,7 @@ interface AppStore {
   releaseInfo: ReleaseInfo | null
   paths: { models: string; templates: string; backend: string } | null
   view: 'cards' | 'settings' | 'hub' | 'models' | 'litellm'
+  themeMode: ThemeMode
   showCreateModal: boolean
   editingTemplate: Template | null
   updateDismissed: boolean
@@ -36,6 +51,7 @@ interface AppStore {
   hubResults: any[]
   hubSelectedModelId: string | null
   setView: (v: AppStore['view']) => void
+  setThemeMode: (themeMode: ThemeMode) => void
   setShowCreateModal: (show: boolean, template?: Template | null) => void
   setActiveBackend: (b: BackendVersion | null) => void
   setCommandsSchema: (s: CommandsSchema | null) => void
@@ -65,11 +81,18 @@ interface AppStore {
 export const useStore = create<AppStore>((set) => ({
   cards: [], backends: [], models: [], activeBackend: null,
   commandsSchema: null, releaseInfo: null, paths: null,
-  view: 'cards', showCreateModal: false, editingTemplate: null,
+  view: 'cards', themeMode: getInitialThemeMode(), showCreateModal: false, editingTemplate: null,
   updateDismissed: false, checkingUpdate: false, downloadProgress: null,
   templateSearch: '', modelDownloads: {}, hfDownloads: [],
   hubQuery: '', hubResults: [], hubSelectedModelId: null,
   setView: (v) => set({ view: v }),
+  setThemeMode: (themeMode) => {
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem(THEME_STORAGE_KEY, themeMode)
+    }
+
+    set({ themeMode })
+  },
   setShowCreateModal: (show, template = null) => set({ showCreateModal: show, editingTemplate: template }),
   setActiveBackend: (b) => set({ activeBackend: b }),
   setCommandsSchema: (s) => set({ commandsSchema: s }),

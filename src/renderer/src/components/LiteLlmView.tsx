@@ -182,7 +182,7 @@ export default function LiteLlmView() {
       <div className="page-header">
         <div>
           <h1 className="page-title">LiteLLM</h1>
-          <p className="page-subtitle">Install, configure, update, and run a LiteLLM proxy from Hexllama</p>
+          <p className="page-subtitle">Install, configure, update, and run a LiteLLM proxy from LlamaDeck</p>
         </div>
       </div>
 
@@ -251,7 +251,7 @@ export default function LiteLlmView() {
             </div>
           </div>
           <div className="settings-row-sub mono">Config file: {manager?.settings.configPath || 'Loading...'}</div>
-          <div className="settings-row-sub">Hexllama is currently using the saved local proxy URL {activeLocalBaseUrl}</div>
+          <div className="settings-row-sub">LlamaDeck is currently using the saved local proxy URL {activeLocalBaseUrl}</div>
           {managerDraftDirty && localBaseUrl !== activeLocalBaseUrl && (
             <div className="settings-row-sub">Unsaved runtime draft would switch the local proxy URL to {localBaseUrl}</div>
           )}

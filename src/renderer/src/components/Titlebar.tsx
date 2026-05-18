@@ -11,11 +11,12 @@ export default function Titlebar({ onCheckUpdates }: Props) {
       {}
       <div className="titlebar-logo">
         <img
-          src="./full-logo.png"
-          alt="hexllama"
-          className="titlebar-logo-img"
+          src="./icon.png"
+          alt="LlamaDeck"
+          className="titlebar-logo-icon brand-logo-img"
           draggable={false}
         />
+        <span className="titlebar-brand-text">LlamaDeck</span>
       </div>
       {}
       <div className="titlebar-drag-region" />

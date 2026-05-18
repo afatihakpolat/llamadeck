@@ -1,4 +1,4 @@
-import { ipcMain, dialog, shell, BrowserWindow } from 'electron'
+import { ipcMain, dialog, shell, BrowserWindow, nativeTheme } from 'electron'
 import {
   existsSync, readdirSync, readFileSync, writeFileSync, mkdirSync,
   unlinkSync, createWriteStream, statSync, rmdirSync, renameSync
@@ -9,7 +9,10 @@ import https from 'https'
 import http from 'http'
 import { app } from 'electron'
 import extract from 'extract-zip'
+import { USER_DATA_ROOT } from './userData'
+import { getAppWindowBehaviorSettings, saveAppWindowBehaviorSettings } from './appSettings'
 import type {
+  AppWindowBehaviorSettings,
   LiteLlmInstallStatus,
   LiteLlmLogLevel,
   LiteLlmManagerSettings,
@@ -20,6 +23,12 @@ import type {
 } from '../shared/types'
 
 type ConfigurablePathKind = 'models' | 'backend'
+const LIGHT_WINDOW_BACKGROUND = '#f3f6fb'
+const DARK_WINDOW_BACKGROUND = '#0b1220'
+
+function getInitialWindowBackground(): string {
+  return nativeTheme.shouldUseDarkColors ? DARK_WINDOW_BACKGROUND : LIGHT_WINDOW_BACKGROUND
+}
 
 interface AppPaths {
   models: string
@@ -67,7 +76,7 @@ interface PythonRuntimeCommand {
   pythonVersion: string
 }
 
-const SOURCE_UPDATE_SCRIPT_PATH = join(app.getPath('userData'), 'update-llama-source.ps1')
+const SOURCE_UPDATE_SCRIPT_PATH = join(USER_DATA_ROOT, 'update-llama-source.ps1')
 const SOURCE_UPDATE_SCRIPT = String.raw`
 param(
   [string]$RepoDir,
@@ -210,7 +219,7 @@ finally {
 }
 `
 
-const APP_ROOT = app.isPackaged ? join(app.getPath('userData')) : join(process.cwd())
+const APP_ROOT = app.isPackaged ? USER_DATA_ROOT : join(process.cwd())
 
 const DEFAULT_PATHS: AppPaths = {
   models: join(APP_ROOT, 'models'),
@@ -218,10 +227,10 @@ const DEFAULT_PATHS: AppPaths = {
   backend: join(APP_ROOT, 'backend')
 }
 
-const PATHS_CONFIG_FILE = join(app.getPath('userData'), 'folder-paths.json')
-const LITELLM_SETTINGS_FILE = join(app.getPath('userData'), 'litellm-settings.json')
-const LITELLM_MANAGER_FILE = join(app.getPath('userData'), 'litellm-manager.json')
-const DEFAULT_LITELLM_CONFIG_PATH = join(app.getPath('userData'), 'litellm-config.yaml')
+const PATHS_CONFIG_FILE = join(USER_DATA_ROOT, 'folder-paths.json')
+const LITELLM_SETTINGS_FILE = join(USER_DATA_ROOT, 'litellm-settings.json')
+const LITELLM_MANAGER_FILE = join(USER_DATA_ROOT, 'litellm-manager.json')
+const DEFAULT_LITELLM_CONFIG_PATH = join(USER_DATA_ROOT, 'litellm-config.yaml')
 const DEFAULT_LITELLM_CONFIG = `model_list:
   - model_name: example-model
     litellm_params:
@@ -478,7 +487,7 @@ function probeLiteLlmApi(baseUrl: string): Promise<boolean> {
     const req = requestImpl(url, {
       method: 'GET',
       headers: {
-        'User-Agent': 'hexllama/1.0.0',
+        'User-Agent': 'llamadeck/1.0.0',
         Accept: 'application/json',
         ...buildLiteLlmRequestHeaders(liteLlmSettings)
       }
@@ -944,10 +953,38 @@ function parseBuildNumber(value: string): number {
   return match ? parseInt(match[1], 10) : 0
 }
 
-function getLatestGitTag(): { tagName: string; url: string } {
+function getRepoOriginUrl(repoDir?: string): string {
+  if (!repoDir) return 'https://github.com/ggml-org/llama.cpp.git'
+
+  try {
+    const remoteUrl = execFileSync('git', ['-C', repoDir, 'remote', 'get-url', 'origin'], {
+      encoding: 'utf-8',
+      windowsHide: true,
+      stdio: ['ignore', 'pipe', 'pipe']
+    }).trim()
+
+    return remoteUrl || 'https://github.com/ggml-org/llama.cpp.git'
+  } catch {
+    return 'https://github.com/ggml-org/llama.cpp.git'
+  }
+}
+
+function getRepoBrowserUrl(remoteUrl: string): string {
+  const trimmed = remoteUrl.trim().replace(/\.git$/i, '')
+
+  if (/^https?:\/\//i.test(trimmed)) return trimmed
+
+  const sshMatch = trimmed.match(/^git@github\.com:(.+)$/i)
+  if (sshMatch?.[1]) return `https://github.com/${sshMatch[1]}`
+
+  return 'https://github.com/ggml-org/llama.cpp'
+}
+
+function getLatestGitTag(repoDir?: string): { tagName: string; url: string } {
+  const remoteUrl = getRepoOriginUrl(repoDir)
   const output = execFileSync(
     'git',
-    ['ls-remote', '--tags', '--refs', 'https://github.com/ggerganov/llama.cpp.git', 'refs/tags/b*'],
+    ['ls-remote', '--tags', '--refs', remoteUrl, 'refs/tags/b*'],
     { encoding: 'utf-8', windowsHide: true, maxBuffer: 4 * 1024 * 1024 }
   )
 
@@ -966,7 +1003,7 @@ function getLatestGitTag(): { tagName: string; url: string } {
 
   return {
     tagName: latestTag,
-    url: `https://github.com/ggerganov/llama.cpp/tree/${latestTag}`
+    url: `${getRepoBrowserUrl(remoteUrl)}/tree/${latestTag}`
   }
 }
 
@@ -1224,7 +1261,7 @@ function requestJson(url: string, options: { method?: 'GET' | 'POST'; headers?: 
     const req = requestImpl(url, {
       method: options.method ?? 'GET',
       headers: {
-        'User-Agent': 'hexllama/1.0.0',
+        'User-Agent': 'llamadeck/1.0.0',
         Accept: 'application/json',
         ...(options.headers ?? {})
       }
@@ -1340,7 +1377,7 @@ function startDownload(
 
   const attempt = (currentUrl: string) => {
     const get = currentUrl.startsWith('https') ? https.get : http.get
-    const headers: Record<string, string> = { 'User-Agent': 'hexllama/1.0' }
+    const headers: Record<string, string> = { 'User-Agent': 'llamadeck/1.0' }
     if (startByte > 0) headers['Range'] = `bytes=${startByte}-`
     currentReq = get(currentUrl, { headers }, (res) => {
       if (destroyed) { res.destroy(); return }
@@ -1727,10 +1764,10 @@ export function registerIpcHandlers(): void {
     const icon = resolveAppIconPath()
     
     const chatWin = new BrowserWindow({
-      width: 1024, height: 768, show: true, autoHideMenuBar: true,
-      title: 'Hexllama - Llama-UI',
+      width: 1024, height: 768, show: false, autoHideMenuBar: true,
+      title: 'LlamaDeck - Llama-UI',
       titleBarStyle: 'hiddenInset',
-      backgroundColor: '#ffffff',
+      backgroundColor: getInitialWindowBackground(),
       ...(icon ? { icon } : {}),
       webPreferences: {
         preload: join(__dirname, '../preload/index.js'),
@@ -1738,6 +1775,9 @@ export function registerIpcHandlers(): void {
         contextIsolation: true,
         nodeIntegration: false
       }
+    })
+    chatWin.on('ready-to-show', () => {
+      chatWin.show()
     })
     const rendererUrl = process.env['ELECTRON_RENDERER_URL']
     if (rendererUrl) {
@@ -1749,6 +1789,17 @@ export function registerIpcHandlers(): void {
 
   ipcMain.handle('open-chat-window', (_e, port: number) => {
     openChatWindow(port)
+  })
+  ipcMain.handle('get-app-window-behavior-settings', () => {
+    return getAppWindowBehaviorSettings()
+  })
+  ipcMain.handle('save-app-window-behavior-settings', (_e, settings: Partial<AppWindowBehaviorSettings>) => {
+    try {
+      const savedSettings = saveAppWindowBehaviorSettings(settings)
+      return { success: true, settings: savedSettings }
+    } catch (error) {
+      return { success: false, error: String(error) }
+    }
   })
   ipcMain.handle('stop-model', (_e, id: string) => {
     const proc = runningProcesses.get(id)
@@ -1765,7 +1816,7 @@ export function registerIpcHandlers(): void {
 
   ipcMain.handle('check-updates', async () => {
     try {
-      const latestTag = getLatestGitTag()
+      const latestTag = getLatestGitTag(getAppPaths().backend)
       const latestNum = parseBuildNumber(latestTag.tagName)
       const backendDir = getAppPaths().backend
       const installedBackends = existsSync(backendDir) ? listBackendsFromDirectory(backendDir) : []
@@ -1808,7 +1859,7 @@ export function registerIpcHandlers(): void {
 
     if (!targetTagName) {
       try {
-        targetTagName = getLatestGitTag().tagName
+        targetTagName = getLatestGitTag(repoDir).tagName
       } catch (err) {
         return { success: false, error: String(err) }
       }

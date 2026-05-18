@@ -1,7 +1,7 @@
 {
-  "name": "hexllama",
+  "name": "llamadeck",
   "version": "1.0.0",
-  "description": "hexllama — a GUI for llama.cpp",
+  "description": "LlamaDeck — a GUI for llama.cpp",
   "main": "out/main/index.js",
   "homepage": "./",
   "scripts": {

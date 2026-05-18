@@ -1,5 +1,6 @@
 import React, { useEffect } from 'react'
 import { useStore } from './store/useStore'
+import type { ThemeMode } from './store/useStore'
 import Titlebar from './components/Titlebar'
 import Sidebar from './components/Sidebar'
 import CardsView from './components/CardsView'
@@ -13,14 +14,30 @@ import ChatWindow from './components/ChatWindow'
 import { buildDefaultTemplate } from './utils/defaultTemplate'
 import type { Template } from '../../shared/types'
 
-export default function App() {
-  const searchParams = new URLSearchParams(window.location.search)
-  const chatUrl = searchParams.get('chat_url')
+const THEME_STORAGE_KEY = 'hexllama_theme'
 
-  if (chatUrl) {
-    return <ChatWindow url={chatUrl} />
+function resolveThemeMode(themeMode: ThemeMode, prefersDark: boolean): 'light' | 'dark' {
+  if (themeMode === 'system') {
+    return prefersDark ? 'dark' : 'light'
   }
 
+  return themeMode
+}
+
+function readStoredThemeMode(): ThemeMode {
+  const storedValue = window.localStorage.getItem(THEME_STORAGE_KEY)
+  return storedValue === 'light' || storedValue === 'dark' || storedValue === 'system'
+    ? storedValue
+    : 'system'
+}
+
+function applyTheme(themeMode: ThemeMode): void {
+  const resolvedTheme = resolveThemeMode(themeMode, window.matchMedia('(prefers-color-scheme: dark)').matches)
+  document.documentElement.dataset.theme = resolvedTheme
+  document.documentElement.style.colorScheme = resolvedTheme
+}
+
+function MainApp() {
   const [loading, setLoading] = React.useState(true)
 
   React.useEffect(() => {
@@ -192,7 +209,8 @@ export default function App() {
         display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
         color: 'var(--text)'
       }}>
-        <img src="./icon.png" alt="Hexllama Icon" style={{ width: 128, height: 128, marginBottom: 24, imageRendering: 'crisp-edges' }} draggable={false} />
+        <img src="./icon.png" alt="LlamaDeck Icon" className="brand-logo-img" style={{ width: 128, height: 128, marginBottom: 24, imageRendering: 'crisp-edges' }} draggable={false} />
+        <div style={{ fontSize: 13, fontWeight: 700, letterSpacing: '0.18em', textTransform: 'uppercase', marginBottom: 12, color: 'var(--text-secondary)' }}>LlamaDeck</div>
         <h2 style={{ fontSize: 18, fontWeight: 600, letterSpacing: '0.5px' }}>All AI-Glory to the Llama.cpp</h2>
       </div>
     )
@@ -211,4 +229,55 @@ export default function App() {
       {showCreateModal && <CreateModal />}
     </div>
   )
+}
+
+export default function App() {
+  const searchParams = new URLSearchParams(window.location.search)
+  const chatUrl = searchParams.get('chat_url')
+  const themeMode = useStore((state) => state.themeMode)
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)')
+
+    const syncTheme = (nextThemeMode: ThemeMode) => {
+      applyTheme(nextThemeMode)
+    }
+
+    const handleSystemThemeChange = () => {
+      if (themeMode === 'system') {
+        syncTheme(themeMode)
+      }
+    }
+
+    const handleStorage = (event: StorageEvent) => {
+      if (event.key === THEME_STORAGE_KEY) {
+        const nextThemeMode = readStoredThemeMode()
+        useStore.setState({ themeMode: nextThemeMode })
+        syncTheme(nextThemeMode)
+      }
+    }
+
+    syncTheme(themeMode)
+    window.addEventListener('storage', handleStorage)
+
+    if (typeof mediaQuery.addEventListener === 'function') {
+      mediaQuery.addEventListener('change', handleSystemThemeChange)
+      return () => {
+        mediaQuery.removeEventListener('change', handleSystemThemeChange)
+        window.removeEventListener('storage', handleStorage)
+      }
+    }
+
+    mediaQuery.addListener(handleSystemThemeChange)
+    return () => {
+      mediaQuery.removeListener(handleSystemThemeChange)
+      window.removeEventListener('storage', handleStorage)
+    }
+  }, [themeMode])
+
+  if (chatUrl) {
+    return <ChatWindow url={chatUrl} />
+  }
+
+  return <MainApp />
 }

@@ -1,4 +1,7 @@
 import type { Template } from '../../../shared/types'
+
+export const DEFAULT_TEMPLATE_SERVER_PORT = 8001
+
 function cleanName(filename: string): string {
   return filename
     .replace(/\.gguf$/i, '')
@@ -91,7 +94,7 @@ function getRecommendedSettings(filename: string): RecommendedSettings {
 }
 export function getNextPort(existingTemplates: Template[]): number {
   const usedPorts = new Set(existingTemplates.map(t => t.serverPort))
-  let port = 8080
+  let port = DEFAULT_TEMPLATE_SERVER_PORT
   while (usedPorts.has(port)) port++
   return port
 }

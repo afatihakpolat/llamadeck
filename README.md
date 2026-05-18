@@ -1,6 +1,8 @@
 <div align="center">
-  <img src="assets/github-logo-hexllama.png" alt="Hexllama Logo" width="400" />
+  <img src="assets/icon_256.png" alt="LlamaDeck Logo" width="128" />
 </div>
+
+<h1 align="center">LlamaDeck</h1>
 
 <p align="center">
   <img src="https://img.shields.io/badge/version-1.0.0-black?style=flat-square" alt="Version 1.0.0" />
@@ -12,9 +14,9 @@
 
 <br/>
 
-Hexllama is a fast, native desktop interface designed to streamline managing and running local Large Language Models using llama.cpp. It strips away the friction of command-line execution and manual file management, providing a unified workspace to discover, download, configure, and serve models.
+LlamaDeck is a fast, native desktop interface designed to streamline managing and running local Large Language Models using llama.cpp. It strips away the friction of command-line execution and manual file management, providing a unified workspace to discover, download, configure, and serve models.
 
-Built by and for local AI enthusiasts, Hexllama ensures you spend less time wrestling with terminal arguments and more time interacting with models.
+Built by and for local AI enthusiasts, LlamaDeck ensures you spend less time wrestling with terminal arguments and more time interacting with models.
 
 ## Features
 
@@ -24,7 +26,7 @@ Search Hugging Face directly within the application. Browse repositories, view f
 ![Model Hub](assets/screenshots/model-hub.png)
 
 **Smart Download Manager**
-Pause, resume, or cancel large model downloads reliably. You can also paste direct GGUF links. When a download completes, Hexllama automatically generates an execution template with recommended threads, batch sizes, and context windows tailored to the model's parameters and quantization level.
+Pause, resume, or cancel large model downloads reliably. You can also paste direct GGUF links. When a download completes, LlamaDeck automatically generates an execution template with recommended threads, batch sizes, and context windows tailored to the model's parameters and quantization level.
 
 ![Model Download](assets/screenshots/model-download.png)
 
@@ -36,7 +38,7 @@ Save your configurations as reusable templates. Run multiple models simultaneous
 ![Template Settings](assets/screenshots/template-edit-model-settings-parameters.png)
 
 **Version and Backend Management**
-Running cutting-edge models sometimes requires different builds of llama.cpp. Hexllama lets you maintain and seamlessly switch between multiple backend binaries. It automatically checks the ggml-org repository for new releases and lets you download and extract them straight from the settings panel.
+Running cutting-edge models sometimes requires different builds of llama.cpp. LlamaDeck lets you maintain and seamlessly switch between multiple backend binaries. It automatically checks the ggml-org repository for new releases and lets you download and extract them straight from the settings panel.
 
 **Visual Command Editor**
 Stop memorizing execution flags. Edit backend-specific commands through a structured user interface. Toggle booleans, set limits on numerical inputs, and define default parameter values for the llama.cpp server.
@@ -50,7 +52,7 @@ The fastest way to get started is to use the pre-compiled installer.
 
 1. Navigate to the [Releases](https://github.com/andersondanieln/hexllama/releases) page.
 2. Download the installer for your operating system.
-3. Run the installer and launch Hexllama.
+3. Run the installer and launch LlamaDeck.
 
 ### Run Locally
 If you want to build from source or modify the project, you can easily run the development environment.
@@ -84,6 +86,6 @@ This project exists because of the incredible foundational work of Georgi Gergan
 
 ## Privacy and Terms
 
-Hexllama is provided as is, without warranty of any kind. The developers assume no liability for damages or issues arising from the use of this software.
+LlamaDeck is provided as is, without warranty of any kind. The developers assume no liability for damages or issues arising from the use of this software.
 
 This application is strictly local. It does not collect, store, or transmit any telemetry or personal data. Note that downloading models relies on third-party services like Hugging Face, and executing backends relies on the downloaded binaries, both of which are subject to their own respective privacy policies.

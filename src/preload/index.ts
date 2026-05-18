@@ -64,6 +64,8 @@ const api = {
   setAppFolder: (kind: 'models' | 'backend', path: string) => ipcRenderer.invoke('set-app-folder', kind, path),
   openExternal: (url: string) => ipcRenderer.invoke('open-external', url),
   openChatWindow: (port: number) => ipcRenderer.invoke('open-chat-window', port),
+  getAppWindowBehaviorSettings: () => ipcRenderer.invoke('get-app-window-behavior-settings'),
+  saveAppWindowBehaviorSettings: (settings: object) => ipcRenderer.invoke('save-app-window-behavior-settings', settings),
 }
 if (process.contextIsolated) {
   try {

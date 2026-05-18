@@ -1,9 +1,9 @@
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { useStore } from '../store/useStore'
-import { HardDrive, Download, Trash, RefreshCw, Loader2, ChevronDown, Terminal, Bell, BellOff, FolderOpen } from 'lucide-react'
+import { HardDrive, Download, Trash, RefreshCw, Loader2, ChevronDown, Terminal, Bell, BellOff, FolderOpen, Moon, Sun, Monitor } from 'lucide-react'
 import CommandsEditor from './CommandsEditor'
-import type { BackendVersion, Template } from '../../../shared/types'
-import type { ModelFileInfo } from '../store/useStore'
+import type { AppWindowBehaviorSettings, BackendVersion, Template } from '../../../shared/types'
+import type { ModelFileInfo, ThemeMode } from '../store/useStore'
 
 const NOTIF_KEY = 'hexllama_update_notify'
 
@@ -49,18 +49,47 @@ export default function SettingsView() {
   const {
     backends, activeBackend, setActiveBackend, setCommandsSchema, setBackends,
     setModels, setCards, paths, setPaths, modelDownloads,
-    releaseInfo, checkingUpdate, downloadProgress, setDownloadProgress, setCheckingUpdate, setReleaseInfo
+    releaseInfo, checkingUpdate, downloadProgress, setDownloadProgress, setCheckingUpdate, setReleaseInfo,
+    themeMode, setThemeMode
   } = useStore()
   const [updatingSource, setUpdatingSource] = useState(false)
   const [expandedEditor, setExpandedEditor] = useState<string | null>(null)
   const [notifPref, setNotifPref] = useState<'banner' | 'manual'>(getNotifPref())
   const [changingFolder, setChangingFolder] = useState<FolderKind | null>(null)
+  const [windowBehaviorSettings, setWindowBehaviorSettings] = useState<AppWindowBehaviorSettings>({ minimizeToTray: false })
+  const [loadingWindowBehaviorSettings, setLoadingWindowBehaviorSettings] = useState(true)
+
+  useEffect(() => {
+    void window.api.getAppWindowBehaviorSettings().then((settings) => {
+      setWindowBehaviorSettings(settings)
+      setLoadingWindowBehaviorSettings(false)
+    }).catch(() => {
+      setLoadingWindowBehaviorSettings(false)
+    })
+  }, [])
 
   const hasActiveDownloads = updatingSource || !!downloadProgress || Object.values(modelDownloads).some((download) => !['done', 'error', 'cancelled'].includes(download.phase))
 
   function handleNotifPref(pref: 'banner' | 'manual') {
     setNotifPref(pref)
     localStorage.setItem(NOTIF_KEY, pref)
+  }
+
+  function handleThemeMode(mode: ThemeMode) {
+    setThemeMode(mode)
+  }
+
+  async function handleMinimizeToTrayChange(minimizeToTray: boolean) {
+    setLoadingWindowBehaviorSettings(true)
+    const result = await window.api.saveAppWindowBehaviorSettings({ minimizeToTray })
+    if (!result.success) {
+      setLoadingWindowBehaviorSettings(false)
+      alert(`Failed to update window behavior: ${result.error || 'Unknown error'}`)
+      return
+    }
+
+    setWindowBehaviorSettings(result.settings)
+    setLoadingWindowBehaviorSettings(false)
   }
 
 
@@ -173,6 +202,71 @@ export default function SettingsView() {
         <div>
           <h1 className="page-title">Settings</h1>
           <p className="page-subtitle">Manage llama.cpp backends and configurations</p>
+        </div>
+      </div>
+
+      <div className="settings-section">
+        <div className="settings-section-title"><Moon /> Appearance</div>
+        <div className="settings-row" style={{ borderBottom: 'none', flexDirection: 'column', alignItems: 'flex-start', gap: 12 }}>
+          <p style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.6 }}>
+            Choose how LlamaDeck should render its interface. System follows your OS preference, while Light and Dark stay fixed.
+          </p>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <button
+              className={`launch-mode-btn ${themeMode === 'system' ? 'active' : ''}`}
+              onClick={() => handleThemeMode('system')}
+            >
+              <Monitor size={13} />
+              System
+            </button>
+            <button
+              className={`launch-mode-btn ${themeMode === 'light' ? 'active' : ''}`}
+              onClick={() => handleThemeMode('light')}
+            >
+              <Sun size={13} />
+              Light
+            </button>
+            <button
+              className={`launch-mode-btn ${themeMode === 'dark' ? 'active' : ''}`}
+              onClick={() => handleThemeMode('dark')}
+            >
+              <Moon size={13} />
+              Dark
+            </button>
+          </div>
+          <p style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+            The theme is saved locally and applies to the main UI and chat windows.
+          </p>
+        </div>
+      </div>
+
+      <div className="settings-section">
+        <div className="settings-section-title"><Monitor /> Window Behavior</div>
+        <div className="settings-row" style={{ borderBottom: 'none', flexDirection: 'column', alignItems: 'flex-start', gap: 12 }}>
+          <p style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.6 }}>
+            Control what happens when you click the main window close button.
+          </p>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <button
+              className={`launch-mode-btn ${windowBehaviorSettings.minimizeToTray ? 'active' : ''}`}
+              onClick={() => void handleMinimizeToTrayChange(true)}
+              disabled={loadingWindowBehaviorSettings}
+            >
+              Minimize To Tray
+            </button>
+            <button
+              className={`launch-mode-btn ${!windowBehaviorSettings.minimizeToTray ? 'active' : ''}`}
+              onClick={() => void handleMinimizeToTrayChange(false)}
+              disabled={loadingWindowBehaviorSettings}
+            >
+              Close Normally
+            </button>
+          </div>
+          <p style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+            {loadingWindowBehaviorSettings
+              ? 'Loading current window behavior...'
+              : 'When enabled, clicking X hides the app to the system tray instead of quitting. Use the tray icon to reopen or quit.'}
+          </p>
         </div>
       </div>
 

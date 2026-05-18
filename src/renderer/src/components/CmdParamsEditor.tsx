@@ -15,6 +15,90 @@ const iconMap: Record<string, React.ReactNode> = {
   Star: <Star size={14} />
 }
 const FEATURED_ARGS = ['--ctx-size', '--gpu-layers', '--threads', '--batch-size', '--flash-attn']
+
+function formatDefaultValue(value: string | number | boolean | null | undefined): string | null {
+  if (value === undefined) return null
+  if (value === null) return 'null'
+  if (typeof value === 'boolean') return value ? 'true' : 'false'
+  if (value === '') return 'empty'
+  return String(value)
+}
+
+function getDecimalPlaces(value: number): number {
+  if (!Number.isFinite(value)) return 0
+
+  const normalized = value.toString().toLowerCase()
+  if (normalized.includes('e-')) {
+    const [, exponent = '0'] = normalized.split('e-')
+    const mantissa = normalized.split('e-')[0]
+    const mantissaDecimals = mantissa.includes('.') ? mantissa.split('.')[1].length : 0
+    return Number(exponent) + mantissaDecimals
+  }
+
+  if (!normalized.includes('.')) return 0
+  return normalized.split('.')[1].length
+}
+
+function getDescriptionRange(cmd: CommandParam): { min?: number; max?: number } {
+  const rangeMatch = cmd.description.match(/valid range\s+(-?\d+(?:\.\d+)?)\s+to\s+(-?\d+(?:\.\d+)?)/i)
+  if (!rangeMatch) return {}
+
+  return {
+    min: Number(rangeMatch[1]),
+    max: Number(rangeMatch[2])
+  }
+}
+
+function getNumberPrecision(cmd: CommandParam): number {
+  const descriptionNumbers = cmd.description.match(/-?\d+\.\d+/g) ?? []
+  const candidates = [cmd.default, cmd.min, cmd.max]
+    .filter((value): value is number => typeof value === 'number' && Number.isFinite(value))
+    .concat(descriptionNumbers.map(Number).filter(Number.isFinite))
+
+  const precision = candidates.reduce((maxPrecision, value) => {
+    return Math.max(maxPrecision, getDecimalPlaces(value))
+  }, 0)
+
+  return precision
+}
+
+function getNumberStep(cmd: CommandParam): number {
+  const precision = getNumberPrecision(cmd)
+
+  return precision > 0 ? 10 ** -precision : 1
+}
+
+function clampNumber(value: number, cmd: CommandParam): number {
+  const descriptionRange = getDescriptionRange(cmd)
+  const min = cmd.min ?? descriptionRange.min ?? -Infinity
+  const max = cmd.max ?? descriptionRange.max ?? Infinity
+  return Math.min(max, Math.max(min, value))
+}
+
+function snapNumberToStep(value: number, step: number, min?: number): number {
+  const origin = min ?? 0
+  const precision = getDecimalPlaces(step)
+  const snappedValue = origin + Math.round((value - origin) / step) * step
+
+  return Number(snappedValue.toFixed(precision))
+}
+
+function adjustNumberValue(currentValue: unknown, delta: number, cmd: CommandParam): number {
+  const step = getNumberStep(cmd)
+  const descriptionRange = getDescriptionRange(cmd)
+  const min = cmd.min ?? descriptionRange.min
+  const baseValue = typeof currentValue === 'number'
+    ? currentValue
+    : typeof cmd.default === 'number'
+      ? cmd.default
+      : cmd.min ?? 0
+  const snappedBaseValue = snapNumberToStep(baseValue, step, min)
+  const nextValue = clampNumber(snappedBaseValue + delta * step, cmd)
+  const precision = getDecimalPlaces(step)
+
+  return Number(nextValue.toFixed(precision))
+}
+
 interface Props {
   templateId?: string
   args: Record<string, any>
@@ -100,6 +184,11 @@ export default function CmdParamsEditor({ templateId, args, onChange, modelPathF
     if (cmd.arg === '--model' || cmd.arg === '--port') return null
     const val = args[cmd.arg] ?? (cmd.type === 'boolean' ? false : '')
     const isActive = args[cmd.arg] !== undefined && args[cmd.arg] !== false && args[cmd.arg] !== ''
+    const defaultValue = formatDefaultValue(cmd.default)
+    const descriptionRange = getDescriptionRange(cmd)
+    const numericStep = cmd.type === 'number' ? getNumberStep(cmd) : undefined
+    const numericMin = cmd.type === 'number' ? (cmd.min ?? descriptionRange.min) : undefined
+    const numericMax = cmd.type === 'number' ? (cmd.max ?? descriptionRange.max) : undefined
     return (
       <div key={cmd.arg} className={`cmd-row ${isActive ? 'active-param' : ''} ${cmd.type === 'text' ? 'cmd-row-full' : ''}`}>
         <div className="cmd-label-group">
@@ -108,6 +197,7 @@ export default function CmdParamsEditor({ templateId, args, onChange, modelPathF
             <span className="tooltip">{cmd.description}</span>
           </div>
           <div className="cmd-arg">{cmd.short ? `${cmd.short}, ` : ''}{cmd.arg}</div>
+          {defaultValue !== null && <div className="cmd-default">Default: {defaultValue}</div>}
         </div>
         <div className="cmd-input-group">
           {cmd.type === 'boolean' && (
@@ -121,13 +211,13 @@ export default function CmdParamsEditor({ templateId, args, onChange, modelPathF
           )}
           {cmd.type === 'number' && (
             <div className="num-input-wrap">
-              <button className="num-btn" onClick={() => handleUpdate(cmd.arg, Math.max((cmd.min ?? -Infinity), (Number(val) || 0) - 1))} disabled={disabled}>-</button>
+              <button type="button" className="num-btn" onClick={() => handleUpdate(cmd.arg, adjustNumberValue(val, -1, cmd))} disabled={disabled}>-</button>
               <input
-                type="number" className="cmd-input num" value={val} placeholder={cmd.default?.toString()} min={cmd.min} max={cmd.max}
+                type="number" className="cmd-input num" value={val} placeholder={cmd.default?.toString()} min={numericMin} max={numericMax} step={numericStep}
                 onChange={(e) => handleUpdate(cmd.arg, e.target.value === '' ? '' : Number(e.target.value))}
                 disabled={disabled}
               />
-              <button className="num-btn" onClick={() => handleUpdate(cmd.arg, Math.min((cmd.max ?? Infinity), (Number(val) || 0) + 1))} disabled={disabled}>+</button>
+              <button type="button" className="num-btn" onClick={() => handleUpdate(cmd.arg, adjustNumberValue(val, 1, cmd))} disabled={disabled}>+</button>
             </div>
           )}
           {cmd.type === 'string' && (
@@ -135,7 +225,7 @@ export default function CmdParamsEditor({ templateId, args, onChange, modelPathF
           )}
           {cmd.type === 'select' && (
             <select className="cmd-select" value={val} onChange={(e) => handleUpdate(cmd.arg, e.target.value)} disabled={disabled}>
-              <option value="">Default</option>
+              <option value="">{defaultValue !== null ? `Default (${defaultValue})` : 'Default'}</option>
               {cmd.options?.map(opt => <option key={opt} value={opt}>{opt}</option>)}
             </select>
           )}
@@ -152,8 +242,8 @@ export default function CmdParamsEditor({ templateId, args, onChange, modelPathF
         <div style={{
           display: 'flex', alignItems: 'center', gap: 8,
           padding: '8px 12px', marginBottom: 12, borderRadius: 8,
-          background: 'var(--surface-2, rgba(255,255,255,0.04))',
-          border: '1px solid var(--border, rgba(255,255,255,0.08))',
+          background: 'var(--surface-2)',
+          border: '1px solid var(--border)',
           color: 'var(--text-muted)', fontSize: 12
         }}>
           <Lock size={13} style={{ flexShrink: 0, opacity: 0.7 }} />

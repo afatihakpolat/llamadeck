@@ -32,7 +32,7 @@ export default function ChatWindow({ url }: { url: string }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', width: '100vw', background: 'var(--bg)' }}>
       <div style={{ height: 48, WebkitAppRegion: 'drag', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 16px', background: 'var(--card-bg)', borderBottom: '1px solid var(--border)' }}>
-        <div style={{ fontWeight: 600, color: 'var(--text)', fontSize: 14 }}>Hexllama - Llama-UI</div>
+        <div style={{ fontWeight: 600, color: 'var(--text)', fontSize: 14 }}>LlamaDeck - Llama-UI</div>
         <div style={{ WebkitAppRegion: 'no-drag', display: 'flex', gap: 8 }}>
           <button className="btn btn-ghost" style={{ padding: '4px 12px', fontSize: 13 }} onClick={handleReload}>
             <RefreshCw size={14} />
@@ -53,7 +53,7 @@ export default function ChatWindow({ url }: { url: string }) {
           <RefreshCw size={24} className="spin" style={{ opacity: 0.5 }} />
         </div>
       ) : (
-        <iframe key={reloadKey} src={url} style={{ flex: 1, border: 'none', width: '100%', background: '#fff' }} title="Llama Chat" />
+        <iframe key={reloadKey} src={url} style={{ flex: 1, border: 'none', width: '100%', background: 'var(--surface)' }} title="Llama Chat" />
       )}
     </div>
   )

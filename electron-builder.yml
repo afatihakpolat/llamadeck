@@ -1,5 +1,5 @@
-appId: com.hexllama.app
-productName: Hexllama
+appId: com.llamadeck.app
+productName: LlamaDeck
 directories:
   buildResources: build
 files:

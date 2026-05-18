@@ -3,7 +3,18 @@ import { useStore } from '../store/useStore'
 import { Play, Square, Settings, ChevronDown, MoreVertical, Copy, Trash, Download, Globe, Server } from 'lucide-react'
 import type { CardState, CommandParam } from '../../../shared/types'
 import CmdParamsEditor from './CmdParamsEditor'
+import { normalizeCommandArgs } from '../utils/commandArgs'
+
 interface Props { card: CardState }
+
+function normalizeModelPath(filePath?: string): string {
+  return (filePath || '').trim().replace(/\\/g, '/').toLowerCase()
+}
+
+function getFileName(filePath?: string): string {
+  return (filePath || '').split(/[/\\]/).pop()?.toLowerCase() || ''
+}
+
 export default function ModelCard({ card }: Props) {
   const { toggleCardExpanded, updateCard, setCardStatus, removeCard, backends, activeBackend, commandsSchema, setShowCreateModal, models } = useStore()
   const [showMenu, setShowMenu] = useState(false)
@@ -11,9 +22,25 @@ export default function ModelCard({ card }: Props) {
   const isRunning = card.status === 'running'
   const isExpanded = card.expanded
   const launchMode = card.template.launchMode || 'chat'
+  const normalizedTemplateArgs = normalizeCommandArgs(card.template.args || {}, commandsSchema)
   const hasModelPath = Boolean(card.template.modelPath?.trim())
-  const modelExists = hasModelPath && models.some(m => m.path === card.template.modelPath)
-  const canStart = hasModelPath && modelExists
+  const normalizedTemplateModelPath = normalizeModelPath(card.template.modelPath)
+  const exactModelMatch = hasModelPath
+    ? models.find((model) => normalizeModelPath(model.path) === normalizedTemplateModelPath)
+    : undefined
+  const templateFileName = getFileName(card.template.modelPath)
+  const fileNameMatches = !exactModelMatch && templateFileName
+    ? models.filter((model) => getFileName(model.path) === templateFileName)
+    : []
+  const resolvedModel = exactModelMatch || (fileNameMatches.length === 1 ? fileNameMatches[0] : undefined)
+  const resolvedModelPath = resolvedModel?.path || card.template.modelPath
+  const modelExists = Boolean(resolvedModel)
+  const preferredBackend = card.template.backendVersion
+    ? backends.find((backend) => backend.name === card.template.backendVersion)
+    : activeBackend
+  const backendExists = Boolean(preferredBackend?.exe)
+  const canStart = hasModelPath && modelExists && backendExists
+
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
       if (menuRef.current && !menuRef.current.contains(e.target as Node)) setShowMenu(false)
@@ -21,6 +48,25 @@ export default function ModelCard({ card }: Props) {
     document.addEventListener('mousedown', handleClickOutside)
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
+
+  useEffect(() => {
+    if (!resolvedModel?.path || !card.template.modelPath) return
+    if (normalizeModelPath(resolvedModel.path) === normalizedTemplateModelPath) return
+
+    const nextTemplate = { ...card.template, modelPath: resolvedModel.path }
+    updateCard(card.template.id, { modelPath: resolvedModel.path })
+    window.api.saveTemplate(nextTemplate)
+  }, [card.template, normalizedTemplateModelPath, resolvedModel, updateCard])
+
+  useEffect(() => {
+    if (!commandsSchema) return
+    if (JSON.stringify(normalizedTemplateArgs) === JSON.stringify(card.template.args || {})) return
+
+    const nextTemplate = { ...card.template, args: normalizedTemplateArgs }
+    updateCard(card.template.id, { args: normalizedTemplateArgs })
+    window.api.saveTemplate(nextTemplate)
+  }, [card.template, commandsSchema, normalizedTemplateArgs, updateCard])
+
   async function handleRunToggle() {
     if (isRunning) {
       const res = await window.api.stopModel(card.template.id)
@@ -29,28 +75,37 @@ export default function ModelCard({ card }: Props) {
       return
     }
 
-    let targetBackend = backends.find(b => b.name === card.template.backendVersion)
+    let targetBackend = preferredBackend
     if (!targetBackend && activeBackend) targetBackend = activeBackend
     if (!targetBackend || !targetBackend.exe) {
       alert('Backend not found or has no executable.')
       return
     }
-    if (!card.template.modelPath?.trim()) {
+    if (!resolvedModelPath?.trim()) {
       alert('Model file is required.')
       return
     }
     const args: string[] = []
-    const tArgs = card.template.args
-    args.push('-m', card.template.modelPath)
+    const tArgs = normalizedTemplateArgs
+    args.push('-m', resolvedModelPath)
     if (commandsSchema) {
+      const knownArgs = new Set<string>()
+
       for (const cat of commandsSchema.categories) {
         for (const cmd of cat.commands) {
+          knownArgs.add(cmd.arg)
           const val = tArgs[cmd.arg]
           if (val !== undefined && val !== null && val !== '') {
             if (cmd.type === 'boolean') { if (val === true) args.push(cmd.arg) }
             else args.push(cmd.arg, String(val))
           }
         }
+      }
+
+      for (const [key, value] of Object.entries(tArgs)) {
+        if (knownArgs.has(key)) continue
+        if (value === true) args.push(key)
+        else if (value !== false && value !== null && value !== '') args.push(key, String(value))
       }
     } else {
       for (const [k, v] of Object.entries(tArgs)) {
@@ -136,12 +191,12 @@ export default function ModelCard({ card }: Props) {
         <span className="card-tag" title={card.template.modelPath}>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z" /><polyline points="14 2 14 8 20 8" /></svg>
           {card.template.modelPath
-            ? (!modelExists ? <span style={{ color: 'var(--danger)' }}>Missing File</span> : (card.template.modelPath?.split(/[/\\]/).pop() || 'No model'))
+            ? (!modelExists ? <span style={{ color: 'var(--danger)' }}>Missing File</span> : (resolvedModelPath?.split(/[/\\]/).pop() || 'No model'))
             : 'No model'}
         </span>
         <span className="card-tag">
           <span className={`status-dot ${isRunning ? 'running' : 'idle'}`} />
-          {isRunning ? `Port ${card.template.serverPort}` : (canStart ? 'Ready' : 'Missing Config')}
+          {isRunning ? `Port ${card.template.serverPort}` : canStart ? 'Ready' : !backendExists ? 'Missing Backend' : !modelExists ? 'Missing File' : 'Missing Config'}
         </span>
       </div>
       <div className="card-launch-mode">
@@ -194,7 +249,7 @@ export default function ModelCard({ card }: Props) {
       </div>
       <div className={`card-expanded ${isExpanded ? 'open' : ''}`}>
         <div className="expanded-inner">
-          <CmdParamsEditor templateId={card.template.id} args={card.template.args} />
+          <CmdParamsEditor templateId={card.template.id} args={normalizedTemplateArgs} />
         </div>
       </div>
     </div>

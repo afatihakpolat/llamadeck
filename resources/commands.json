@@ -5,143 +5,1884 @@
       "name": "Model",
       "icon": "Box",
       "commands": [
-        { "arg": "--model", "short": "-m", "label": "Model Path", "description": "Model path to load", "type": "string", "placeholder": "/path/to/model.gguf", "env": "LLAMA_ARG_MODEL" },
-        { "arg": "--model-url", "short": "-mu", "label": "Model URL", "description": "Model download URL", "type": "string", "placeholder": "https://...", "env": "LLAMA_ARG_MODEL_URL" },
-        { "arg": "--hf-repo", "short": "-hf", "label": "HuggingFace Repo", "description": "HuggingFace model repo (user/model[:quant])", "type": "string", "placeholder": "ggml-org/GLM-4.7-Flash-GGUF:Q4_K_M", "env": "LLAMA_ARG_HF_REPO" },
-        { "arg": "--hf-file", "short": "-hff", "label": "HuggingFace File", "description": "HuggingFace model file override", "type": "string", "placeholder": "model.gguf", "env": "LLAMA_ARG_HF_FILE" },
-        { "arg": "--hf-token", "short": "-hft", "label": "HuggingFace Token", "description": "HuggingFace access token", "type": "string", "placeholder": "hf_...", "env": "HF_TOKEN" },
-        { "arg": "--ctx-size", "short": "-c", "label": "Context Size", "description": "Size of the prompt context (0 = from model)", "type": "number", "default": 0, "min": 0, "max": 131072, "env": "LLAMA_ARG_CTX_SIZE" },
-        { "arg": "--n-predict", "short": "-n", "label": "Max Tokens to Predict", "description": "Number of tokens to predict (-1 = infinity)", "type": "number", "default": -1, "min": -1, "max": 65536, "env": "LLAMA_ARG_N_PREDICT" },
-        { "arg": "--lora", "label": "LoRA Adapter", "description": "Path to LoRA adapter", "type": "string", "placeholder": "/path/to/lora.gguf" },
-        { "arg": "--mmproj", "short": "-mm", "label": "Multimodal Projector", "description": "Path to multimodal projector file", "type": "string", "placeholder": "/path/to/mmproj.gguf", "env": "LLAMA_ARG_MMPROJ" }
+        {
+          "arg": "--model",
+          "short": "-m",
+          "label": "Model Path",
+          "description": "Model path to load",
+          "type": "string",
+          "placeholder": "/path/to/model.gguf",
+          "env": "LLAMA_ARG_MODEL"
+        },
+        {
+          "arg": "--model-url",
+          "short": "-mu",
+          "label": "Model URL",
+          "description": "Model download URL",
+          "type": "string",
+          "placeholder": "https://...",
+          "env": "LLAMA_ARG_MODEL_URL"
+        },
+        {
+          "arg": "--hf-repo",
+          "short": "-hf",
+          "label": "HuggingFace Repo",
+          "description": "HuggingFace model repo (user/model[:quant])",
+          "type": "string",
+          "placeholder": "ggml-org/GLM-4.7-Flash-GGUF:Q4_K_M",
+          "env": "LLAMA_ARG_HF_REPO"
+        },
+        {
+          "arg": "--hf-file",
+          "short": "-hff",
+          "label": "HuggingFace File",
+          "description": "HuggingFace model file override",
+          "type": "string",
+          "placeholder": "model.gguf",
+          "env": "LLAMA_ARG_HF_FILE"
+        },
+        {
+          "arg": "--hf-token",
+          "short": "-hft",
+          "label": "HuggingFace Token",
+          "description": "HuggingFace access token",
+          "type": "string",
+          "placeholder": "hf_...",
+          "env": "HF_TOKEN"
+        },
+        {
+          "arg": "--ctx-size",
+          "short": "-c",
+          "label": "Context Size",
+          "description": "Size of the prompt context (0 = from model)",
+          "type": "number",
+          "default": 0,
+          "min": 0,
+          "env": "LLAMA_ARG_CTX_SIZE"
+        },
+        {
+          "arg": "--n-predict",
+          "short": "-n",
+          "label": "Max Tokens to Predict",
+          "description": "Number of tokens to predict (-1 = infinity)",
+          "type": "number",
+          "default": -1,
+          "min": -1,
+          "max": 65536,
+          "env": "LLAMA_ARG_N_PREDICT"
+        },
+        {
+          "arg": "--lora",
+          "label": "LoRA Adapter",
+          "description": "Path to LoRA adapter",
+          "type": "string",
+          "placeholder": "/path/to/lora.gguf"
+        },
+        {
+          "arg": "--mmproj",
+          "short": "-mm",
+          "label": "Multimodal Projector",
+          "description": "Path to multimodal projector file",
+          "type": "string",
+          "placeholder": "/path/to/mmproj.gguf",
+          "env": "LLAMA_ARG_MMPROJ"
+        },
+        {
+          "arg": "--control-vector",
+          "label": "Control Vector",
+          "description": "add a control vector note: use comma-separated values to add multiple control vectors",
+          "type": "string",
+          "placeholder": "/path/to/file"
+        },
+        {
+          "arg": "--control-vector-layer-range",
+          "label": "Control Vector Layer Range",
+          "description": "layer range to apply the control vector(s) to, start and end inclusive",
+          "type": "string"
+        },
+        {
+          "arg": "--control-vector-scaled",
+          "label": "Control Vector Scaled",
+          "description": "add a control vector with user defined scaling SCALE note: use comma-separated values (format: FNAME:SCALE,...)",
+          "type": "string",
+          "placeholder": "/path/to/file"
+        },
+        {
+          "arg": "--hf-file-v",
+          "short": "-hffv",
+          "label": "Hf File V",
+          "description": "Hugging Face model file for the vocoder model",
+          "type": "string",
+          "env": "LLAMA_ARG_HF_FILE_V",
+          "placeholder": "/path/to/file"
+        },
+        {
+          "arg": "--lora-init-without-apply",
+          "label": "Lora Init Without Apply",
+          "description": "load LoRA adapters without applying them (apply later via POST /lora-adapters)",
+          "type": "boolean",
+          "default": false
+        },
+        {
+          "arg": "--lora-scaled",
+          "label": "Lora Scaled",
+          "description": "path to LoRA adapter with user defined scaling (format: FNAME:SCALE,...) note: use comma-separated values",
+          "type": "string",
+          "placeholder": "/path/to/file"
+        },
+        {
+          "arg": "--mmproj-auto",
+          "label": "Mmproj Auto",
+          "description": "whether to use multimodal projector file (if available), useful when using -hf",
+          "type": "boolean",
+          "default": true,
+          "env": "LLAMA_ARG_MMPROJ_AUTO"
+        },
+        {
+          "arg": "--mmproj-offload",
+          "label": "Mmproj Offload",
+          "description": "whether to enable GPU offloading for multimodal projector",
+          "type": "boolean",
+          "default": true,
+          "env": "LLAMA_ARG_MMPROJ_OFFLOAD"
+        },
+        {
+          "arg": "--models-autoload",
+          "label": "Models Autoload",
+          "description": "for router server, whether to automatically load models",
+          "type": "boolean",
+          "default": true,
+          "env": "LLAMA_ARG_MODELS_AUTOLOAD"
+        },
+        {
+          "arg": "--models-dir",
+          "label": "Models Dir",
+          "description": "directory containing models for the router server",
+          "type": "string",
+          "env": "LLAMA_ARG_MODELS_DIR"
+        },
+        {
+          "arg": "--models-max",
+          "label": "Models Max",
+          "description": "for router server, maximum number of models to load simultaneously",
+          "type": "number",
+          "default": 4,
+          "env": "LLAMA_ARG_MODELS_MAX"
+        },
+        {
+          "arg": "--models-preset",
+          "label": "Models Preset",
+          "description": "path to INI file containing model presets for the router server",
+          "type": "string",
+          "env": "LLAMA_ARG_MODELS_PRESET"
+        },
+        {
+          "arg": "--override-kv",
+          "label": "Override Kv",
+          "description": "advanced option to override model metadata by key. to specify multiple overrides, either use comma-separated values. types: int, float, bool, str. example: --override-kv tokenizer.ggml.add_bos_token=bool:false,tokenizer.ggml.add_eos_token=bool:false",
+          "type": "string"
+        }
       ]
     },
     {
       "name": "Performance",
       "icon": "Cpu",
       "commands": [
-        { "arg": "--threads", "short": "-t", "label": "CPU Threads", "description": "Number of CPU threads for generation (-1 = auto)", "type": "number", "default": -1, "min": -1, "max": 256, "env": "LLAMA_ARG_THREADS" },
-        { "arg": "--threads-batch", "short": "-tb", "label": "Batch Threads", "description": "Threads for batch/prompt processing (default: same as --threads)", "type": "number", "default": -1, "min": -1, "max": 256 },
-        { "arg": "--batch-size", "short": "-b", "label": "Batch Size", "description": "Logical maximum batch size", "type": "number", "default": 2048, "min": 1, "max": 65536, "env": "LLAMA_ARG_BATCH" },
-        { "arg": "--ubatch-size", "short": "-ub", "label": "Micro-Batch Size", "description": "Physical maximum batch size", "type": "number", "default": 512, "min": 1, "max": 65536, "env": "LLAMA_ARG_UBATCH" },
-        { "arg": "--parallel", "short": "-np", "label": "Parallel Sequences", "description": "Number of parallel sequences to decode", "type": "number", "default": 1, "min": 1, "max": 64, "env": "LLAMA_ARG_N_PARALLEL" },
-        { "arg": "--keep", "label": "Keep Tokens", "description": "Tokens to keep from initial prompt (-1 = all)", "type": "number", "default": 0, "min": -1, "max": 65536 },
-        { "arg": "--mlock", "label": "Memory Lock", "description": "Force system to keep model in RAM (no swap)", "type": "boolean", "default": false, "env": "LLAMA_ARG_MLOCK" },
-        { "arg": "--mmap", "label": "Memory Map", "description": "Memory-map the model file (faster load)", "type": "boolean", "default": true, "env": "LLAMA_ARG_MMAP" },
-        { "arg": "--flash-attn", "short": "-fa", "label": "Flash Attention", "description": "Flash Attention mode", "type": "select", "options": ["auto", "on", "off"], "default": "auto", "env": "LLAMA_ARG_FLASH_ATTN" },
-        { "arg": "--swa-full", "label": "Full SWA Cache", "description": "Use full-size SWA cache", "type": "boolean", "default": false, "env": "LLAMA_ARG_SWA_FULL" },
-        { "arg": "--check-tensors", "label": "Check Tensors", "description": "Check model tensor data for invalid values", "type": "boolean", "default": false },
-        { "arg": "--prio", "label": "Process Priority", "description": "Process/thread priority: low(-1), normal(0), medium(1), high(2), realtime(3)", "type": "select", "options": ["-1", "0", "1", "2", "3"], "default": "0" },
-        { "arg": "--poll", "label": "Poll Level", "description": "Polling level to wait for work (0-100, 0 = no polling)", "type": "number", "default": 50, "min": 0, "max": 100 },
-        { "arg": "--numa", "label": "NUMA Mode", "description": "NUMA optimization type", "type": "select", "options": ["", "distribute", "isolate", "numactl"], "default": "", "env": "LLAMA_ARG_NUMA" }
+        {
+          "arg": "--threads",
+          "short": "-t",
+          "label": "CPU Threads",
+          "description": "Number of CPU threads for generation (-1 = auto)",
+          "type": "number",
+          "default": -1,
+          "min": -1,
+          "max": 256,
+          "env": "LLAMA_ARG_THREADS"
+        },
+        {
+          "arg": "--threads-batch",
+          "short": "-tb",
+          "label": "Batch Threads",
+          "description": "Threads for batch/prompt processing (default: same as --threads)",
+          "type": "number",
+          "default": -1,
+          "min": -1,
+          "max": 256
+        },
+        {
+          "arg": "--batch-size",
+          "short": "-b",
+          "label": "Batch Size",
+          "description": "Logical maximum batch size",
+          "type": "number",
+          "default": 2048,
+          "min": 1,
+          "max": 65536,
+          "env": "LLAMA_ARG_BATCH"
+        },
+        {
+          "arg": "--ubatch-size",
+          "short": "-ub",
+          "label": "Micro-Batch Size",
+          "description": "Physical maximum batch size",
+          "type": "number",
+          "default": 512,
+          "min": 1,
+          "max": 65536,
+          "env": "LLAMA_ARG_UBATCH"
+        },
+        {
+          "arg": "--parallel",
+          "short": "-np",
+          "label": "Parallel Sequences",
+          "description": "Number of parallel sequences to decode",
+          "type": "number",
+          "default": 1,
+          "min": 1,
+          "max": 64,
+          "env": "LLAMA_ARG_N_PARALLEL"
+        },
+        {
+          "arg": "--keep",
+          "label": "Keep Tokens",
+          "description": "Tokens to keep from initial prompt (-1 = all)",
+          "type": "number",
+          "default": 0,
+          "min": -1,
+          "max": 65536
+        },
+        {
+          "arg": "--mlock",
+          "label": "Memory Lock",
+          "description": "Force system to keep model in RAM (no swap)",
+          "type": "boolean",
+          "default": false,
+          "env": "LLAMA_ARG_MLOCK"
+        },
+        {
+          "arg": "--mmap",
+          "label": "Memory Map",
+          "description": "Memory-map the model file (faster load)",
+          "type": "boolean",
+          "default": true,
+          "env": "LLAMA_ARG_MMAP"
+        },
+        {
+          "arg": "--flash-attn",
+          "short": "-fa",
+          "label": "Flash Attention",
+          "description": "Flash Attention mode",
+          "type": "select",
+          "options": [
+            "auto",
+            "on",
+            "off"
+          ],
+          "default": "auto",
+          "env": "LLAMA_ARG_FLASH_ATTN"
+        },
+        {
+          "arg": "--swa-full",
+          "label": "Full SWA Cache",
+          "description": "Use full-size SWA cache",
+          "type": "boolean",
+          "default": false,
+          "env": "LLAMA_ARG_SWA_FULL"
+        },
+        {
+          "arg": "--check-tensors",
+          "label": "Check Tensors",
+          "description": "Check model tensor data for invalid values",
+          "type": "boolean",
+          "default": false
+        },
+        {
+          "arg": "--prio",
+          "label": "Process Priority",
+          "description": "Process/thread priority: low(-1), normal(0), medium(1), high(2), realtime(3)",
+          "type": "select",
+          "options": [
+            "-1",
+            "0",
+            "1",
+            "2",
+            "3"
+          ],
+          "default": "0"
+        },
+        {
+          "arg": "--poll",
+          "label": "Poll Level",
+          "description": "Polling level to wait for work (0-100, 0 = no polling)",
+          "type": "number",
+          "default": 50,
+          "min": 0,
+          "max": 100
+        },
+        {
+          "arg": "--numa",
+          "label": "NUMA Mode",
+          "description": "NUMA optimization type",
+          "type": "select",
+          "options": [
+            "",
+            "distribute",
+            "isolate",
+            "numactl"
+          ],
+          "default": "",
+          "env": "LLAMA_ARG_NUMA"
+        },
+        {
+          "arg": "--adaptive-decay",
+          "label": "Adaptive Decay",
+          "description": "adaptive-p: decay rate for target adaptation over time. lower values are more reactive, higher values are more stable. (valid range 0.0 to 0.99)",
+          "type": "number",
+          "default": 0.9
+        },
+        {
+          "arg": "--adaptive-target",
+          "label": "Adaptive Target",
+          "description": "adaptive-p: select tokens near this probability (valid range 0.0 to 1.0; negative = disabled)",
+          "type": "number",
+          "default": -1
+        },
+        {
+          "arg": "--cache-idle-slots",
+          "label": "Cache Idle Slots",
+          "description": "save and clear idle slots on new task",
+          "type": "boolean",
+          "default": true,
+          "env": "LLAMA_ARG_CACHE_IDLE_SLOTS"
+        },
+        {
+          "arg": "--cache-prompt",
+          "label": "Cache Prompt",
+          "description": "whether to enable prompt caching",
+          "type": "boolean",
+          "default": true,
+          "env": "LLAMA_ARG_CACHE_PROMPT"
+        },
+        {
+          "arg": "--cache-ram",
+          "short": "-cram",
+          "label": "Cache Ram",
+          "description": "set the maximum cache size in MiB",
+          "type": "number",
+          "default": 8192,
+          "env": "LLAMA_ARG_CACHE_RAM"
+        },
+        {
+          "arg": "--cache-reuse",
+          "label": "Cache Reuse",
+          "description": "min chunk size to attempt reusing from the cache via KV shifting, requires prompt caching to be enabled [(card)](https://ggml.ai/f0.png)",
+          "type": "number",
+          "default": 0,
+          "env": "LLAMA_ARG_CACHE_REUSE"
+        },
+        {
+          "arg": "--checkpoint-every-n-tokens",
+          "short": "-cpent",
+          "label": "Checkpoint Every N Tokens",
+          "description": "create a checkpoint every n tokens during prefill (processing), -1 to disable",
+          "type": "number",
+          "default": 8192,
+          "env": "LLAMA_ARG_CHECKPOINT_EVERY_NT"
+        },
+        {
+          "arg": "--context-shift",
+          "label": "Context Shift",
+          "description": "whether to use context shift on infinite text generation",
+          "type": "boolean",
+          "default": false,
+          "env": "LLAMA_ARG_CONTEXT_SHIFT"
+        },
+        {
+          "arg": "--cpu-strict",
+          "label": "Cpu Strict",
+          "description": "use strict CPU placement",
+          "type": "select",
+          "options": [
+            "0",
+            "1"
+          ],
+          "default": "0"
+        },
+        {
+          "arg": "--cpu-strict-batch",
+          "label": "Cpu Strict Batch",
+          "description": "use strict CPU placement",
+          "type": "select",
+          "options": [
+            "0",
+            "1"
+          ]
+        },
+        {
+          "arg": "--ctx-checkpoints",
+          "short": "-ctxcp",
+          "label": "Ctx Checkpoints",
+          "description": "max number of context checkpoints to create per slot",
+          "type": "number",
+          "default": 32,
+          "env": "LLAMA_ARG_CTX_CHECKPOINTS"
+        },
+        {
+          "arg": "--draft",
+          "label": "Draft",
+          "description": "the argument has been removed. use --spec-draft-n-max or --spec-ngram-mod-n-max",
+          "type": "number",
+          "env": "LLAMA_ARG_DRAFT_MAX"
+        },
+        {
+          "arg": "--draft-min",
+          "label": "Draft Min",
+          "description": "the argument has been removed. use --spec-draft-n-min or --spec-ngram-mod-n-min",
+          "type": "number",
+          "env": "LLAMA_ARG_DRAFT_MIN"
+        },
+        {
+          "arg": "--embd-gemma-default",
+          "label": "Embd Gemma Default",
+          "description": "use default EmbeddingGemma model (note: can download weights from the internet)",
+          "type": "boolean"
+        },
+        {
+          "arg": "--embd-normalize",
+          "label": "Embd Normalize",
+          "description": "normalisation for embeddings (-1=none, 0=max absolute int16, 1=taxicab, 2=euclidean, >2=p-norm)",
+          "type": "number",
+          "default": 2
+        },
+        {
+          "arg": "--embedding",
+          "label": "Embedding",
+          "description": "restrict to only support embedding use case; use only with dedicated embedding models",
+          "type": "boolean",
+          "default": false,
+          "env": "LLAMA_ARG_EMBEDDINGS"
+        },
+        {
+          "arg": "--fim-qwen-1",
+          "label": "Fim Qwen 1",
+          "description": "use default Qwen 2.5 Coder 1.5B (note: can download weights from the internet)",
+          "type": "string"
+        },
+        {
+          "arg": "--fim-qwen-14b-spec",
+          "label": "Fim Qwen 14b Spec",
+          "description": "use Qwen 2.5 Coder 14B + 0.5B draft for speculative decoding (note: can download weights from the internet)",
+          "type": "boolean"
+        },
+        {
+          "arg": "--fim-qwen-30b-default",
+          "label": "Fim Qwen 30b Default",
+          "description": "use default Qwen 3 Coder 30B A3B Instruct (note: can download weights from the internet)",
+          "type": "boolean"
+        },
+        {
+          "arg": "--fim-qwen-3b-default",
+          "label": "Fim Qwen 3b Default",
+          "description": "use default Qwen 2.5 Coder 3B (note: can download weights from the internet)",
+          "type": "boolean"
+        },
+        {
+          "arg": "--fim-qwen-7b-default",
+          "label": "Fim Qwen 7b Default",
+          "description": "use default Qwen 2.5 Coder 7B (note: can download weights from the internet)",
+          "type": "boolean"
+        },
+        {
+          "arg": "--fim-qwen-7b-spec",
+          "label": "Fim Qwen 7b Spec",
+          "description": "use Qwen 2.5 Coder 7B + 0.5B draft for speculative decoding (note: can download weights from the internet)",
+          "type": "boolean"
+        },
+        {
+          "arg": "--gpt-oss-120b-default",
+          "label": "Gpt Oss 120b Default",
+          "description": "use gpt-oss-120b (note: can download weights from the internet)",
+          "type": "boolean"
+        },
+        {
+          "arg": "--gpt-oss-20b-default",
+          "label": "Gpt Oss 20b Default",
+          "description": "use gpt-oss-20b (note: can download weights from the internet)",
+          "type": "boolean"
+        },
+        {
+          "arg": "--image-max-tokens",
+          "label": "Image Max Tokens",
+          "description": "maximum number of tokens each image can take, only used by vision models with dynamic resolution",
+          "type": "number",
+          "env": "LLAMA_ARG_IMAGE_MAX_TOKENS"
+        },
+        {
+          "arg": "--image-min-tokens",
+          "label": "Image Min Tokens",
+          "description": "minimum number of tokens each image can take, only used by vision models with dynamic resolution",
+          "type": "number",
+          "env": "LLAMA_ARG_IMAGE_MIN_TOKENS"
+        },
+        {
+          "arg": "--media-path",
+          "label": "Media Path",
+          "description": "directory for loading local media files; files can be accessed via file:// URLs using relative paths",
+          "type": "string",
+          "placeholder": "/path/to/file"
+        },
+        {
+          "arg": "--no-host",
+          "label": "No Host",
+          "description": "bypass host buffer allowing extra buffers to be used",
+          "type": "boolean",
+          "env": "LLAMA_ARG_NO_HOST"
+        },
+        {
+          "arg": "--path",
+          "label": "Path",
+          "description": "path to serve static files from",
+          "type": "string",
+          "default": "",
+          "env": "LLAMA_ARG_STATIC_PATH",
+          "placeholder": "/path/to/file"
+        },
+        {
+          "arg": "--perf",
+          "label": "Perf",
+          "description": "whether to enable internal libllama performance timings",
+          "type": "boolean",
+          "default": false,
+          "env": "LLAMA_ARG_PERF"
+        },
+        {
+          "arg": "--poll-batch",
+          "label": "Poll Batch",
+          "description": "use polling to wait for work",
+          "type": "select",
+          "options": [
+            "0",
+            "1"
+          ]
+        },
+        {
+          "arg": "--pooling",
+          "label": "Pooling",
+          "description": "pooling type for embeddings, use model default if unspecified",
+          "type": "select",
+          "options": [
+            "none",
+            "mean",
+            "cls",
+            "last",
+            "rank"
+          ],
+          "env": "LLAMA_ARG_POOLING"
+        },
+        {
+          "arg": "--prefill-assistant",
+          "label": "Prefill Assistant",
+          "description": "whether to prefill the assistant's response if the last message is an assistant message when this flag is set, if the last message is an assistant message then it will be treated as a full message and not prefilled",
+          "type": "boolean",
+          "default": false
+        },
+        {
+          "arg": "--prio-batch",
+          "label": "Prio Batch",
+          "description": "set process/thread priority : 0-normal, 1-medium, 2-high, 3-realtime",
+          "type": "number",
+          "default": 0
+        },
+        {
+          "arg": "--props",
+          "label": "Props",
+          "description": "enable changing global properties via POST /props",
+          "type": "boolean",
+          "default": false,
+          "env": "LLAMA_ARG_ENDPOINT_PROPS"
+        },
+        {
+          "arg": "--rerank",
+          "label": "Rerank",
+          "description": "enable reranking endpoint on server",
+          "type": "boolean",
+          "default": false,
+          "env": "LLAMA_ARG_RERANKING"
+        },
+        {
+          "arg": "--reuse-port",
+          "label": "Reuse Port",
+          "description": "allow multiple sockets to bind to the same port",
+          "type": "boolean",
+          "default": false,
+          "env": "LLAMA_ARG_REUSE_PORT"
+        },
+        {
+          "arg": "--skip-chat-parsing",
+          "label": "Skip Chat Parsing",
+          "description": "force a pure content parser, even if a Jinja template is specified; model will output everything in the content section, including any reasoning and/or tool calls",
+          "type": "boolean",
+          "default": false,
+          "env": "LLAMA_ARG_SKIP_CHAT_PARSING"
+        },
+        {
+          "arg": "--sleep-idle-seconds",
+          "label": "Sleep Idle Seconds",
+          "description": "number of seconds of idleness after which the server will sleep",
+          "type": "string",
+          "default": "-1"
+        },
+        {
+          "arg": "--slot-save-path",
+          "label": "Slot Save Path",
+          "description": "path to save slot kv cache",
+          "type": "string",
+          "placeholder": "/path/to/file"
+        },
+        {
+          "arg": "--spm-infill",
+          "label": "Spm Infill",
+          "description": "use Suffix/Prefix/Middle pattern for infill (instead of Prefix/Suffix/Middle) as some models prefer this.",
+          "type": "boolean",
+          "default": false
+        },
+        {
+          "arg": "--tags",
+          "label": "Tags",
+          "description": "set model tags, comma-separated (informational, not used for routing)",
+          "type": "string",
+          "env": "LLAMA_ARG_TAGS"
+        },
+        {
+          "arg": "--threads-http",
+          "label": "Threads Http",
+          "description": "number of threads used to process HTTP requests",
+          "type": "number",
+          "default": -1,
+          "env": "LLAMA_ARG_THREADS_HTTP"
+        },
+        {
+          "arg": "--tools",
+          "label": "Tools",
+          "description": "experimental: whether to enable built-in tools for AI agents - do not enable in untrusted environments specify \"all\" to enable all tools available tools: read_file, file_glob_search, grep_search, exec_shell_command, write_file, edit_file, apply_diff, get_datetime",
+          "type": "string",
+          "default": "no tools",
+          "env": "LLAMA_ARG_TOOLS"
+        },
+        {
+          "arg": "--tts-use-guide-tokens",
+          "label": "Tts Use Guide Tokens",
+          "description": "Use guide tokens to improve TTS word recall",
+          "type": "boolean"
+        },
+        {
+          "arg": "--ui",
+          "label": "Ui",
+          "description": "--no-ui whether to enable the Web UI",
+          "type": "boolean",
+          "default": true,
+          "env": "LLAMA_ARG_UI"
+        },
+        {
+          "arg": "--ui-config",
+          "label": "Ui Config",
+          "description": "JSON that provides default UI settings (overrides UI defaults)",
+          "type": "string",
+          "env": "LLAMA_ARG_UI_CONFIG"
+        },
+        {
+          "arg": "--ui-config-file",
+          "label": "Ui Config File",
+          "description": "JSON file that provides default UI settings (overrides UI defaults)",
+          "type": "string",
+          "env": "LLAMA_ARG_UI_CONFIG_FILE",
+          "placeholder": "/path/to/file"
+        },
+        {
+          "arg": "--ui-mcp-proxy",
+          "label": "Ui Mcp Proxy",
+          "description": "experimental: whether to enable MCP CORS proxy - do not enable in untrusted environments",
+          "type": "boolean",
+          "default": false,
+          "env": "LLAMA_ARG_UI_MCP_PROXY"
+        },
+        {
+          "arg": "--vision-gemma-12b-default",
+          "label": "Vision Gemma 12b Default",
+          "description": "use Gemma 3 12B QAT (note: can download weights from the internet)",
+          "type": "boolean"
+        },
+        {
+          "arg": "--vision-gemma-4b-default",
+          "label": "Vision Gemma 4b Default",
+          "description": "use Gemma 3 4B QAT (note: can download weights from the internet)",
+          "type": "boolean"
+        },
+        {
+          "arg": "--warmup",
+          "label": "Warmup",
+          "description": "whether to perform warmup with an empty run",
+          "type": "boolean",
+          "default": true
+        },
+        {
+          "arg": "--webui",
+          "label": "Webui",
+          "description": "[DEPRECATED: use --ui/--no-ui] whether to enable the Web UI",
+          "type": "boolean",
+          "env": "LLAMA_ARG_WEBUI",
+          "deprecated": true
+        },
+        {
+          "arg": "--webui-config",
+          "label": "Webui Config",
+          "description": "[DEPRECATED: use --ui-config] JSON that provides default WebUI settings (overrides WebUI defaults)",
+          "type": "string",
+          "env": "LLAMA_ARG_WEBUI_CONFIG",
+          "deprecated": true
+        },
+        {
+          "arg": "--webui-config-file",
+          "label": "Webui Config File",
+          "description": "[DEPRECATED: use --ui-config-file] JSON file that provides default WebUI settings (overrides WebUI defaults)",
+          "type": "string",
+          "env": "LLAMA_ARG_WEBUI_CONFIG_FILE",
+          "deprecated": true,
+          "placeholder": "/path/to/file"
+        },
+        {
+          "arg": "--webui-mcp-proxy",
+          "label": "Webui Mcp Proxy",
+          "description": "[DEPRECATED: use --ui-mcp-proxy/--no-ui-mcp-proxy] experimental: whether to enable MCP CORS proxy",
+          "type": "boolean",
+          "env": "LLAMA_ARG_WEBUI_MCP_PROXY",
+          "deprecated": true
+        }
       ]
     },
     {
       "name": "GPU",
       "icon": "Zap",
       "commands": [
-        { "arg": "--gpu-layers", "short": "-ngl", "label": "GPU Layers", "description": "Max layers to store in VRAM ('auto', 'all', or number)", "type": "string", "default": "auto", "placeholder": "auto", "env": "LLAMA_ARG_N_GPU_LAYERS" },
-        { "arg": "--split-mode", "short": "-sm", "label": "Split Mode", "description": "How to split model across multiple GPUs", "type": "select", "options": ["layer", "none", "row", "tensor"], "default": "layer", "env": "LLAMA_ARG_SPLIT_MODE" },
-        { "arg": "--main-gpu", "short": "-mg", "label": "Main GPU", "description": "Primary GPU index for the model", "type": "number", "default": 0, "min": 0, "max": 16, "env": "LLAMA_ARG_MAIN_GPU" },
-        { "arg": "--device", "short": "-dev", "label": "Devices", "description": "Comma-separated list of devices for offloading", "type": "string", "placeholder": "CUDA0,CUDA1", "env": "LLAMA_ARG_DEVICE" },
-        { "arg": "--tensor-split", "short": "-ts", "label": "Tensor Split", "description": "Fraction to offload to each GPU (e.g. 3,1)", "type": "string", "placeholder": "3,1", "env": "LLAMA_ARG_TENSOR_SPLIT" },
-        { "arg": "--kv-offload", "short": "-kvo", "label": "KV Cache Offload", "description": "Enable KV cache offloading to GPU", "type": "boolean", "default": true, "env": "LLAMA_ARG_KV_OFFLOAD" },
-        { "arg": "--op-offload", "label": "Op Offload", "description": "Offload host tensor operations to device", "type": "boolean", "default": true },
-        { "arg": "--fit", "short": "-fit", "label": "Auto Fit Memory", "description": "Adjust arguments to fit in device memory", "type": "select", "options": ["on", "off"], "default": "on", "env": "LLAMA_ARG_FIT" },
-        { "arg": "--cpu-moe", "short": "-cmoe", "label": "CPU MoE", "description": "Keep all MoE weights in CPU", "type": "boolean", "default": false, "env": "LLAMA_ARG_CPU_MOE" }
+        {
+          "arg": "--gpu-layers",
+          "short": "-ngl",
+          "label": "GPU Layers",
+          "description": "Max layers to store in VRAM ('auto', 'all', or number)",
+          "type": "string",
+          "default": "auto",
+          "placeholder": "auto",
+          "env": "LLAMA_ARG_N_GPU_LAYERS"
+        },
+        {
+          "arg": "--split-mode",
+          "short": "-sm",
+          "label": "Split Mode",
+          "description": "How to split model across multiple GPUs",
+          "type": "select",
+          "options": [
+            "layer",
+            "none",
+            "row",
+            "tensor"
+          ],
+          "default": "layer",
+          "env": "LLAMA_ARG_SPLIT_MODE"
+        },
+        {
+          "arg": "--main-gpu",
+          "short": "-mg",
+          "label": "Main GPU",
+          "description": "Primary GPU index for the model",
+          "type": "number",
+          "default": 0,
+          "min": 0,
+          "max": 16,
+          "env": "LLAMA_ARG_MAIN_GPU"
+        },
+        {
+          "arg": "--device",
+          "short": "-dev",
+          "label": "Devices",
+          "description": "Comma-separated list of devices for offloading",
+          "type": "string",
+          "placeholder": "CUDA0,CUDA1",
+          "env": "LLAMA_ARG_DEVICE"
+        },
+        {
+          "arg": "--tensor-split",
+          "short": "-ts",
+          "label": "Tensor Split",
+          "description": "Fraction to offload to each GPU (e.g. 3,1)",
+          "type": "string",
+          "placeholder": "3,1",
+          "env": "LLAMA_ARG_TENSOR_SPLIT"
+        },
+        {
+          "arg": "--kv-offload",
+          "short": "-kvo",
+          "label": "KV Cache Offload",
+          "description": "Enable KV cache offloading to GPU",
+          "type": "boolean",
+          "default": true,
+          "env": "LLAMA_ARG_KV_OFFLOAD"
+        },
+        {
+          "arg": "--op-offload",
+          "label": "Op Offload",
+          "description": "Offload host tensor operations to device",
+          "type": "boolean",
+          "default": true
+        },
+        {
+          "arg": "--fit",
+          "short": "-fit",
+          "label": "Auto Fit Memory",
+          "description": "Adjust arguments to fit in device memory",
+          "type": "select",
+          "options": [
+            "on",
+            "off"
+          ],
+          "default": "on",
+          "env": "LLAMA_ARG_FIT"
+        },
+        {
+          "arg": "--cpu-moe",
+          "short": "-cmoe",
+          "label": "CPU MoE",
+          "description": "Keep all MoE weights in CPU",
+          "type": "boolean",
+          "default": false
+        },
+        {
+          "arg": "--fit-ctx",
+          "short": "-fitc",
+          "label": "Fit Ctx",
+          "description": "minimum ctx size that can be set by --fit option,",
+          "type": "number",
+          "default": 4096,
+          "env": "LLAMA_ARG_FIT_CTX"
+        },
+        {
+          "arg": "--fit-target",
+          "short": "-fitt",
+          "label": "Fit Target",
+          "description": "target margin per device for --fit, comma-separated list of values, single value is broadcast across all devices,",
+          "type": "string",
+          "default": "1024",
+          "env": "LLAMA_ARG_FIT_TARGET"
+        },
+        {
+          "arg": "--n-cpu-moe",
+          "short": "-ncmoe",
+          "label": "N Cpu Moe",
+          "description": "keep the Mixture of Experts (MoE) weights of the first N layers in the CPU",
+          "type": "number",
+          "env": "LLAMA_ARG_N_CPU_MOE"
+        }
       ]
     },
     {
       "name": "KV Cache",
       "icon": "Database",
       "commands": [
-        { "arg": "--cache-type-k", "short": "-ctk", "label": "KV Cache Type (K)", "description": "KV cache data type for Keys", "type": "select", "options": ["f16", "f32", "bf16", "q8_0", "q4_0", "q4_1", "iq4_nl", "q5_0", "q5_1"], "default": "f16", "env": "LLAMA_ARG_CACHE_TYPE_K" },
-        { "arg": "--cache-type-v", "short": "-ctv", "label": "KV Cache Type (V)", "description": "KV cache data type for Values", "type": "select", "options": ["f16", "f32", "bf16", "q8_0", "q4_0", "q4_1", "iq4_nl", "q5_0", "q5_1"], "default": "f16", "env": "LLAMA_ARG_CACHE_TYPE_V" },
-        { "arg": "--repack", "label": "Weight Repacking", "description": "Enable weight repacking for performance", "type": "boolean", "default": true, "env": "LLAMA_ARG_REPACK" }
+        {
+          "arg": "--cache-type-k",
+          "short": "-ctk",
+          "label": "KV Cache Type (K)",
+          "description": "KV cache data type for Keys",
+          "type": "select",
+          "options": [
+            "f16",
+            "f32",
+            "bf16",
+            "q8_0",
+            "q4_0",
+            "q4_1",
+            "iq4_nl",
+            "q5_0",
+            "q5_1"
+          ],
+          "default": "f16",
+          "env": "LLAMA_ARG_CACHE_TYPE_K"
+        },
+        {
+          "arg": "--cache-type-v",
+          "short": "-ctv",
+          "label": "KV Cache Type (V)",
+          "description": "KV cache data type for Values",
+          "type": "select",
+          "options": [
+            "f16",
+            "f32",
+            "bf16",
+            "q8_0",
+            "q4_0",
+            "q4_1",
+            "iq4_nl",
+            "q5_0",
+            "q5_1"
+          ],
+          "default": "f16",
+          "env": "LLAMA_ARG_CACHE_TYPE_V"
+        },
+        {
+          "arg": "--repack",
+          "label": "Weight Repacking",
+          "description": "Enable weight repacking for performance",
+          "type": "boolean",
+          "default": true,
+          "env": "LLAMA_ARG_REPACK",
+          "short": "-nr"
+        }
       ]
     },
     {
       "name": "Sampling",
       "icon": "Sliders",
       "commands": [
-        { "arg": "--temperature", "label": "Temperature", "description": "Sampling temperature (higher = more creative)", "type": "number", "default": 0.8, "min": 0, "max": 2, "env": "" },
-        { "arg": "--top-k", "label": "Top-K", "description": "Top-K sampling (0 = disabled)", "type": "number", "default": 40, "min": 0, "max": 1000, "env": "LLAMA_ARG_TOP_K" },
-        { "arg": "--top-p", "label": "Top-P", "description": "Top-P nucleus sampling (1.0 = disabled)", "type": "number", "default": 0.95, "min": 0, "max": 1 },
-        { "arg": "--min-p", "label": "Min-P", "description": "Min-P sampling (0.0 = disabled)", "type": "number", "default": 0.05, "min": 0, "max": 1 },
-        { "arg": "--seed", "short": "-s", "label": "Seed", "description": "RNG seed (-1 = random)", "type": "number", "default": -1, "min": -1, "max": 2147483647 },
-        { "arg": "--repeat-penalty", "label": "Repeat Penalty", "description": "Penalize repetition (1.0 = disabled)", "type": "number", "default": 1.0, "min": 0, "max": 2 },
-        { "arg": "--repeat-last-n", "label": "Repeat Last N", "description": "Tokens to consider for repeat penalty (-1 = ctx)", "type": "number", "default": 64, "min": -1, "max": 65536 },
-        { "arg": "--presence-penalty", "label": "Presence Penalty", "description": "Presence penalty (0.0 = disabled)", "type": "number", "default": 0.0, "min": 0, "max": 2 },
-        { "arg": "--frequency-penalty", "label": "Frequency Penalty", "description": "Frequency penalty (0.0 = disabled)", "type": "number", "default": 0.0, "min": 0, "max": 2 },
-        { "arg": "--dynatemp-range", "label": "Dynamic Temp Range", "description": "Dynamic temperature range (0.0 = disabled)", "type": "number", "default": 0.0, "min": 0, "max": 2 },
-        { "arg": "--dynatemp-exp", "label": "Dynamic Temp Exponent", "description": "Dynamic temperature exponent", "type": "number", "default": 1.0, "min": 0, "max": 4 },
-        { "arg": "--mirostat", "label": "Mirostat", "description": "Mirostat sampling mode (0=off, 1=v1, 2=v2)", "type": "select", "options": ["0", "1", "2"], "default": "0" },
-        { "arg": "--mirostat-lr", "label": "Mirostat LR (eta)", "description": "Mirostat learning rate", "type": "number", "default": 0.1, "min": 0, "max": 1 },
-        { "arg": "--mirostat-ent", "label": "Mirostat Entropy (tau)", "description": "Mirostat target entropy", "type": "number", "default": 5.0, "min": 0, "max": 10 },
-        { "arg": "--xtc-probability", "label": "XTC Probability", "description": "XTC sampling probability (0.0 = disabled)", "type": "number", "default": 0.0, "min": 0, "max": 1 },
-        { "arg": "--xtc-threshold", "label": "XTC Threshold", "description": "XTC sampling threshold", "type": "number", "default": 0.1, "min": 0, "max": 1 },
-        { "arg": "--dry-multiplier", "label": "DRY Multiplier", "description": "DRY sampling multiplier (0.0 = disabled)", "type": "number", "default": 0.0, "min": 0, "max": 4 },
-        { "arg": "--dry-base", "label": "DRY Base", "description": "DRY sampling base value", "type": "number", "default": 1.75, "min": 1, "max": 4 },
-        { "arg": "--ignore-eos", "label": "Ignore EOS", "description": "Ignore end-of-stream token and keep generating", "type": "boolean", "default": false },
-        { "arg": "--samplers", "label": "Sampler Pipeline", "description": "Sampler order separated by ';'", "type": "text", "default": "penalties;dry;top_n_sigma;top_k;typ_p;top_p;min_p;xtc;temperature", "placeholder": "penalties;dry;top_k;top_p;temperature" },
-        { "arg": "--grammar", "label": "Grammar (BNF)", "description": "BNF-like grammar to constrain output", "type": "text", "placeholder": "root ::= ..." },
-        { "arg": "--json-schema", "short": "-j", "label": "JSON Schema", "description": "JSON schema to constrain output", "type": "text", "placeholder": "{}" }
+        {
+          "arg": "--temperature",
+          "label": "Temperature",
+          "description": "Sampling temperature (higher = more creative)",
+          "type": "number",
+          "default": 0.8,
+          "min": 0,
+          "max": 2,
+          "env": ""
+        },
+        {
+          "arg": "--top-k",
+          "label": "Top-K",
+          "description": "Top-K sampling (0 = disabled)",
+          "type": "number",
+          "default": 40,
+          "min": 0,
+          "max": 1000,
+          "env": "LLAMA_ARG_TOP_K"
+        },
+        {
+          "arg": "--top-p",
+          "label": "Top-P",
+          "description": "Top-P nucleus sampling (1.0 = disabled)",
+          "type": "number",
+          "default": 0.95,
+          "min": 0,
+          "max": 1
+        },
+        {
+          "arg": "--min-p",
+          "label": "Min-P",
+          "description": "Min-P sampling (0.0 = disabled)",
+          "type": "number",
+          "default": 0.05,
+          "min": 0,
+          "max": 1
+        },
+        {
+          "arg": "--seed",
+          "short": "-s",
+          "label": "Seed",
+          "description": "RNG seed (-1 = random)",
+          "type": "number",
+          "default": -1,
+          "min": -1,
+          "max": 2147483647
+        },
+        {
+          "arg": "--repeat-penalty",
+          "label": "Repeat Penalty",
+          "description": "Penalize repetition (1.0 = disabled)",
+          "type": "number",
+          "default": 1,
+          "min": 0,
+          "max": 2
+        },
+        {
+          "arg": "--repeat-last-n",
+          "label": "Repeat Last N",
+          "description": "Tokens to consider for repeat penalty (-1 = ctx)",
+          "type": "number",
+          "default": 64,
+          "min": -1,
+          "max": 65536
+        },
+        {
+          "arg": "--presence-penalty",
+          "label": "Presence Penalty",
+          "description": "Presence penalty (0.0 = disabled)",
+          "type": "number",
+          "default": 0,
+          "min": 0,
+          "max": 2
+        },
+        {
+          "arg": "--frequency-penalty",
+          "label": "Frequency Penalty",
+          "description": "Frequency penalty (0.0 = disabled)",
+          "type": "number",
+          "default": 0,
+          "min": 0,
+          "max": 2
+        },
+        {
+          "arg": "--dynatemp-range",
+          "label": "Dynamic Temp Range",
+          "description": "Dynamic temperature range (0.0 = disabled)",
+          "type": "number",
+          "default": 0,
+          "min": 0,
+          "max": 2
+        },
+        {
+          "arg": "--dynatemp-exp",
+          "label": "Dynamic Temp Exponent",
+          "description": "Dynamic temperature exponent",
+          "type": "number",
+          "default": 1,
+          "min": 0,
+          "max": 4
+        },
+        {
+          "arg": "--mirostat",
+          "label": "Mirostat",
+          "description": "Mirostat sampling mode (0=off, 1=v1, 2=v2)",
+          "type": "select",
+          "options": [
+            "0",
+            "1",
+            "2"
+          ],
+          "default": "0"
+        },
+        {
+          "arg": "--mirostat-lr",
+          "label": "Mirostat LR (eta)",
+          "description": "Mirostat learning rate",
+          "type": "number",
+          "default": 0.1,
+          "min": 0,
+          "max": 1
+        },
+        {
+          "arg": "--mirostat-ent",
+          "label": "Mirostat Entropy (tau)",
+          "description": "Mirostat target entropy",
+          "type": "number",
+          "default": 5,
+          "min": 0,
+          "max": 10
+        },
+        {
+          "arg": "--xtc-probability",
+          "label": "XTC Probability",
+          "description": "XTC sampling probability (0.0 = disabled)",
+          "type": "number",
+          "default": 0,
+          "min": 0,
+          "max": 1
+        },
+        {
+          "arg": "--xtc-threshold",
+          "label": "XTC Threshold",
+          "description": "XTC sampling threshold",
+          "type": "number",
+          "default": 0.1,
+          "min": 0,
+          "max": 1
+        },
+        {
+          "arg": "--dry-multiplier",
+          "label": "DRY Multiplier",
+          "description": "DRY sampling multiplier (0.0 = disabled)",
+          "type": "number",
+          "default": 0,
+          "min": 0,
+          "max": 4
+        },
+        {
+          "arg": "--dry-base",
+          "label": "DRY Base",
+          "description": "DRY sampling base value",
+          "type": "number",
+          "default": 1.75,
+          "min": 1,
+          "max": 4
+        },
+        {
+          "arg": "--ignore-eos",
+          "label": "Ignore EOS",
+          "description": "Ignore end-of-stream token and keep generating",
+          "type": "boolean",
+          "default": false
+        },
+        {
+          "arg": "--samplers",
+          "label": "Sampler Pipeline",
+          "description": "Sampler order separated by ';'",
+          "type": "text",
+          "default": "penalties"
+        },
+        {
+          "arg": "--grammar",
+          "label": "Grammar (BNF)",
+          "description": "BNF-like grammar to constrain output",
+          "type": "text"
+        },
+        {
+          "arg": "--json-schema",
+          "short": "-j",
+          "label": "JSON Schema",
+          "description": "JSON schema to constrain output",
+          "type": "text"
+        },
+        {
+          "arg": "--dry-allowed-length",
+          "label": "Dry Allowed Length",
+          "description": "set allowed length for DRY sampling",
+          "type": "number",
+          "default": 2
+        },
+        {
+          "arg": "--dry-penalty-last-n",
+          "label": "Dry Penalty Last N",
+          "description": "set DRY penalty for the last n tokens",
+          "type": "number",
+          "default": -1
+        },
+        {
+          "arg": "--dry-sequence-breaker",
+          "label": "Dry Sequence Breaker",
+          "description": "add sequence breaker for DRY sampling, clearing out default breakers ('\\n', ':', '\"', '*') in the process; use \"none\" to not use any sequence breakers",
+          "type": "string"
+        },
+        {
+          "arg": "--grammar-file",
+          "label": "Grammar File",
+          "description": "file to read grammar from",
+          "type": "string",
+          "placeholder": "/path/to/file"
+        },
+        {
+          "arg": "--sampler-seq",
+          "label": "Sampler Seq",
+          "description": "simplified sequence for samplers that will be used",
+          "type": "string",
+          "default": "edskypmxt"
+        },
+        {
+          "arg": "--top-nsigma",
+          "label": "Top Nsigma",
+          "description": "top-n-sigma sampling",
+          "type": "number",
+          "default": -1
+        },
+        {
+          "arg": "--typical",
+          "label": "Typical",
+          "description": "locally typical sampling, parameter p",
+          "type": "number",
+          "default": 1
+        }
       ]
     },
     {
       "name": "RoPE / YaRN",
       "icon": "Wind",
       "commands": [
-        { "arg": "--rope-scaling", "label": "RoPE Scaling", "description": "RoPE frequency scaling method", "type": "select", "options": ["", "none", "linear", "yarn"], "default": "", "env": "LLAMA_ARG_ROPE_SCALING_TYPE" },
-        { "arg": "--rope-scale", "label": "RoPE Scale", "description": "RoPE context scaling factor", "type": "number", "default": 1.0, "min": 0.1, "max": 32, "env": "LLAMA_ARG_ROPE_SCALE" },
-        { "arg": "--rope-freq-base", "label": "RoPE Freq Base", "description": "RoPE base frequency for NTK-aware scaling", "type": "number", "default": 0, "min": 0, "max": 10000000, "env": "LLAMA_ARG_ROPE_FREQ_BASE" },
-        { "arg": "--rope-freq-scale", "label": "RoPE Freq Scale", "description": "RoPE frequency scaling factor (1/N)", "type": "number", "default": 0, "min": 0, "max": 1, "env": "LLAMA_ARG_ROPE_FREQ_SCALE" },
-        { "arg": "--yarn-orig-ctx", "label": "YaRN Original Context", "description": "YaRN original context size (0 = model default)", "type": "number", "default": 0, "min": 0, "max": 131072, "env": "LLAMA_ARG_YARN_ORIG_CTX" },
-        { "arg": "--yarn-ext-factor", "label": "YaRN Ext Factor", "description": "YaRN extrapolation mix factor (0.0 = full interpolation)", "type": "number", "default": -1, "min": -1, "max": 2, "env": "LLAMA_ARG_YARN_EXT_FACTOR" },
-        { "arg": "--yarn-attn-factor", "label": "YaRN Attn Factor", "description": "YaRN attention magnitude scale", "type": "number", "default": -1, "min": -1, "max": 4, "env": "LLAMA_ARG_YARN_ATTN_FACTOR" },
-        { "arg": "--yarn-beta-slow", "label": "YaRN Beta Slow", "description": "YaRN high correction dim (alpha)", "type": "number", "default": -1, "min": -1, "max": 128, "env": "LLAMA_ARG_YARN_BETA_SLOW" },
-        { "arg": "--yarn-beta-fast", "label": "YaRN Beta Fast", "description": "YaRN low correction dim (beta)", "type": "number", "default": -1, "min": -1, "max": 128, "env": "LLAMA_ARG_YARN_BETA_FAST" }
+        {
+          "arg": "--rope-scaling",
+          "label": "RoPE Scaling",
+          "description": "RoPE frequency scaling method",
+          "type": "select",
+          "options": [
+            "none",
+            "linear",
+            "yarn"
+          ],
+          "default": "",
+          "env": "LLAMA_ARG_ROPE_SCALING_TYPE"
+        },
+        {
+          "arg": "--rope-scale",
+          "label": "RoPE Scale",
+          "description": "RoPE context scaling factor",
+          "type": "number",
+          "default": 1,
+          "min": 0.1,
+          "max": 32,
+          "env": "LLAMA_ARG_ROPE_SCALE"
+        },
+        {
+          "arg": "--rope-freq-base",
+          "label": "RoPE Freq Base",
+          "description": "RoPE base frequency for NTK-aware scaling",
+          "type": "number",
+          "default": 0,
+          "min": 0,
+          "max": 10000000,
+          "env": "LLAMA_ARG_ROPE_FREQ_BASE"
+        },
+        {
+          "arg": "--rope-freq-scale",
+          "label": "RoPE Freq Scale",
+          "description": "RoPE frequency scaling factor (1/N)",
+          "type": "number",
+          "default": 0,
+          "min": 0,
+          "max": 1,
+          "env": "LLAMA_ARG_ROPE_FREQ_SCALE"
+        },
+        {
+          "arg": "--yarn-orig-ctx",
+          "label": "YaRN Original Context",
+          "description": "YaRN original context size (0 = model default)",
+          "type": "number",
+          "default": 0,
+          "min": 0,
+          "max": 131072,
+          "env": "LLAMA_ARG_YARN_ORIG_CTX"
+        },
+        {
+          "arg": "--yarn-ext-factor",
+          "label": "YaRN Ext Factor",
+          "description": "YaRN extrapolation mix factor (0.0 = full interpolation)",
+          "type": "number",
+          "default": -1,
+          "min": -1,
+          "max": 2,
+          "env": "LLAMA_ARG_YARN_EXT_FACTOR"
+        },
+        {
+          "arg": "--yarn-attn-factor",
+          "label": "YaRN Attn Factor",
+          "description": "YaRN attention magnitude scale",
+          "type": "number",
+          "default": -1,
+          "min": -1,
+          "max": 4,
+          "env": "LLAMA_ARG_YARN_ATTN_FACTOR"
+        },
+        {
+          "arg": "--yarn-beta-slow",
+          "label": "YaRN Beta Slow",
+          "description": "YaRN high correction dim (alpha)",
+          "type": "number",
+          "default": -1,
+          "min": -1,
+          "max": 128,
+          "env": "LLAMA_ARG_YARN_BETA_SLOW"
+        },
+        {
+          "arg": "--yarn-beta-fast",
+          "label": "YaRN Beta Fast",
+          "description": "YaRN low correction dim (beta)",
+          "type": "number",
+          "default": -1,
+          "min": -1,
+          "max": 128,
+          "env": "LLAMA_ARG_YARN_BETA_FAST"
+        }
       ]
     },
     {
       "name": "Server",
       "icon": "Server",
       "commands": [
-        { "arg": "--port", "label": "Server Port", "description": "Port the server listens on", "type": "number", "default": 8080, "min": 1024, "max": 65535, "env": "LLAMA_ARG_PORT" },
-        { "arg": "--host", "label": "Server Host", "description": "Host address to bind", "type": "string", "default": "127.0.0.1", "placeholder": "127.0.0.1", "env": "LLAMA_ARG_HOST" },
-        { "arg": "--chat-template", "label": "Chat Template", "description": "Custom Jinja chat template name or path", "type": "string", "placeholder": "llama3", "env": "LLAMA_ARG_CHAT_TEMPLATE" },
-        { "arg": "--system-prompt", "short": "-sys", "label": "System Prompt", "description": "System prompt to use with model", "type": "text", "placeholder": "You are a helpful assistant." },
-        { "arg": "--jinja", "label": "Use Jinja Templating", "description": "Enable Jinja template engine for chat", "type": "boolean", "default": true, "env": "LLAMA_ARG_JINJA" },
-        { "arg": "--reasoning-format", "label": "Reasoning Format", "description": "Format for model reasoning output", "type": "select", "options": ["auto", "none", "deepseek", "deepseek-legacy"], "default": "auto", "env": "LLAMA_ARG_THINK" },
-        { "arg": "--reasoning", "short": "-rea", "label": "Reasoning Mode", "description": "Enable reasoning/thinking in chat", "type": "select", "options": ["auto", "on", "off"], "default": "auto", "env": "LLAMA_ARG_REASONING" },
-        { "arg": "--reasoning-budget", "label": "Reasoning Budget (tokens)", "description": "Token budget for thinking (-1 = unlimited)", "type": "number", "default": -1, "min": -1, "max": 65536, "env": "LLAMA_ARG_THINK_BUDGET" }
+        {
+          "arg": "--port",
+          "label": "Server Port",
+          "description": "Port the server listens on",
+          "type": "number",
+          "default": 8080,
+          "min": 1024,
+          "max": 65535,
+          "env": "LLAMA_ARG_PORT"
+        },
+        {
+          "arg": "--host",
+          "label": "Server Host",
+          "description": "Host address to bind",
+          "type": "string",
+          "default": "127.0.0.1",
+          "placeholder": "127.0.0.1",
+          "env": "LLAMA_ARG_HOST"
+        },
+        {
+          "arg": "--chat-template",
+          "label": "Chat Template",
+          "description": "Custom Jinja chat template name or path",
+          "type": "string",
+          "placeholder": "llama3",
+          "env": "LLAMA_ARG_CHAT_TEMPLATE",
+          "default": "template taken from model's metadata"
+        },
+        {
+          "arg": "--system-prompt",
+          "short": "-sys",
+          "label": "System Prompt",
+          "description": "System prompt to use with model",
+          "type": "text"
+        },
+        {
+          "arg": "--jinja",
+          "label": "Use Jinja Templating",
+          "description": "Enable Jinja template engine for chat",
+          "type": "boolean",
+          "default": true,
+          "env": "LLAMA_ARG_JINJA"
+        },
+        {
+          "arg": "--reasoning-format",
+          "label": "Reasoning Format",
+          "description": "Format for model reasoning output",
+          "type": "select",
+          "options": [
+            "auto",
+            "none",
+            "deepseek",
+            "deepseek-legacy"
+          ],
+          "default": "auto",
+          "env": "LLAMA_ARG_THINK"
+        },
+        {
+          "arg": "--reasoning",
+          "short": "-rea",
+          "label": "Reasoning Mode",
+          "description": "Enable reasoning/thinking in chat",
+          "type": "select",
+          "options": [
+            "auto",
+            "on",
+            "off"
+          ],
+          "default": "auto",
+          "env": "LLAMA_ARG_REASONING"
+        },
+        {
+          "arg": "--reasoning-budget",
+          "label": "Reasoning Budget (tokens)",
+          "description": "Token budget for thinking (-1 = unlimited)",
+          "type": "number",
+          "default": -1,
+          "min": -1,
+          "max": 65536,
+          "env": "LLAMA_ARG_THINK_BUDGET"
+        },
+        {
+          "arg": "--api-key",
+          "label": "Api Key",
+          "description": "API key to use for authentication, multiple keys can be provided as a comma-separated list",
+          "type": "string",
+          "default": "none",
+          "env": "LLAMA_API_KEY"
+        },
+        {
+          "arg": "--api-key-file",
+          "label": "Api Key File",
+          "description": "path to file containing API keys",
+          "type": "string",
+          "default": "none",
+          "placeholder": "/path/to/file"
+        },
+        {
+          "arg": "--api-prefix",
+          "label": "Api Prefix",
+          "description": "prefix path the server serves from, without the trailing slash",
+          "type": "string",
+          "default": "",
+          "env": "LLAMA_ARG_API_PREFIX"
+        },
+        {
+          "arg": "--chat-template-file",
+          "label": "Chat Template File",
+          "description": "set custom jinja chat template file if suffix/prefix are specified, template will be disabled only commonly used templates are accepted (unless --jinja is set before this flag): list of built-in templates: bailing, bailing-think, bailing2, chatglm3, chatglm4, chatml, command-r, deepseek, deepseek-ocr, deepseek2, deepseek3, exaone-moe, exaone3, exaone4, falcon3, gemma, gigachat, glmedge, gpt-oss, granite, granite-4.0, grok-2, hunyuan-dense, hunyuan-moe, hunyuan-ocr, kimi-k2, llama2, llama2-sys, llama2-sys-bos, llama2-sys-strip, llama3, llama4, megrez, minicpm, mistral-v1, mistral-v3, mistral-v3-tekken, mistral-v7, mistral-v7-tekken, monarch, openchat, orion, pangu-embedded, phi3, phi4, rwkv-world, seed_oss, smolvlm, solar-open, vicuna, vicuna-orca, yandex, zephyr",
+          "type": "string",
+          "default": "template taken from model's metadata",
+          "env": "LLAMA_ARG_CHAT_TEMPLATE_FILE",
+          "placeholder": "/path/to/file"
+        },
+        {
+          "arg": "--chat-template-kwargs",
+          "label": "Chat Template Kwargs",
+          "description": "sets additional params for the json template parser, must be a valid json object string, e.g. '{\"key1\":\"value1\",\"key2\":\"value2\"}'",
+          "type": "string",
+          "env": "LLAMA_CHAT_TEMPLATE_KWARGS"
+        },
+        {
+          "arg": "--metrics",
+          "label": "Metrics",
+          "description": "enable prometheus compatible metrics endpoint",
+          "type": "boolean",
+          "default": false,
+          "env": "LLAMA_ARG_ENDPOINT_METRICS"
+        },
+        {
+          "arg": "--reasoning-budget-message",
+          "label": "Reasoning Budget Message",
+          "description": "message injected before the end-of-thinking tag when reasoning budget is exhausted",
+          "type": "string",
+          "default": "none",
+          "env": "LLAMA_ARG_THINK_BUDGET_MESSAGE"
+        },
+        {
+          "arg": "--slots",
+          "label": "Slots",
+          "description": "expose slots monitoring endpoint",
+          "type": "boolean",
+          "default": true,
+          "env": "LLAMA_ARG_ENDPOINT_SLOTS"
+        },
+        {
+          "arg": "--ssl-cert-file",
+          "label": "Ssl Cert File",
+          "description": "path to file a PEM-encoded SSL certificate",
+          "type": "string",
+          "env": "LLAMA_ARG_SSL_CERT_FILE",
+          "placeholder": "/path/to/file"
+        },
+        {
+          "arg": "--ssl-key-file",
+          "label": "Ssl Key File",
+          "description": "path to file a PEM-encoded SSL private key",
+          "type": "string",
+          "env": "LLAMA_ARG_SSL_KEY_FILE",
+          "placeholder": "/path/to/file"
+        }
       ]
     },
     {
       "name": "Logging",
       "icon": "FileText",
       "commands": [
-        { "arg": "--log-disable", "label": "Disable Logging", "description": "Disable log output entirely", "type": "boolean", "default": false },
-        { "arg": "--log-file", "label": "Log File", "description": "Save log output to file", "type": "string", "placeholder": "/path/to/llama.log", "env": "LLAMA_LOG_FILE" },
-        { "arg": "--log-colors", "label": "Log Colors", "description": "Colorize log output", "type": "select", "options": ["auto", "on", "off"], "default": "auto", "env": "LLAMA_LOG_COLORS" },
-        { "arg": "--verbose", "short": "-v", "label": "Verbose Mode", "description": "Log all messages (useful for debugging)", "type": "boolean", "default": false },
-        { "arg": "--log-verbosity", "short": "-lv", "label": "Verbosity Level", "description": "0=generic, 1=error, 2=warning, 3=info, 4=debug", "type": "select", "options": ["0", "1", "2", "3", "4"], "default": "3", "env": "LLAMA_LOG_VERBOSITY" },
-        { "arg": "--log-prefix", "label": "Log Prefix", "description": "Enable prefix in log messages", "type": "boolean", "default": false, "env": "LLAMA_LOG_PREFIX" },
-        { "arg": "--log-timestamps", "label": "Log Timestamps", "description": "Enable timestamps in log messages", "type": "boolean", "default": false, "env": "LLAMA_LOG_TIMESTAMPS" },
-        { "arg": "--offline", "label": "Offline Mode", "description": "Force cache usage, prevent network access", "type": "boolean", "default": false, "env": "LLAMA_OFFLINE" }
+        {
+          "arg": "--log-disable",
+          "label": "Disable Logging",
+          "description": "Disable log output entirely",
+          "type": "boolean",
+          "default": false
+        },
+        {
+          "arg": "--log-file",
+          "label": "Log File",
+          "description": "Save log output to file",
+          "type": "string",
+          "placeholder": "/path/to/llama.log",
+          "env": "LLAMA_LOG_FILE"
+        },
+        {
+          "arg": "--log-colors",
+          "label": "Log Colors",
+          "description": "Colorize log output",
+          "type": "select",
+          "options": [
+            "on",
+            "off",
+            "auto"
+          ],
+          "default": "auto",
+          "env": "LLAMA_LOG_COLORS"
+        },
+        {
+          "arg": "--verbose",
+          "short": "-v",
+          "label": "Verbose Mode",
+          "description": "Log all messages (useful for debugging)",
+          "type": "boolean",
+          "default": false
+        },
+        {
+          "arg": "--log-verbosity",
+          "short": "-lv",
+          "label": "Verbosity Level",
+          "description": "0=generic, 1=error, 2=warning, 3=info, 4=debug",
+          "type": "select",
+          "options": [
+            "0",
+            "1",
+            "2",
+            "3",
+            "4"
+          ],
+          "default": "3",
+          "env": "LLAMA_LOG_VERBOSITY"
+        },
+        {
+          "arg": "--log-prefix",
+          "label": "Log Prefix",
+          "description": "Enable prefix in log messages",
+          "type": "boolean",
+          "default": false,
+          "env": "LLAMA_ARG_LOG_PREFIX"
+        },
+        {
+          "arg": "--log-timestamps",
+          "label": "Log Timestamps",
+          "description": "Enable timestamps in log messages",
+          "type": "boolean",
+          "default": false,
+          "env": "LLAMA_ARG_LOG_TIMESTAMPS"
+        },
+        {
+          "arg": "--offline",
+          "label": "Offline Mode",
+          "description": "Force cache usage, prevent network access",
+          "type": "boolean",
+          "default": false,
+          "env": "LLAMA_OFFLINE"
+        }
       ]
     },
     {
       "name": "Speculative Decoding",
       "icon": "GitBranch",
       "commands": [
-        { "arg": "--spec-type", "label": "Speculative Type", "description": "Comma-separated speculative decoding types", "type": "string", "placeholder": "draft-simple", "env": "LLAMA_ARG_SPEC_TYPE" },
-        { "arg": "--spec-draft-model", "short": "-md", "label": "Draft Model", "description": "Draft model path for speculative decoding", "type": "string", "placeholder": "/path/to/draft.gguf", "env": "LLAMA_ARG_SPEC_DRAFT_MODEL" },
-        { "arg": "--spec-draft-ngl", "short": "-ngld", "label": "Draft GPU Layers", "description": "Max draft model layers in VRAM", "type": "string", "default": "auto", "placeholder": "auto", "env": "LLAMA_ARG_N_GPU_LAYERS_DRAFT" },
-        { "arg": "--spec-draft-n-max", "label": "Draft Max Tokens", "description": "Tokens to draft for speculative decoding", "type": "number", "default": 16, "min": 1, "max": 128, "env": "LLAMA_ARG_SPEC_DRAFT_N_MAX" },
-        { "arg": "--spec-draft-n-min", "label": "Draft Min Tokens", "description": "Minimum draft tokens for speculative decoding", "type": "number", "default": 0, "min": 0, "max": 128, "env": "LLAMA_ARG_SPEC_DRAFT_N_MIN" },
-        { "arg": "--spec-draft-p-min", "label": "Draft P-Min", "description": "Minimum speculative decoding probability (greedy)", "type": "number", "default": 0.75, "min": 0, "max": 1, "env": "LLAMA_ARG_SPEC_DRAFT_P_MIN" },
-        { "arg": "--spec-draft-p-split", "label": "Draft P-Split", "description": "Speculative decoding split probability", "type": "number", "default": 0.1, "min": 0, "max": 1, "env": "LLAMA_ARG_SPEC_DRAFT_P_SPLIT" }
+        {
+          "arg": "--spec-type",
+          "label": "Speculative Type",
+          "description": "Comma-separated speculative decoding types",
+          "type": "string",
+          "placeholder": "draft-simple",
+          "env": "LLAMA_ARG_SPEC_TYPE",
+          "default": "none"
+        },
+        {
+          "arg": "--spec-draft-model",
+          "short": "-md",
+          "label": "Draft Model",
+          "description": "Draft model path for speculative decoding",
+          "type": "string",
+          "placeholder": "/path/to/draft.gguf",
+          "env": "LLAMA_ARG_SPEC_DRAFT_MODEL"
+        },
+        {
+          "arg": "--spec-draft-ngl",
+          "short": "-ngld",
+          "label": "Draft GPU Layers",
+          "description": "Max draft model layers in VRAM",
+          "type": "string",
+          "default": "auto",
+          "placeholder": "auto",
+          "env": "LLAMA_ARG_N_GPU_LAYERS_DRAFT"
+        },
+        {
+          "arg": "--spec-draft-n-max",
+          "label": "Draft Max Tokens",
+          "description": "Tokens to draft for speculative decoding",
+          "type": "number",
+          "default": 16,
+          "min": 1,
+          "max": 128,
+          "env": "LLAMA_ARG_SPEC_DRAFT_N_MAX"
+        },
+        {
+          "arg": "--spec-draft-n-min",
+          "label": "Draft Min Tokens",
+          "description": "Minimum draft tokens for speculative decoding",
+          "type": "number",
+          "default": 0,
+          "min": 0,
+          "max": 128,
+          "env": "LLAMA_ARG_SPEC_DRAFT_N_MIN"
+        },
+        {
+          "arg": "--spec-draft-p-min",
+          "label": "Draft P-Min",
+          "description": "Minimum speculative decoding probability (greedy)",
+          "type": "number",
+          "default": 0.75,
+          "min": 0,
+          "max": 1,
+          "env": "LLAMA_ARG_SPEC_DRAFT_P_MIN"
+        },
+        {
+          "arg": "--spec-draft-p-split",
+          "label": "Draft P-Split",
+          "description": "Speculative decoding split probability",
+          "type": "number",
+          "default": 0.1,
+          "min": 0,
+          "max": 1,
+          "env": "LLAMA_ARG_SPEC_DRAFT_P_SPLIT"
+        },
+        {
+          "arg": "--spec-default",
+          "label": "Spec Default",
+          "description": "enable default speculative decoding config",
+          "type": "boolean"
+        },
+        {
+          "arg": "--spec-draft-cpu-mask",
+          "short": "-Cd",
+          "label": "Spec Draft Cpu Mask",
+          "description": "Draft model CPU affinity mask. Complements cpu-range-draft",
+          "type": "string"
+        },
+        {
+          "arg": "--spec-draft-cpu-mask-batch",
+          "short": "-Cbd",
+          "label": "Spec Draft Cpu Mask Batch",
+          "description": "Draft model CPU affinity mask. Complements cpu-range-draft",
+          "type": "string"
+        },
+        {
+          "arg": "--spec-draft-cpu-moe",
+          "short": "-cmoed",
+          "label": "Spec Draft Cpu Moe",
+          "description": "keep all Mixture of Experts (MoE) weights in the CPU for the draft model",
+          "type": "string",
+          "env": "LLAMA_ARG_SPEC_DRAFT_CPU_MOE"
+        },
+        {
+          "arg": "--spec-draft-cpu-range",
+          "short": "-Crd",
+          "label": "Spec Draft Cpu Range",
+          "description": "Ranges of CPUs for affinity. Complements --cpu-mask-draft",
+          "type": "string"
+        },
+        {
+          "arg": "--spec-draft-cpu-strict",
+          "label": "Spec Draft Cpu Strict",
+          "description": "Use strict CPU placement for draft model",
+          "type": "select",
+          "options": [
+            "0",
+            "1"
+          ]
+        },
+        {
+          "arg": "--spec-draft-cpu-strict-batch",
+          "label": "Spec Draft Cpu Strict Batch",
+          "description": "Use strict CPU placement for draft model",
+          "type": "select",
+          "options": [
+            "0",
+            "1"
+          ]
+        },
+        {
+          "arg": "--spec-draft-device",
+          "short": "-devd",
+          "label": "Spec Draft Device",
+          "description": "comma-separated list of devices to use for offloading the draft model (none = don't offload) use --list-devices to see a list of available devices",
+          "type": "string",
+          "placeholder": "CUDA0,CUDA1"
+        },
+        {
+          "arg": "--spec-draft-hf",
+          "short": "-hfd",
+          "label": "Spec Draft Hf",
+          "description": "Same as --hf-repo, but for the draft model",
+          "type": "string",
+          "env": "LLAMA_ARG_SPEC_DRAFT_HF_REPO"
+        },
+        {
+          "arg": "--spec-draft-n-cpu-moe",
+          "short": "-ncmoed",
+          "label": "Spec Draft N Cpu Moe",
+          "description": "keep the Mixture of Experts (MoE) weights of the first N layers in the CPU for the draft model",
+          "type": "number",
+          "env": "LLAMA_ARG_SPEC_DRAFT_N_CPU_MOE"
+        },
+        {
+          "arg": "--spec-draft-override-tensor",
+          "short": "-otd",
+          "label": "Spec Draft Override Tensor",
+          "description": "override tensor buffer type for draft model",
+          "type": "string"
+        },
+        {
+          "arg": "--spec-draft-poll",
+          "label": "Spec Draft Poll",
+          "description": "Use polling to wait for draft model work",
+          "type": "select",
+          "options": [
+            "0",
+            "1"
+          ]
+        },
+        {
+          "arg": "--spec-draft-poll-batch",
+          "label": "Spec Draft Poll Batch",
+          "description": "Use polling to wait for draft model work",
+          "type": "select",
+          "options": [
+            "0",
+            "1"
+          ]
+        },
+        {
+          "arg": "--spec-draft-prio",
+          "label": "Spec Draft Prio",
+          "description": "set draft process/thread priority : 0-normal, 1-medium, 2-high, 3-realtime",
+          "type": "number",
+          "default": 0
+        },
+        {
+          "arg": "--spec-draft-prio-batch",
+          "label": "Spec Draft Prio Batch",
+          "description": "set draft process/thread priority : 0-normal, 1-medium, 2-high, 3-realtime",
+          "type": "number",
+          "default": 0
+        },
+        {
+          "arg": "--spec-draft-threads",
+          "short": "-td",
+          "label": "Spec Draft Threads",
+          "description": "number of threads to use during generation",
+          "type": "number"
+        },
+        {
+          "arg": "--spec-draft-threads-batch",
+          "short": "-tbd",
+          "label": "Spec Draft Threads Batch",
+          "description": "number of threads to use during batch and prompt processing",
+          "type": "number"
+        },
+        {
+          "arg": "--spec-draft-type-k",
+          "short": "-ctkd",
+          "label": "Spec Draft Type K",
+          "description": "KV cache data type for K for the draft model",
+          "type": "select",
+          "options": [
+            "f32",
+            "f16",
+            "bf16",
+            "q8_0",
+            "q4_0",
+            "q4_1",
+            "iq4_nl",
+            "q5_0",
+            "q5_1"
+          ],
+          "default": "f16",
+          "env": "LLAMA_ARG_SPEC_DRAFT_CACHE_TYPE_K"
+        },
+        {
+          "arg": "--spec-draft-type-v",
+          "short": "-ctvd",
+          "label": "Spec Draft Type V",
+          "description": "KV cache data type for V for the draft model",
+          "type": "select",
+          "options": [
+            "f32",
+            "f16",
+            "bf16",
+            "q8_0",
+            "q4_0",
+            "q4_1",
+            "iq4_nl",
+            "q5_0",
+            "q5_1"
+          ],
+          "default": "f16",
+          "env": "LLAMA_ARG_SPEC_DRAFT_CACHE_TYPE_V"
+        },
+        {
+          "arg": "--spec-ngram-map-k-min-hits",
+          "label": "Spec Ngram Map K Min Hits",
+          "description": "minimum hits for ngram-map-k speculative decoding",
+          "type": "number",
+          "default": 1
+        },
+        {
+          "arg": "--spec-ngram-map-k-size-m",
+          "label": "Spec Ngram Map K Size M",
+          "description": "ngram size M for ngram-map-k speculative decoding, length of draft m-gram",
+          "type": "number",
+          "default": 48
+        },
+        {
+          "arg": "--spec-ngram-map-k-size-n",
+          "label": "Spec Ngram Map K Size N",
+          "description": "ngram size N for ngram-map-k speculative decoding, length of lookup n-gram",
+          "type": "number",
+          "default": 12
+        },
+        {
+          "arg": "--spec-ngram-map-k4v-min-hits",
+          "label": "Spec Ngram Map K4v Min Hits",
+          "description": "minimum hits for ngram-map-k4v speculative decoding",
+          "type": "number",
+          "default": 1
+        },
+        {
+          "arg": "--spec-ngram-map-k4v-size-m",
+          "label": "Spec Ngram Map K4v Size M",
+          "description": "ngram size M for ngram-map-k4v speculative decoding, length of draft m-gram",
+          "type": "number",
+          "default": 48
+        },
+        {
+          "arg": "--spec-ngram-map-k4v-size-n",
+          "label": "Spec Ngram Map K4v Size N",
+          "description": "ngram size N for ngram-map-k4v speculative decoding, length of lookup n-gram",
+          "type": "number",
+          "default": 12
+        },
+        {
+          "arg": "--spec-ngram-min-hits",
+          "label": "Spec Ngram Min Hits",
+          "description": "the argument has been removed. use the respective --spec-ngram-*-min-hits",
+          "type": "number"
+        },
+        {
+          "arg": "--spec-ngram-mod-n-match",
+          "label": "Spec Ngram Mod N Match",
+          "description": "ngram-mod lookup length",
+          "type": "number",
+          "default": 24
+        },
+        {
+          "arg": "--spec-ngram-mod-n-max",
+          "label": "Spec Ngram Mod N Max",
+          "description": "maximum number of ngram tokens to use for ngram-based speculative decoding",
+          "type": "number",
+          "default": 64
+        },
+        {
+          "arg": "--spec-ngram-mod-n-min",
+          "label": "Spec Ngram Mod N Min",
+          "description": "minimum number of ngram tokens to use for ngram-based speculative decoding",
+          "type": "number",
+          "default": 48
+        },
+        {
+          "arg": "--spec-ngram-simple-min-hits",
+          "label": "Spec Ngram Simple Min Hits",
+          "description": "minimum hits for ngram-simple speculative decoding",
+          "type": "number",
+          "default": 1
+        },
+        {
+          "arg": "--spec-ngram-simple-size-m",
+          "label": "Spec Ngram Simple Size M",
+          "description": "ngram size M for ngram-simple speculative decoding, length of draft m-gram",
+          "type": "number",
+          "default": 48
+        },
+        {
+          "arg": "--spec-ngram-simple-size-n",
+          "label": "Spec Ngram Simple Size N",
+          "description": "ngram size N for ngram-simple speculative decoding, length of lookup n-gram",
+          "type": "number",
+          "default": 12
+        },
+        {
+          "arg": "--spec-ngram-size-m",
+          "label": "Spec Ngram Size M",
+          "description": "the argument has been removed. use the respective --spec-ngram-*-size-m",
+          "type": "number"
+        },
+        {
+          "arg": "--spec-ngram-size-n",
+          "label": "Spec Ngram Size N",
+          "description": "the argument has been removed. use the respective --spec-ngram-*-size-n or --spec-ngram-mod-n-match",
+          "type": "number"
+        }
       ]
     }
   ]

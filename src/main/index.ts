@@ -1,10 +1,20 @@
-import { app, shell, BrowserWindow } from 'electron'
+import { app, shell, BrowserWindow, nativeTheme, Tray, Menu, nativeImage } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
+import './userData'
 import { registerIpcHandlers, shutdownManagedProcesses } from './ipc'
 import { existsSync } from 'fs'
+import { getAppWindowBehaviorSettings } from './appSettings'
 
 let isShuttingDown = false
+let mainWindow: BrowserWindow | null = null
+let tray: Tray | null = null
+const LIGHT_WINDOW_BACKGROUND = '#f3f6fb'
+const DARK_WINDOW_BACKGROUND = '#0b1220'
+
+function getInitialWindowBackground(): string {
+  return nativeTheme.shouldUseDarkColors ? DARK_WINDOW_BACKGROUND : LIGHT_WINDOW_BACKGROUND
+}
 
 function resolveIcon(): string | undefined {
   const candidates = [
@@ -14,9 +24,56 @@ function resolveIcon(): string | undefined {
   ]
   return candidates.find(existsSync)
 }
+
+function destroyTray(): void {
+  if (!tray) return
+
+  tray.destroy()
+  tray = null
+}
+
+function showMainWindow(): void {
+  if (!mainWindow) return
+
+  if (mainWindow.isMinimized()) {
+    mainWindow.restore()
+  }
+
+  if (!mainWindow.isVisible()) {
+    mainWindow.show()
+  }
+
+  mainWindow.focus()
+  destroyTray()
+}
+
+function ensureTray(): Tray | null {
+  if (tray) return tray
+
+  const iconPath = resolveIcon()
+  if (!iconPath) return null
+
+  const trayIcon = nativeImage.createFromPath(iconPath)
+  tray = new Tray(trayIcon.resize({ width: 16, height: 16 }))
+  tray.setToolTip('LlamaDeck')
+  tray.setContextMenu(Menu.buildFromTemplate([
+    {
+      label: 'Open LlamaDeck',
+      click: () => showMainWindow()
+    },
+    {
+      label: 'Quit',
+      click: () => app.quit()
+    }
+  ]))
+  tray.on('click', () => showMainWindow())
+
+  return tray
+}
+
 function createWindow(): void {
   const icon = resolveIcon()
-  const mainWindow = new BrowserWindow({
+  mainWindow = new BrowserWindow({
     width: 1280,
     height: 800,
     minWidth: 960,
@@ -24,7 +81,7 @@ function createWindow(): void {
     show: false,
     autoHideMenuBar: true,
     titleBarStyle: 'hiddenInset',
-    backgroundColor: '#f5f5f5',
+    backgroundColor: getInitialWindowBackground(),
     ...(icon ? { icon } : {}),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
@@ -34,7 +91,23 @@ function createWindow(): void {
     }
   })
   mainWindow.on('ready-to-show', () => {
-    mainWindow.show()
+    mainWindow?.show()
+  })
+  mainWindow.on('show', () => {
+    destroyTray()
+  })
+  mainWindow.on('close', (event) => {
+    if (isShuttingDown) return
+    if (!getAppWindowBehaviorSettings().minimizeToTray) return
+
+    const appTray = ensureTray()
+    if (!appTray) return
+
+    event.preventDefault()
+    mainWindow?.hide()
+  })
+  mainWindow.on('closed', () => {
+    mainWindow = null
   })
   mainWindow.webContents.setWindowOpenHandler((details) => {
     if (details.url.startsWith('https:') || details.url.startsWith('http:')) {
@@ -54,7 +127,7 @@ function createWindow(): void {
   }
 }
 app.whenReady().then(() => {
-  electronApp.setAppUserModelId('com.hexllama')
+  electronApp.setAppUserModelId('com.llamadeck.app')
   app.on('browser-window-created', (_, window) => {
     optimizer.watchWindowShortcuts(window)
   })
@@ -70,6 +143,11 @@ app.whenReady().then(() => {
   registerIpcHandlers()
   createWindow()
   app.on('activate', function () {
+    if (mainWindow) {
+      showMainWindow()
+      return
+    }
+
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
   })
 })
