@@ -49,6 +49,7 @@
 - Reverted the single-active-template restriction in the main-process launch path so different templates can run concurrently again; the app still prevents starting the exact same template twice.
 - Extended proxy usage tracking to include OpenAI-compatible `/v1/responses` requests, including streamed Responses payloads that report usage through nested `response` objects and `input_tokens`/`output_tokens` fields.
 - Added per-template pricing as the primary cost source for each template, with the app-wide rates kept as the default fallback. A new Pricing tab inside Usage Stats manages both surfaces; the Cost tab is read-only and resolves rates per rollup row (session/template rollups use the template's rates, daily and overall rollups use the app-wide rates, currency is always app-wide). Pricing lives in the template's existing JSON file and follows it through export/import.
+- Fixed the Live Output viewport so it only auto-scrolls to the bottom while the user is already at (or within ~32px of) the bottom. Scrolling up to read earlier content no longer gets yanked back, and selections survive. New chunks that arrive while reading count up and surface a small "N new chunks ↓" pill that snaps back to the bottom when clicked.
 
 ## Verification
 - `npm run build` after switching usage persistence from raw request ledger rows to compact per-session summaries with an in-memory recent-request buffer
@@ -83,6 +84,7 @@
 - `npm run build` after removing the guard that stopped other running templates before launching a new one
 - `npm run build` after extending proxy usage extraction to cover `/v1/responses` and Responses API usage payload shapes
 - `npm run build` after splitting the Cost tab into a read-only view plus a new Pricing tab and switching the cost resolver to per-template with app-wide fallback
+- `npm run build` after replacing the unconditional auto-scroll in Live Output with a sticky-scroll that respects manual scroll position and adds a "N new chunks ↓" jump-to-bottom pill
 
 ## Next Recommended Check
 - Manual smoke test for proxy-backed usage stats: start an API template, send both standard and streaming requests through `/v1/chat/completions`, `/v1/responses`, `/completions`, or `/completion`, confirm the request rows appear live on Usage Stats, verify input/cache/output/total stay internally consistent between the summary card and request rows, stop the session, restart the app, and confirm historical totals remain while Recent Requests resets.

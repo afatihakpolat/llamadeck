@@ -1,6 +1,8 @@
-import React, { useEffect, useMemo, useRef } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Terminal, Trash2 } from 'lucide-react'
 import { useStore } from '../store/useStore'
+
+const STICKY_THRESHOLD_PX = 32
 
 function formatTime(timestamp: string): string {
   const date = new Date(timestamp)
@@ -19,6 +21,9 @@ export default function LiveOutputView() {
     clearModelOutput
   } = useStore()
   const viewportRef = useRef<HTMLDivElement>(null)
+  const stickyRef = useRef(true)
+  const [isAtBottom, setIsAtBottom] = useState(true)
+  const [unreadCount, setUnreadCount] = useState(0)
 
   const sessions = useMemo(() => {
     return cards.filter((card) => (modelOutput[card.template.id]?.length || 0) > 0 || card.status === 'running')
@@ -37,11 +42,47 @@ export default function LiveOutputView() {
   const selectedCard = selectedId ? cards.find((card) => card.template.id === selectedId) ?? null : null
   const entries = selectedId ? modelOutput[selectedId] || [] : []
 
+  // Switching sessions always snaps to the bottom of the new session.
   useEffect(() => {
     if (!viewportRef.current) return
-
     viewportRef.current.scrollTop = viewportRef.current.scrollHeight
-  }, [entries.length, selectedId])
+    stickyRef.current = true
+    setIsAtBottom(true)
+    setUnreadCount(0)
+  }, [selectedId])
+
+  // New entries: scroll to bottom only if the user is still following; otherwise count.
+  useEffect(() => {
+    if (entries.length === 0) {
+      setUnreadCount(0)
+      return
+    }
+    if (stickyRef.current) {
+      if (!viewportRef.current) return
+      viewportRef.current.scrollTop = viewportRef.current.scrollHeight
+    } else {
+      setUnreadCount((current) => current + 1)
+    }
+  }, [entries.length])
+
+  const handleScroll = useCallback(() => {
+    if (!viewportRef.current) return
+    const { scrollTop, scrollHeight, clientHeight } = viewportRef.current
+    const atBottom = scrollTop + clientHeight >= scrollHeight - STICKY_THRESHOLD_PX
+    stickyRef.current = atBottom
+    setIsAtBottom(atBottom)
+    if (atBottom) {
+      setUnreadCount(0)
+    }
+  }, [])
+
+  const handleJumpToBottom = useCallback(() => {
+    if (!viewportRef.current) return
+    viewportRef.current.scrollTop = viewportRef.current.scrollHeight
+    stickyRef.current = true
+    setIsAtBottom(true)
+    setUnreadCount(0)
+  }, [])
 
   return (
     <div className="live-output-page">
@@ -102,7 +143,7 @@ export default function LiveOutputView() {
               </div>
             </div>
 
-            <div className="live-output-viewport" ref={viewportRef}>
+            <div className="live-output-viewport" ref={viewportRef} onScroll={handleScroll}>
               {entries.length === 0 ? (
                 <div className="live-output-empty">Waiting for process output...</div>
               ) : (
@@ -113,6 +154,11 @@ export default function LiveOutputView() {
                     <span className="live-output-text">{entry.text}</span>
                   </div>
                 ))
+              )}
+              {!isAtBottom && unreadCount > 0 && (
+                <button type="button" className="live-output-jump-bottom" onClick={handleJumpToBottom}>
+                  {unreadCount} new chunk{unreadCount === 1 ? '' : 's'} ↓
+                </button>
               )}
             </div>
           </div>

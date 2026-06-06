@@ -936,9 +936,28 @@ input, textarea, select {
   font-size: 11px;
   line-height: 1.6;
   padding: 14px 16px;
+  position: relative;
 }
 .live-output-empty {
   color: var(--text-muted);
+}
+.live-output-jump-bottom {
+  position: absolute;
+  right: 16px;
+  bottom: 16px;
+  background: var(--accent);
+  color: var(--accent-fg);
+  border: none;
+  border-radius: 999px;
+  padding: 6px 14px;
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  font-family: var(--font);
+}
+.live-output-jump-bottom:hover {
+  filter: brightness(1.1);
 }
 .live-output-line {
   display: grid;
