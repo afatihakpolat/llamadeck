@@ -326,12 +326,15 @@ export function migrateLegacyUsageLedger(legacyLedgerPath: string, sessionsDir: 
   writeFileSync(markerPath, new Date().toISOString(), 'utf-8')
 }
 
-function getWindowedDailyRollups(session: UsagePersistedSession, fromTimestamp: number): UsageDailyRollup[] {
-  if (fromTimestamp === 0) {
+function getWindowedDailyRollups(session: UsagePersistedSession, fromTimestamp: number, toTimestamp: number): UsageDailyRollup[] {
+  if (fromTimestamp === 0 && toTimestamp >= Date.now()) {
     return session.dailyRollups
   }
 
-  return session.dailyRollups.filter((dailyRollup) => toDayTimestamp(dailyRollup.day) >= fromTimestamp)
+  return session.dailyRollups.filter((dailyRollup) => {
+    const dayTs = toDayTimestamp(dailyRollup.day)
+    return dayTs >= fromTimestamp && dayTs <= toTimestamp
+  })
 }
 
 function getSessionWindowTimestamps(
@@ -399,7 +402,7 @@ export function buildUsageStatsSnapshotFromSessions(
       continue
     }
 
-    const windowedDailyRollups = getWindowedDailyRollups(session, normalizedQuery.fromTimestamp)
+    const windowedDailyRollups = getWindowedDailyRollups(session, normalizedQuery.fromTimestamp, normalizedQuery.toTimestamp)
     const sessionWindowSummary = normalizedQuery.fromTimestamp === 0
       ? session
       : buildSummaryFromDailyRollups(windowedDailyRollups)
@@ -459,7 +462,8 @@ export function buildUsageStatsSnapshotFromSessions(
     : liveSessions
   const filteredRecentRequests = recentRequests.filter((record) => {
     if (normalizedQuery.templateId && record.templateId !== normalizedQuery.templateId) return false
-    return new Date(record.finishedAt).getTime() >= normalizedQuery.fromTimestamp
+    const finishedAt = new Date(record.finishedAt).getTime()
+    return finishedAt >= normalizedQuery.fromTimestamp && finishedAt <= normalizedQuery.toTimestamp
   }).slice(0, normalizedQuery.limit)
 
   return {

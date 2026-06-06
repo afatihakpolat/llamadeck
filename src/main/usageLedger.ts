@@ -195,7 +195,8 @@ export function buildUsageStatsSnapshot(
   }
   const filteredRecords = records.filter((record) => {
     if (normalizedQuery.templateId && record.templateId !== normalizedQuery.templateId) return false
-    return new Date(record.finishedAt).getTime() >= normalizedQuery.fromTimestamp
+    const finishedAt = new Date(record.finishedAt).getTime()
+    return finishedAt >= normalizedQuery.fromTimestamp && finishedAt <= normalizedQuery.toTimestamp
   })
 
   const summary = zeroSummary()

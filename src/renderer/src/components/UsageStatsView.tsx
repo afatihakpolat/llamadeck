@@ -32,7 +32,7 @@ function presetToRange(preset: Exclude<UsageStatsWindow, 'custom'>): { fromTimes
   return { fromTimestamp: new Date(now.getFullYear(), now.getMonth(), 1).getTime(), toTimestamp }
 }
 
-function detectPreset(fromTimestamp: number, toTimestamp: number, _now: number = Date.now()): UsageStatsWindow {
+function detectPreset(fromTimestamp: number, toTimestamp: number): UsageStatsWindow {
   // All presets recompute their `toTimestamp` to `Date.now()` on every call, so we
   // tolerate a 60-second window for the `toTimestamp` match. The `fromTimestamp` is
   // always a calendar-day boundary (or 0 for "all time") and is compared exactly.
