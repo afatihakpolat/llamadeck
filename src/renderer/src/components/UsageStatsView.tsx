@@ -17,7 +17,7 @@ import { PricingTab } from './PricingTab'
 
 type UsageStatsWindow = 'today' | '7d' | '30d' | 'month' | 'all' | 'custom'
 
-const STORAGE_KEY = 'llamadeck_usage_stats_query_v1'
+const STORAGE_KEY = 'hexllama_usage_stats_query_v1'
 
 function presetToRange(preset: Exclude<UsageStatsWindow, 'custom'>): { fromTimestamp: number; toTimestamp: number } {
   const now = new Date()
@@ -32,15 +32,16 @@ function presetToRange(preset: Exclude<UsageStatsWindow, 'custom'>): { fromTimes
   return { fromTimestamp: new Date(now.getFullYear(), now.getMonth(), 1).getTime(), toTimestamp }
 }
 
-function detectPreset(fromTimestamp: number, toTimestamp: number, now: number = Date.now()): UsageStatsWindow {
+function detectPreset(fromTimestamp: number, toTimestamp: number, _now: number = Date.now()): UsageStatsWindow {
+  // All presets recompute their `toTimestamp` to `Date.now()` on every call, so we
+  // tolerate a 60-second window for the `toTimestamp` match. The `fromTimestamp` is
+  // always a calendar-day boundary (or 0 for "all time") and is compared exactly.
   for (const preset of ['today', '7d', '30d', 'month', 'all'] as const) {
     const range = presetToRange(preset)
-    if (range.fromTimestamp === fromTimestamp && range.toTimestamp === toTimestamp) {
+    if (range.fromTimestamp === fromTimestamp && Math.abs(range.toTimestamp - toTimestamp) < 60_000) {
       return preset
     }
   }
-  // 'all' has a moving toTimestamp (now). Tolerate close-to-now by allowing within 60s.
-  if (fromTimestamp === 0 && Math.abs(toTimestamp - now) < 60_000) return 'all'
   return 'custom'
 }
 
@@ -429,7 +430,7 @@ export default function UsageStatsView() {
         fromTimestamp: typeof parsed.fromTimestamp === 'number' && Number.isFinite(parsed.fromTimestamp) ? parsed.fromTimestamp : DEFAULT_QUERY.fromTimestamp,
         toTimestamp: typeof parsed.toTimestamp === 'number' && Number.isFinite(parsed.toTimestamp) ? parsed.toTimestamp : DEFAULT_QUERY.toTimestamp,
         templateId: typeof parsed.templateId === 'string' || parsed.templateId === null ? parsed.templateId : null,
-        limit: typeof parsed.limit === 'number' ? parsed.limit : 100
+        limit: typeof parsed.limit === 'number' && Number.isFinite(parsed.limit) ? parsed.limit : 100
       }
     } catch (storageError) {
       console.warn('Failed to load saved usage stats query, falling back to defaults:', storageError)
