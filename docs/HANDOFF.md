@@ -48,6 +48,7 @@
 - Settings and the update banner now hide source-build buttons for build flavors that are already installed for the latest upstream tag; if both latest CPU and CUDA variants exist, the build actions disappear entirely.
 - Reverted the single-active-template restriction in the main-process launch path so different templates can run concurrently again; the app still prevents starting the exact same template twice.
 - Extended proxy usage tracking to include OpenAI-compatible `/v1/responses` requests, including streamed Responses payloads that report usage through nested `response` objects and `input_tokens`/`output_tokens` fields.
+- Added per-template pricing as the primary cost source for each template, with the app-wide rates kept as the default fallback. A new Pricing tab inside Usage Stats manages both surfaces; the Cost tab is read-only and resolves rates per rollup row (session/template rollups use the template's rates, daily and overall rollups use the app-wide rates, currency is always app-wide). Pricing lives in the template's existing JSON file and follows it through export/import.
 
 ## Verification
 - `npm run build` after switching usage persistence from raw request ledger rows to compact per-session summaries with an in-memory recent-request buffer
@@ -81,6 +82,7 @@
 - `npm run build` after hiding CPU/CUDA build buttons when the latest installed variants already exist
 - `npm run build` after removing the guard that stopped other running templates before launching a new one
 - `npm run build` after extending proxy usage extraction to cover `/v1/responses` and Responses API usage payload shapes
+- `npm run build` after splitting the Cost tab into a read-only view plus a new Pricing tab and switching the cost resolver to per-template with app-wide fallback
 
 ## Next Recommended Check
 - Manual smoke test for proxy-backed usage stats: start an API template, send both standard and streaming requests through `/v1/chat/completions`, `/v1/responses`, `/completions`, or `/completion`, confirm the request rows appear live on Usage Stats, verify input/cache/output/total stay internally consistent between the summary card and request rows, stop the session, restart the app, and confirm historical totals remain while Recent Requests resets.
@@ -97,3 +99,4 @@
 - Usage stats caveat: the page currently keeps its filter/query state locally instead of in Zustand, which keeps the implementation narrow but means there is no cross-view persistence of the selected stats filters yet.
 - Residual polish gap: when the saved app theme differs from the OS theme, a cold-open main window or newly opened chat window can still flash the OS-based background before renderer hydration applies the saved theme.
 - Rename caveat: packaged upgrades preserve the legacy Hexllama data directory, but the installer identity, taskbar pins, and shortcuts still move to the new LlamaDeck identity rather than migrating in place.
+- Manual smoke test for per-template pricing: open the Pricing tab, save new app-wide defaults and confirm the Cost tab recalculates. Toggle one template on, set non-zero rates, save, and confirm that template's session/template-rollup rows in the Cost tab use the new rates while others stay on app-wide. Toggle the template off, save, and confirm the Cost tab reverts. Reload the app and confirm both surfaces persist. Delete a template that had per-template pricing and confirm historical cost rows for that template fall back to app-wide. Export a template with pricing, re-import on a fresh install, and confirm the pricing block survived the round-trip.
