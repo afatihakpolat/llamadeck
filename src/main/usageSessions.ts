@@ -93,16 +93,6 @@ function toDayEndTimestamp(day: string): number {
   return new Date(year, month - 1, date + 1).getTime() - 1
 }
 
-function getWindowStart(window: UsageStatsQuery['window']): number {
-  const now = new Date()
-  if (window === 'all') return 0
-
-  const localMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime()
-  if (window === '7d') return localMidnight - (6 * 24 * 60 * 60 * 1000)
-
-  return localMidnight
-}
-
 function buildSummaryFromDailyRollups(dailyRollups: UsageDailyRollup[]): UsageSummaryRollup {
   const summary = zeroSummary()
   for (const dailyRollup of dailyRollups) {
@@ -336,20 +326,23 @@ export function migrateLegacyUsageLedger(legacyLedgerPath: string, sessionsDir: 
   writeFileSync(markerPath, new Date().toISOString(), 'utf-8')
 }
 
-function getWindowedDailyRollups(session: UsagePersistedSession, windowStart: number, window: UsageStatsQuery['window']): UsageDailyRollup[] {
-  if (window === 'all') {
+function getWindowedDailyRollups(session: UsagePersistedSession, fromTimestamp: number, toTimestamp: number): UsageDailyRollup[] {
+  if (fromTimestamp === 0 && toTimestamp >= Date.now()) {
     return session.dailyRollups
   }
 
-  return session.dailyRollups.filter((dailyRollup) => toDayTimestamp(dailyRollup.day) >= windowStart)
+  return session.dailyRollups.filter((dailyRollup) => {
+    const dayTs = toDayTimestamp(dailyRollup.day)
+    return dayTs >= fromTimestamp && dayTs <= toTimestamp
+  })
 }
 
 function getSessionWindowTimestamps(
   session: UsagePersistedSession,
   windowedDailyRollups: UsageDailyRollup[],
-  window: UsageStatsQuery['window']
+  fromTimestamp: number
 ): Pick<UsageSessionRollup, 'windowStartedAt' | 'windowEndedAt' | 'windowLastRequestAt'> {
-  if (window === 'all') {
+  if (fromTimestamp === 0) {
     return {
       windowStartedAt: session.startedAt,
       windowEndedAt: session.stoppedAt,
@@ -393,11 +386,11 @@ export function buildUsageStatsSnapshotFromSessions(
   query: UsageStatsQuery
 ): UsageStatsSnapshot {
   const normalizedQuery: UsageStatsQuery = {
-    window: query.window,
+    fromTimestamp: query.fromTimestamp,
+    toTimestamp: query.toTimestamp,
     templateId: query.templateId ?? null,
     limit: Math.min(query.limit ?? 20, 20)
   }
-  const windowStart = getWindowStart(normalizedQuery.window)
 
   const summary = zeroSummary()
   const templateRollups = new Map<string, UsageTemplateRollup>()
@@ -409,8 +402,8 @@ export function buildUsageStatsSnapshotFromSessions(
       continue
     }
 
-    const windowedDailyRollups = getWindowedDailyRollups(session, windowStart, normalizedQuery.window)
-    const sessionWindowSummary = normalizedQuery.window === 'all'
+    const windowedDailyRollups = getWindowedDailyRollups(session, normalizedQuery.fromTimestamp, normalizedQuery.toTimestamp)
+    const sessionWindowSummary = normalizedQuery.fromTimestamp === 0
       ? session
       : buildSummaryFromDailyRollups(windowedDailyRollups)
 
@@ -419,7 +412,7 @@ export function buildUsageStatsSnapshotFromSessions(
     }
 
     mergeSummary(summary, sessionWindowSummary)
-    const sessionWindowTimestamps = getSessionWindowTimestamps(session, windowedDailyRollups, normalizedQuery.window)
+    const sessionWindowTimestamps = getSessionWindowTimestamps(session, windowedDailyRollups, normalizedQuery.fromTimestamp)
     sessionRollups.push({
       launchId: session.launchId,
       templateId: session.templateId,
@@ -469,7 +462,8 @@ export function buildUsageStatsSnapshotFromSessions(
     : liveSessions
   const filteredRecentRequests = recentRequests.filter((record) => {
     if (normalizedQuery.templateId && record.templateId !== normalizedQuery.templateId) return false
-    return new Date(record.finishedAt).getTime() >= windowStart
+    const finishedAt = new Date(record.finishedAt).getTime()
+    return finishedAt >= normalizedQuery.fromTimestamp && finishedAt <= normalizedQuery.toTimestamp
   }).slice(0, normalizedQuery.limit)
 
   return {

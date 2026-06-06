@@ -1938,7 +1938,8 @@ export function registerIpcHandlers(): void {
   })
   ipcMain.handle('get-usage-stats', (_e, partialQuery?: Partial<UsageStatsQuery>) => {
     const query: UsageStatsQuery = {
-      window: partialQuery?.window ?? '7d',
+      fromTimestamp: partialQuery?.fromTimestamp ?? 0,
+      toTimestamp: partialQuery?.toTimestamp ?? Date.now(),
       templateId: partialQuery?.templateId ?? null,
       limit: partialQuery?.limit ?? 20
     }

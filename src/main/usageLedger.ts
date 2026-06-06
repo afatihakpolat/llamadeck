@@ -110,14 +110,6 @@ function accumulateSummary(target: UsageSummaryRollup, record: Pick<UsageRequest
   }
 }
 
-function getWindowStart(window: UsageStatsQuery['window']): number {
-  const now = new Date()
-  if (window === 'all') return 0
-  if (window === '7d') return Date.now() - (7 * 24 * 60 * 60 * 1000)
-
-  return new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime()
-}
-
 function toDayKey(isoTimestamp: string): string {
   const date = new Date(isoTimestamp)
   const year = date.getFullYear()
@@ -196,14 +188,15 @@ export function buildUsageStatsSnapshot(
   query: UsageStatsQuery
 ): UsageStatsSnapshot {
   const normalizedQuery: UsageStatsQuery = {
-    window: query.window,
+    fromTimestamp: query.fromTimestamp,
+    toTimestamp: query.toTimestamp,
     templateId: query.templateId ?? null,
     limit: query.limit ?? 100
   }
-  const windowStart = getWindowStart(normalizedQuery.window)
   const filteredRecords = records.filter((record) => {
     if (normalizedQuery.templateId && record.templateId !== normalizedQuery.templateId) return false
-    return new Date(record.finishedAt).getTime() >= windowStart
+    const finishedAt = new Date(record.finishedAt).getTime()
+    return finishedAt >= normalizedQuery.fromTimestamp && finishedAt <= normalizedQuery.toTimestamp
   })
 
   const summary = zeroSummary()

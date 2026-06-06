@@ -19,6 +19,7 @@
 | `src/main/usageSessions.ts` (modify) | Delete `getWindowStart`; update `getWindowedDailyRollups` signature; replace two call sites with `query.fromTimestamp`/`toTimestamp`. |
 | `src/main/ipc.ts` (modify) | Update the `get-usage-stats` handler's normalized query to use `fromTimestamp`/`toTimestamp` instead of `window`. |
 | `src/renderer/src/components/UsageStatsView.tsx` (modify) | Add renderer-only `UsageStatsWindow` type, `WINDOW_OPTIONS` (5 presets), `presetToRange` helper, custom-range panel state and JSX, `localStorage` persistence. |
+| `src/renderer/src/components/Titlebar.tsx` (modify, line ~45) | Update the `getUsageStats({ window: 'all', limit: 1 })` call to use the new query shape. Simplest: drop the `window` field and rely on IPC defaults (`fromTimestamp ?? 0`, `toTimestamp ?? Date.now()`). |
 | `src/renderer/src/styles/global.css` (modify) | Add `.usage-stats-custom-range` styling for the inline custom-range panel. |
 | `docs/HANDOFF.md` (modify) | Add completion line, verification line, and manual smoke test list. |
 
@@ -296,7 +297,7 @@ In `src/renderer/src/components/UsageStatsView.tsx`, add the new type and helper
 ```ts
 type UsageStatsWindow = 'today' | '7d' | '30d' | 'month' | 'all' | 'custom'
 
-const STORAGE_KEY = 'llamadeck_usage_stats_query_v1'
+const STORAGE_KEY = 'hexllama_usage_stats_query_v1'
 
 function presetToRange(preset: Exclude<UsageStatsWindow, 'custom'>): { fromTimestamp: number; toTimestamp: number } {
   const now = new Date()

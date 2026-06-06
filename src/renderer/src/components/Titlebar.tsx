@@ -42,7 +42,7 @@ export default function Titlebar({ onCheckUpdates }: Props) {
 
     async function loadLiveSessions() {
       try {
-        const snapshot = await window.api.getUsageStats({ window: 'all', limit: 1 })
+        const snapshot = await window.api.getUsageStats({ limit: 1 })
         if (active) {
           setLiveSessions(snapshot.liveSessions)
         }
