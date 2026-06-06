@@ -1052,6 +1052,22 @@ input, textarea, select {
   color: var(--text);
   transform: translateY(-1px);
 }
+.usage-stats-custom-range {
+  display: flex;
+  gap: 12px;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  padding: 10px 12px;
+  margin-top: 10px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+.usage-stats-custom-range-actions {
+  display: flex;
+  gap: 8px;
+  margin-left: auto;
+}
 .usage-template-select {
   min-width: 190px;
   background-color: var(--surface-2);
