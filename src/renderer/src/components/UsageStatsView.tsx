@@ -1,7 +1,8 @@
-import React, { useEffect, useRef, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { Activity, BarChart3, RefreshCw } from 'lucide-react'
 import { useStore } from '../store/useStore'
 import type {
+  Template,
   UsageCostSettings,
   UsageLiveSession,
   UsageRequestRecord,
@@ -12,6 +13,8 @@ import type {
   UsageStatsWindow,
   UsageSummaryRollup
 } from '../../../shared/types'
+import { resolveTemplatePricing } from '../utils/templatePricing'
+import { PricingTab } from './PricingTab'
 
 const WINDOW_OPTIONS: Array<{ label: string; value: UsageStatsWindow }> = [
   { label: 'Today', value: 'today' },
@@ -32,18 +35,11 @@ const DEFAULT_USAGE_COST_SETTINGS: UsageCostSettings = {
   outputCostPerMillion: 0
 }
 
-type UsageStatsTab = 'overview' | 'sessions' | 'cost'
+type UsageStatsTab = 'overview' | 'sessions' | 'cost' | 'pricing'
 type UsageSessionGroupBy = 'none' | 'template' | 'status'
 type UsageSessionSortBy = 'activity' | 'tokens' | 'requests' | 'duration'
 type UsageSessionStatusFilter = 'all' | UsageSessionStatus
 type UsageCostSortBy = 'cost' | 'activity' | 'requests' | 'duration'
-
-interface UsageCostDraft {
-  currency: string
-  inputCostPerMillion: string
-  cacheCostPerMillion: string
-  outputCostPerMillion: string
-}
 
 interface UsageCostBreakdown {
   inputCost: number
@@ -55,7 +51,8 @@ interface UsageCostBreakdown {
 const STATS_TAB_OPTIONS: Array<{ label: string; value: UsageStatsTab }> = [
   { label: 'Overview', value: 'overview' },
   { label: 'Sessions', value: 'sessions' },
-  { label: 'Cost', value: 'cost' }
+  { label: 'Cost', value: 'cost' },
+  { label: 'Pricing', value: 'pricing' }
 ]
 
 const SESSION_STATUS_OPTIONS: Array<{ label: string; value: UsageSessionStatusFilter }> = [
@@ -137,54 +134,8 @@ function formatCost(value: number, currency: string): string {
   }
 }
 
-function formatRatePerMillion(value: number, currency: string): string {
-  return `${formatCost(value, currency)} / 1M`
-}
-
 function getUncachedInputTokens(record: Pick<UsageSummaryRollup, 'promptTokens' | 'cacheTokens'>): number {
   return Math.max(record.promptTokens, 0)
-}
-
-function createUsageCostDraft(settings: UsageCostSettings): UsageCostDraft {
-  return {
-    currency: settings.currency,
-    inputCostPerMillion: String(settings.inputCostPerMillion),
-    cacheCostPerMillion: String(settings.cacheCostPerMillion),
-    outputCostPerMillion: String(settings.outputCostPerMillion)
-  }
-}
-
-function parseNonNegativeRate(rawValue: string, label: string): number {
-  const trimmedValue = rawValue.trim()
-  if (!trimmedValue) {
-    return 0
-  }
-
-  const parsedValue = Number(trimmedValue)
-  if (!Number.isFinite(parsedValue) || parsedValue < 0) {
-    throw new Error(`${label} must be a non-negative number.`)
-  }
-
-  return parsedValue
-}
-
-function parseUsageCostDraft(draft: UsageCostDraft): UsageCostSettings {
-  const normalizedCurrency = draft.currency.trim().toUpperCase() || DEFAULT_USAGE_COST_SETTINGS.currency
-
-  return {
-    currency: normalizedCurrency,
-    inputCostPerMillion: parseNonNegativeRate(draft.inputCostPerMillion, 'Input cost'),
-    cacheCostPerMillion: parseNonNegativeRate(draft.cacheCostPerMillion, 'Cache cost'),
-    outputCostPerMillion: parseNonNegativeRate(draft.outputCostPerMillion, 'Output cost')
-  }
-}
-
-function tryParseUsageCostDraft(draft: UsageCostDraft): UsageCostSettings | null {
-  try {
-    return parseUsageCostDraft(draft)
-  } catch {
-    return null
-  }
 }
 
 function getUsageCostBreakdown(record: Pick<UsageSummaryRollup, 'promptTokens' | 'cacheTokens' | 'completionTokens'>, settings: UsageCostSettings): UsageCostBreakdown {
@@ -379,25 +330,33 @@ function sortSessionRollups(sessions: UsageSessionRollup[], sortBy: UsageSession
   })
 }
 
-function sortCostSessionRollups(sessions: UsageSessionRollup[], sortBy: UsageCostSortBy, settings: UsageCostSettings): UsageSessionRollup[] {
+function sortCostSessionRollups(
+  sessions: UsageSessionRollup[],
+  sortBy: UsageCostSortBy,
+  pricingFor: (templateId: string) => UsageCostSettings
+): UsageSessionRollup[] {
   if (sortBy !== 'cost') {
     return sortSessionRollups(sessions, sortBy)
   }
 
   return [...sessions].sort((left, right) => {
-    return getUsageCostBreakdown(right, settings).totalCost - getUsageCostBreakdown(left, settings).totalCost
+    return getUsageCostBreakdown(right, pricingFor(right.templateId)).totalCost - getUsageCostBreakdown(left, pricingFor(left.templateId)).totalCost
       || right.requestCount - left.requestCount
       || getTimestampValue(getSessionActivityTimestamp(right)) - getTimestampValue(getSessionActivityTimestamp(left))
   })
 }
 
-function sortCostSessionGroups(groups: SessionAnalysisGroup[], sortBy: UsageCostSortBy, settings: UsageCostSettings): SessionAnalysisGroup[] {
+function sortCostSessionGroups(
+  groups: SessionAnalysisGroup[],
+  sortBy: UsageCostSortBy,
+  pricingFor: (key: string) => UsageCostSettings
+): SessionAnalysisGroup[] {
   if (sortBy !== 'cost') {
     return groups
   }
 
   return [...groups].sort((left, right) => {
-    return getUsageCostBreakdown(right, settings).totalCost - getUsageCostBreakdown(left, settings).totalCost
+    return getUsageCostBreakdown(right, pricingFor(right.key)).totalCost - getUsageCostBreakdown(left, pricingFor(left.key)).totalCost
       || right.requestCount - left.requestCount
       || getTimestampValue(right.lastActivityAt) - getTimestampValue(left.lastActivityAt)
       || left.label.localeCompare(right.label)
@@ -414,16 +373,12 @@ export default function UsageStatsView() {
   const [costSessionStatusFilter, setCostSessionStatusFilter] = useState<UsageSessionStatusFilter>('all')
   const [costSessionGroupBy, setCostSessionGroupBy] = useState<UsageSessionGroupBy>('none')
   const [costSessionSortBy, setCostSessionSortBy] = useState<UsageCostSortBy>('cost')
-  const [costSettings, setCostSettings] = useState<UsageCostSettings>(DEFAULT_USAGE_COST_SETTINGS)
-  const [costDraft, setCostDraft] = useState<UsageCostDraft>(createUsageCostDraft(DEFAULT_USAGE_COST_SETTINGS))
-  const [loadingCostSettings, setLoadingCostSettings] = useState(true)
-  const [savingCostSettings, setSavingCostSettings] = useState(false)
-  const [costSettingsReady, setCostSettingsReady] = useState(false)
-  const [costSettingsError, setCostSettingsError] = useState<string | null>(null)
+  const [appSettings, setAppSettings] = useState<UsageCostSettings>(DEFAULT_USAGE_COST_SETTINGS)
   const [snapshot, setSnapshot] = useState<UsageStatsSnapshot | null>(null)
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [costSettingsError, setCostSettingsError] = useState<string | null>(null)
   const queryRef = useRef(query)
 
   queryRef.current = query
@@ -446,6 +401,26 @@ export default function UsageStatsView() {
     .map(([id, name]) => ({ id, name }))
     .sort((left, right) => left.name.localeCompare(right.name))
 
+  const templatesById = useMemo(() => {
+    const map = new Map<string, Template>()
+    for (const card of cards) {
+      map.set(card.template.id, card.template)
+    }
+    return map
+  }, [cards])
+
+  const pricingForTemplate = (templateId: string | null | undefined) => {
+    if (!templateId) return appSettings
+    return resolveTemplatePricing(templatesById.get(templateId), appSettings)
+  }
+
+  const pricingForGroupKey = (key: string) => {
+    if (costSessionGroupBy === 'template') {
+      return pricingForTemplate(key)
+    }
+    return appSettings
+  }
+
   const filteredSessionRollups = sortSessionRollups(
     (snapshot?.sessionRollups ?? []).filter((session) => {
       return sessionStatusFilter === 'all' || session.status === sessionStatusFilter
@@ -458,7 +433,7 @@ export default function UsageStatsView() {
       return costSessionStatusFilter === 'all' || session.status === costSessionStatusFilter
     }),
     costSessionSortBy,
-    tryParseUsageCostDraft(costDraft) ?? costSettings
+    pricingForTemplate
   )
   const costSessionAnalysisGroups = sortCostSessionGroups(
     buildSortedSessionAnalysisGroups(
@@ -467,26 +442,9 @@ export default function UsageStatsView() {
       costSessionSortBy === 'cost' ? 'tokens' : costSessionSortBy
     ),
     costSessionSortBy,
-    tryParseUsageCostDraft(costDraft) ?? costSettings
+    pricingForGroupKey
   )
-  const effectiveCostSettings = tryParseUsageCostDraft(costDraft) ?? costSettings
-  const canRenderCostAnalysis = costSettingsReady && !loadingCostSettings
-  const summaryCost = snapshot && canRenderCostAnalysis ? getUsageCostBreakdown(snapshot.summary, effectiveCostSettings) : null
-
-  async function loadCostSettings() {
-    try {
-      const nextSettings = await window.api.getUsageCostSettings()
-      setCostSettings(nextSettings)
-      setCostDraft(createUsageCostDraft(nextSettings))
-      setCostSettingsReady(true)
-      setCostSettingsError(null)
-    } catch (loadError) {
-      setCostSettingsReady(false)
-      setCostSettingsError(loadError instanceof Error ? loadError.message : String(loadError))
-    } finally {
-      setLoadingCostSettings(false)
-    }
-  }
+  const summaryCost = snapshot ? getUsageCostBreakdown(snapshot.summary, appSettings) : null
 
   async function loadSnapshot(nextQuery: UsageStatsQuery, mode: 'initial' | 'refresh' = 'refresh') {
     if (mode === 'initial') {
@@ -512,7 +470,21 @@ export default function UsageStatsView() {
   }, [query.window, query.templateId])
 
   useEffect(() => {
-    void loadCostSettings()
+    let cancelled = false
+    void window.api.getUsageCostSettings()
+      .then((next) => {
+        if (cancelled) return
+        setAppSettings(next)
+        setCostSettingsError(null)
+      })
+      .catch((loadError) => {
+        console.warn('Failed to load app-wide usage cost settings:', loadError)
+        if (cancelled) return
+        setCostSettingsError(loadError instanceof Error ? loadError.message : String(loadError))
+      })
+    return () => {
+      cancelled = true
+    }
   }, [])
 
   useEffect(() => {
@@ -523,29 +495,13 @@ export default function UsageStatsView() {
     return unsubscribe
   }, [])
 
-  async function handleSaveCostSettings() {
-    try {
-      setSavingCostSettings(true)
-      const parsedSettings = parseUsageCostDraft(costDraft)
-      const result = await window.api.saveUsageCostSettings(parsedSettings)
-      if (!result.success) {
-        alert(`Failed to save cost settings: ${result.error || 'Unknown error'}`)
-        return
-      }
-
-      setCostSettings(result.settings)
-      setCostDraft(createUsageCostDraft(result.settings))
-      setCostSettingsReady(true)
-      setCostSettingsError(null)
-    } catch (saveError) {
-      alert(saveError instanceof Error ? saveError.message : String(saveError))
-    } finally {
-      setSavingCostSettings(false)
-    }
-  }
-
   return (
     <div className="usage-stats-page">
+      {costSettingsError && (
+        <div className="usage-stats-warning">
+          Cost settings failed to load: {costSettingsError}. The Cost tab will show zero-cost totals until the next successful load.
+        </div>
+      )}
       <div className="page-header usage-stats-header">
         <div>
           <h1 className="page-title">Usage Stats</h1>
@@ -904,101 +860,27 @@ export default function UsageStatsView() {
                 )}
               </section>
             </>
-          ) : (
+          ) : activeTab === 'cost' ? (
             <>
-              <section className="usage-section">
-                <div className="usage-section-header usage-section-header-stack">
-                  <div>
-                    <h2>Cost Settings</h2>
-                    <span className="usage-section-header-note">Set app-wide rates per 1M tokens. Changing these values reprices the current historical view immediately after save.</span>
-                  </div>
-                  <span>{loadingCostSettings ? 'Loading rates...' : 'App-wide pricing'}</span>
-                </div>
-                {costSettingsError && (
-                  <div className="usage-stats-warning">Cost settings failed to load: {costSettingsError}</div>
-                )}
-                <div className="usage-cost-config-grid">
-                  <label className="usage-control-field">
-                    <span>Currency</span>
-                    <input
-                      className="form-input usage-cost-input"
-                      value={costDraft.currency}
-                      onChange={(event) => setCostDraft((current) => ({ ...current, currency: event.target.value }))}
-                      placeholder="USD"
-                      maxLength={8}
-                      disabled={loadingCostSettings || savingCostSettings}
-                    />
-                  </label>
-                  <label className="usage-control-field">
-                    <span>Input / 1M</span>
-                    <input
-                      className="form-input usage-cost-input"
-                      type="number"
-                      min="0"
-                      step="0.000001"
-                      value={costDraft.inputCostPerMillion}
-                      onChange={(event) => setCostDraft((current) => ({ ...current, inputCostPerMillion: event.target.value }))}
-                      disabled={loadingCostSettings || savingCostSettings}
-                    />
-                  </label>
-                  <label className="usage-control-field">
-                    <span>Cache / 1M</span>
-                    <input
-                      className="form-input usage-cost-input"
-                      type="number"
-                      min="0"
-                      step="0.000001"
-                      value={costDraft.cacheCostPerMillion}
-                      onChange={(event) => setCostDraft((current) => ({ ...current, cacheCostPerMillion: event.target.value }))}
-                      disabled={loadingCostSettings || savingCostSettings}
-                    />
-                  </label>
-                  <label className="usage-control-field">
-                    <span>Output / 1M</span>
-                    <input
-                      className="form-input usage-cost-input"
-                      type="number"
-                      min="0"
-                      step="0.000001"
-                      value={costDraft.outputCostPerMillion}
-                      onChange={(event) => setCostDraft((current) => ({ ...current, outputCostPerMillion: event.target.value }))}
-                      disabled={loadingCostSettings || savingCostSettings}
-                    />
-                  </label>
-                </div>
-                <div className="usage-cost-config-actions">
-                  <button className="btn btn-primary" onClick={() => void handleSaveCostSettings()} disabled={loadingCostSettings || savingCostSettings}>
-                    {savingCostSettings ? 'Saving...' : 'Save Rates'}
-                  </button>
-                  <span className="usage-summary-meta">
-                    {formatRatePerMillion(effectiveCostSettings.inputCostPerMillion, effectiveCostSettings.currency)} input • {formatRatePerMillion(effectiveCostSettings.cacheCostPerMillion, effectiveCostSettings.currency)} cache • {formatRatePerMillion(effectiveCostSettings.outputCostPerMillion, effectiveCostSettings.currency)} output
-                  </span>
-                </div>
-              </section>
-
-              {!canRenderCostAnalysis ? (
-                <div className="usage-section-empty">Save or load cost settings to unlock detailed cost analysis for this usage history.</div>
-              ) : (
-                <>
               <div className="usage-summary-grid">
                 <div className="usage-summary-card">
                   <span className="usage-summary-label">Estimated Total Cost</span>
-                  <strong>{formatCost(summaryCost?.totalCost ?? 0, effectiveCostSettings.currency)}</strong>
+                  <strong>{formatCost(summaryCost?.totalCost ?? 0, appSettings.currency)}</strong>
                   <span className="usage-summary-meta">For the selected window and template filter</span>
                 </div>
                 <div className="usage-summary-card">
                   <span className="usage-summary-label">Input Cost</span>
-                  <strong>{formatCost(summaryCost?.inputCost ?? 0, effectiveCostSettings.currency)}</strong>
+                  <strong>{formatCost(summaryCost?.inputCost ?? 0, appSettings.currency)}</strong>
                   <span className="usage-summary-meta">{formatNumber(getUncachedInputTokens(snapshot.summary))} uncached prompt tokens</span>
                 </div>
                 <div className="usage-summary-card">
                   <span className="usage-summary-label">Cache Cost</span>
-                  <strong>{formatCost(summaryCost?.cacheCost ?? 0, effectiveCostSettings.currency)}</strong>
+                  <strong>{formatCost(summaryCost?.cacheCost ?? 0, appSettings.currency)}</strong>
                   <span className="usage-summary-meta">{formatNumber(snapshot.summary.cacheTokens)} cached prompt tokens</span>
                 </div>
                 <div className="usage-summary-card">
                   <span className="usage-summary-label">Output Cost</span>
-                  <strong>{formatCost(summaryCost?.outputCost ?? 0, effectiveCostSettings.currency)}</strong>
+                  <strong>{formatCost(summaryCost?.outputCost ?? 0, appSettings.currency)}</strong>
                   <span className="usage-summary-meta">{formatNumber(snapshot.summary.completionTokens)} generated tokens</span>
                 </div>
               </div>
@@ -1067,7 +949,8 @@ export default function UsageStatsView() {
                       </thead>
                       <tbody>
                         {filteredCostSessionRollups.map((session) => {
-                          const sessionCost = getUsageCostBreakdown(session, effectiveCostSettings)
+                          const sessionPricing = pricingForTemplate(session.templateId)
+                          const sessionCost = getUsageCostBreakdown(session, sessionPricing)
 
                           return (
                             <tr key={session.launchId}>
@@ -1084,8 +967,8 @@ export default function UsageStatsView() {
                                 <div className="usage-request-secondary">{formatNumber(session.successCount)} ok • {formatNumber(session.errorCount)} failed</div>
                               </td>
                               <td>
-                                <div className="usage-request-primary">{formatCost(sessionCost.totalCost, effectiveCostSettings.currency)}</div>
-                                <div className="usage-request-secondary">{formatCost(sessionCost.inputCost, effectiveCostSettings.currency)} input • {formatCost(sessionCost.cacheCost, effectiveCostSettings.currency)} cache • {formatCost(sessionCost.outputCost, effectiveCostSettings.currency)} output</div>
+                                <div className="usage-request-primary">{formatCost(sessionCost.totalCost, sessionPricing.currency)}</div>
+                                <div className="usage-request-secondary">{formatCost(sessionCost.inputCost, sessionPricing.currency)} input • {formatCost(sessionCost.cacheCost, sessionPricing.currency)} cache • {formatCost(sessionCost.outputCost, sessionPricing.currency)} output</div>
                               </td>
                               <td>
                                 <div className="usage-request-primary">{formatNumber(session.totalTokens)}</div>
@@ -1104,7 +987,8 @@ export default function UsageStatsView() {
                 ) : (
                   <div className="usage-list-table">
                     {costSessionAnalysisGroups.map((group) => {
-                      const groupCost = getUsageCostBreakdown(group, effectiveCostSettings)
+                      const groupPricing = pricingForGroupKey(group.key)
+                      const groupCost = getUsageCostBreakdown(group, groupPricing)
 
                       return (
                         <div className="usage-list-row" key={group.key}>
@@ -1115,8 +999,8 @@ export default function UsageStatsView() {
                           <div className="usage-list-metrics">
                             <span>{formatNumber(group.sessionCount)} sessions</span>
                             <span>{formatNumber(group.requestCount)} requests</span>
-                            <span>{formatCost(groupCost.totalCost, effectiveCostSettings.currency)} total</span>
-                            <span>{formatCost(groupCost.inputCost, effectiveCostSettings.currency)} input • {formatCost(groupCost.cacheCost, effectiveCostSettings.currency)} cache • {formatCost(groupCost.outputCost, effectiveCostSettings.currency)} output</span>
+                            <span>{formatCost(groupCost.totalCost, groupPricing.currency)} total</span>
+                            <span>{formatCost(groupCost.inputCost, groupPricing.currency)} input • {formatCost(groupCost.cacheCost, groupPricing.currency)} cache • {formatCost(groupCost.outputCost, groupPricing.currency)} output</span>
                             <span>{group.lastActivityAt ? `Last activity ${formatTimestamp(group.lastActivityAt)}` : 'No recent activity'}</span>
                           </div>
                         </div>
@@ -1137,7 +1021,8 @@ export default function UsageStatsView() {
                   ) : (
                     <div className="usage-list-table">
                       {snapshot.templateRollups.map((rollup) => {
-                        const rollupCost = getUsageCostBreakdown(rollup, effectiveCostSettings)
+                        const rollupPricing = pricingForTemplate(rollup.templateId)
+                        const rollupCost = getUsageCostBreakdown(rollup, rollupPricing)
 
                         return (
                           <div className="usage-list-row" key={rollup.templateId}>
@@ -1147,8 +1032,8 @@ export default function UsageStatsView() {
                             </div>
                             <div className="usage-list-metrics">
                               <span>{formatNumber(rollup.requestCount)} requests</span>
-                              <span>{formatCost(rollupCost.totalCost, effectiveCostSettings.currency)} total</span>
-                              <span>{formatCost(rollupCost.inputCost, effectiveCostSettings.currency)} input • {formatCost(rollupCost.cacheCost, effectiveCostSettings.currency)} cache • {formatCost(rollupCost.outputCost, effectiveCostSettings.currency)} output</span>
+                              <span>{formatCost(rollupCost.totalCost, rollupPricing.currency)} total</span>
+                              <span>{formatCost(rollupCost.inputCost, rollupPricing.currency)} input • {formatCost(rollupCost.cacheCost, rollupPricing.currency)} cache • {formatCost(rollupCost.outputCost, rollupPricing.currency)} output</span>
                               <span>{rollup.lastRequestAt ? formatTimestamp(rollup.lastRequestAt) : 'No recent activity'}</span>
                             </div>
                           </div>
@@ -1168,7 +1053,7 @@ export default function UsageStatsView() {
                   ) : (
                     <div className="usage-list-table">
                       {snapshot.dailyRollups.map((rollup) => {
-                        const rollupCost = getUsageCostBreakdown(rollup, effectiveCostSettings)
+                        const rollupCost = getUsageCostBreakdown(rollup, appSettings)
 
                         return (
                           <div className="usage-list-row" key={rollup.day}>
@@ -1178,8 +1063,8 @@ export default function UsageStatsView() {
                             </div>
                             <div className="usage-list-metrics">
                               <span>{formatNumber(rollup.requestCount)} requests</span>
-                              <span>{formatCost(rollupCost.totalCost, effectiveCostSettings.currency)} total</span>
-                              <span>{formatCost(rollupCost.inputCost, effectiveCostSettings.currency)} input • {formatCost(rollupCost.cacheCost, effectiveCostSettings.currency)} cache • {formatCost(rollupCost.outputCost, effectiveCostSettings.currency)} output</span>
+                              <span>{formatCost(rollupCost.totalCost, appSettings.currency)} total</span>
+                              <span>{formatCost(rollupCost.inputCost, appSettings.currency)} input • {formatCost(rollupCost.cacheCost, appSettings.currency)} cache • {formatCost(rollupCost.outputCost, appSettings.currency)} output</span>
                               <span>{formatNumber(rollup.errorCount)} failed</span>
                             </div>
                           </div>
@@ -1212,7 +1097,8 @@ export default function UsageStatsView() {
                       </thead>
                       <tbody>
                         {snapshot.recentRequests.map((record) => {
-                          const requestCost = record.countedExactly ? getUsageCostBreakdown(record, effectiveCostSettings) : null
+                          const requestPricing = pricingForTemplate(record.templateId)
+                          const requestCost = record.countedExactly ? getUsageCostBreakdown(record, requestPricing) : null
 
                           return (
                             <tr key={record.id}>
@@ -1233,8 +1119,8 @@ export default function UsageStatsView() {
                                 <div className="usage-request-secondary">{record.error || (record.countedExactly ? 'exact usage' : 'non-exact row')}</div>
                               </td>
                               <td>
-                                <div className="usage-request-primary">{requestCost ? formatCost(requestCost.totalCost, effectiveCostSettings.currency) : 'Not exact'}</div>
-                                <div className="usage-request-secondary">{requestCost ? `${formatCost(requestCost.inputCost, effectiveCostSettings.currency)} input • ${formatCost(requestCost.cacheCost, effectiveCostSettings.currency)} cache • ${formatCost(requestCost.outputCost, effectiveCostSettings.currency)} output` : 'Cost requires exact token data'}</div>
+                                <div className="usage-request-primary">{requestCost ? formatCost(requestCost.totalCost, requestPricing.currency) : 'Not exact'}</div>
+                                <div className="usage-request-secondary">{requestCost ? `${formatCost(requestCost.inputCost, requestPricing.currency)} input • ${formatCost(requestCost.cacheCost, requestPricing.currency)} cache • ${formatCost(requestCost.outputCost, requestPricing.currency)} output` : 'Cost requires exact token data'}</div>
                               </td>
                               <td>
                                 <div className="usage-request-primary">{renderTokenSummary(record)}</div>
@@ -1248,10 +1134,10 @@ export default function UsageStatsView() {
                   </div>
                 )}
               </section>
-                </>
-              )}
             </>
-          )}
+          ) : activeTab === 'pricing' ? (
+            <PricingTab appSettings={appSettings} onAppSettingsChange={setAppSettings} />
+          ) : null}
         </>
       ) : null}
     </div>

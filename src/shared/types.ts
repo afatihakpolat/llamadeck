@@ -168,6 +168,11 @@ export interface UsageCostSettings {
 export interface AppWindowBehaviorSettings {
   minimizeToTray: boolean
 }
+export interface TemplatePricing {
+  inputCostPerMillion: number
+  cacheCostPerMillion: number
+  outputCostPerMillion: number
+}
 export interface Template {
   id: string
   name: string
@@ -180,6 +185,7 @@ export interface Template {
   createdAt: string
   updatedAt: string
   _file?: string
+  pricing?: TemplatePricing
 }
 
 export type LiteLlmLogLevel = 'info' | 'debug' | 'detailed_debug'
