@@ -593,7 +593,11 @@ export default function UsageStatsView() {
 
   function openCustomRange() {
     // Pre-fill the inputs with the current query range so the user has a sensible starting point.
-    setCustomFrom(toDateInputValue(query.fromTimestamp))
+    // When the current range is "all time" (fromTimestamp = 0), toDateInputValue(0) would render
+    // the epoch date as 1969 (or 1970 depending on timezone) — fall back to last 7 days instead.
+    const isAllTime = query.fromTimestamp === 0
+    const fromDateTs = isAllTime ? presetToRange('7d').fromTimestamp : query.fromTimestamp
+    setCustomFrom(toDateInputValue(fromDateTs))
     setCustomTo(toDateInputValue(query.toTimestamp))
     setCustomRangeOpen(true)
   }
