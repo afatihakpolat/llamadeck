@@ -10,23 +10,78 @@ import type {
   UsageSessionStatus,
   UsageStatsQuery,
   UsageStatsSnapshot,
-  UsageStatsWindow,
   UsageSummaryRollup
 } from '../../../shared/types'
 import { resolveTemplatePricing } from '../utils/templatePricing'
 import { PricingTab } from './PricingTab'
 
-const WINDOW_OPTIONS: Array<{ label: string; value: UsageStatsWindow }> = [
+type UsageStatsWindow = 'today' | '7d' | '30d' | 'month' | 'all' | 'custom'
+
+const STORAGE_KEY = 'llamadeck_usage_stats_query_v1'
+
+function presetToRange(preset: Exclude<UsageStatsWindow, 'custom'>): { fromTimestamp: number; toTimestamp: number } {
+  const now = new Date()
+  const toTimestamp = now.getTime()
+  if (preset === 'all') return { fromTimestamp: 0, toTimestamp }
+
+  const localMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime()
+  if (preset === 'today') return { fromTimestamp: localMidnight, toTimestamp }
+  if (preset === '7d') return { fromTimestamp: localMidnight - 6 * 24 * 60 * 60 * 1000, toTimestamp }
+  if (preset === '30d') return { fromTimestamp: localMidnight - 29 * 24 * 60 * 60 * 1000, toTimestamp }
+  // 'month' is calendar-month-to-date: 1st of current local month at 00:00 -> now
+  return { fromTimestamp: new Date(now.getFullYear(), now.getMonth(), 1).getTime(), toTimestamp }
+}
+
+function detectPreset(fromTimestamp: number, toTimestamp: number, now: number = Date.now()): UsageStatsWindow {
+  for (const preset of ['today', '7d', '30d', 'month', 'all'] as const) {
+    const range = presetToRange(preset)
+    if (range.fromTimestamp === fromTimestamp && range.toTimestamp === toTimestamp) {
+      return preset
+    }
+  }
+  // 'all' has a moving toTimestamp (now). Tolerate close-to-now by allowing within 60s.
+  if (fromTimestamp === 0 && Math.abs(toTimestamp - now) < 60_000) return 'all'
+  return 'custom'
+}
+
+function toDateInputValue(timestamp: number): string {
+  const date = new Date(timestamp)
+  const y = date.getFullYear()
+  const m = `${date.getMonth() + 1}`.padStart(2, '0')
+  const d = `${date.getDate()}`.padStart(2, '0')
+  return `${y}-${m}-${d}`
+}
+
+function fromDateInputToLocalMidnightStart(value: string): number {
+  // value is YYYY-MM-DD; interpret as local-midnight start of that day
+  const [y, m, d] = value.split('-').map(Number)
+  return new Date(y, m - 1, d).getTime()
+}
+
+function fromDateInputToLocalEndOfDay(value: string): number {
+  // value is YYYY-MM-DD; interpret as end-of-day local (23:59:59.999) on that day
+  const [y, m, d] = value.split('-').map(Number)
+  return new Date(y, m - 1, d, 23, 59, 59, 999).getTime()
+}
+
+const WINDOW_OPTIONS: Array<{ label: string; value: Exclude<UsageStatsWindow, 'custom'> }> = [
   { label: 'Today', value: 'today' },
   { label: 'Last 7 days', value: '7d' },
+  { label: 'Last 30 days', value: '30d' },
+  { label: 'This month', value: 'month' },
   { label: 'All time', value: 'all' }
 ]
 
-const DEFAULT_QUERY: UsageStatsQuery = {
-  window: '7d',
-  templateId: null,
-  limit: 100
-}
+const DEFAULT_QUERY: UsageStatsQuery = (() => {
+  const now = new Date()
+  const localMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime()
+  return {
+    fromTimestamp: localMidnight - 6 * 24 * 60 * 60 * 1000,
+    toTimestamp: now.getTime(),
+    templateId: null,
+    limit: 100
+  }
+})()
 
 const DEFAULT_USAGE_COST_SETTINGS: UsageCostSettings = {
   currency: 'USD',
@@ -365,7 +420,22 @@ function sortCostSessionGroups(
 
 export default function UsageStatsView() {
   const cards = useStore((state) => state.cards)
-  const [query, setQuery] = useState<UsageStatsQuery>(DEFAULT_QUERY)
+  const [query, setQuery] = useState<UsageStatsQuery>(() => {
+    try {
+      const raw = window.localStorage.getItem(STORAGE_KEY)
+      if (!raw) return DEFAULT_QUERY
+      const parsed = JSON.parse(raw) as Partial<UsageStatsQuery>
+      return {
+        fromTimestamp: typeof parsed.fromTimestamp === 'number' && Number.isFinite(parsed.fromTimestamp) ? parsed.fromTimestamp : DEFAULT_QUERY.fromTimestamp,
+        toTimestamp: typeof parsed.toTimestamp === 'number' && Number.isFinite(parsed.toTimestamp) ? parsed.toTimestamp : DEFAULT_QUERY.toTimestamp,
+        templateId: typeof parsed.templateId === 'string' || parsed.templateId === null ? parsed.templateId : null,
+        limit: typeof parsed.limit === 'number' ? parsed.limit : 100
+      }
+    } catch (storageError) {
+      console.warn('Failed to load saved usage stats query, falling back to defaults:', storageError)
+      return DEFAULT_QUERY
+    }
+  })
   const [activeTab, setActiveTab] = useState<UsageStatsTab>('overview')
   const [sessionStatusFilter, setSessionStatusFilter] = useState<UsageSessionStatusFilter>('all')
   const [sessionGroupBy, setSessionGroupBy] = useState<UsageSessionGroupBy>('none')
@@ -379,6 +449,9 @@ export default function UsageStatsView() {
   const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [costSettingsError, setCostSettingsError] = useState<string | null>(null)
+  const [customRangeOpen, setCustomRangeOpen] = useState(false)
+  const [customFrom, setCustomFrom] = useState<string>('')
+  const [customTo, setCustomTo] = useState<string>('')
   const queryRef = useRef(query)
 
   queryRef.current = query
@@ -467,7 +540,7 @@ export default function UsageStatsView() {
 
   useEffect(() => {
     void loadSnapshot(query, 'initial')
-  }, [query.window, query.templateId])
+  }, [query.fromTimestamp, query.toTimestamp, query.templateId])
 
   useEffect(() => {
     let cancelled = false
@@ -495,6 +568,47 @@ export default function UsageStatsView() {
     return unsubscribe
   }, [])
 
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(query))
+    } catch (storageError) {
+      console.warn('Failed to persist usage stats query:', storageError)
+    }
+  }, [query])
+
+  const activePreset: UsageStatsWindow = detectPreset(query.fromTimestamp, query.toTimestamp)
+  const customRangeValid = (() => {
+    if (!customFrom || !customTo) return false
+    const fromTs = fromDateInputToLocalMidnightStart(customFrom)
+    const toTs = fromDateInputToLocalEndOfDay(customTo)
+    return Number.isFinite(fromTs) && Number.isFinite(toTs) && fromTs <= toTs
+  })()
+
+  function handlePresetClick(preset: Exclude<UsageStatsWindow, 'custom'>) {
+    const range = presetToRange(preset)
+    setQuery((current) => ({ ...current, fromTimestamp: range.fromTimestamp, toTimestamp: range.toTimestamp }))
+    setCustomRangeOpen(false)
+  }
+
+  function openCustomRange() {
+    // Pre-fill the inputs with the current query range so the user has a sensible starting point.
+    setCustomFrom(toDateInputValue(query.fromTimestamp))
+    setCustomTo(toDateInputValue(query.toTimestamp))
+    setCustomRangeOpen(true)
+  }
+
+  function applyCustomRange() {
+    if (!customFrom || !customTo) return
+    const fromDate = new Date(customFrom)
+    const toDate = new Date(customTo)
+    if (Number.isNaN(fromDate.getTime()) || Number.isNaN(toDate.getTime())) return
+    const fromTimestamp = fromDateInputToLocalMidnightStart(customFrom)
+    const toTimestamp = fromDateInputToLocalEndOfDay(customTo)
+    if (fromTimestamp > toTimestamp) return
+    setQuery((current) => ({ ...current, fromTimestamp, toTimestamp }))
+    setCustomRangeOpen(false)
+  }
+
   return (
     <div className="usage-stats-page">
       {costSettingsError && (
@@ -512,13 +626,60 @@ export default function UsageStatsView() {
             {WINDOW_OPTIONS.map((option) => (
               <button
                 key={option.value}
-                className={`usage-window-chip ${query.window === option.value ? 'active' : ''}`}
-                onClick={() => setQuery((current) => ({ ...current, window: option.value }))}
+                className={`usage-window-chip ${activePreset === option.value ? 'active' : ''}`}
+                onClick={() => handlePresetClick(option.value)}
               >
                 {option.label}
               </button>
             ))}
+            <button
+              type="button"
+              className={`usage-window-chip ${activePreset === 'custom' ? 'active' : ''}`}
+              onClick={openCustomRange}
+            >
+              Custom
+            </button>
           </div>
+          {customRangeOpen && (
+            <div className="usage-stats-custom-range">
+              <label className="usage-control-field">
+                <span>From</span>
+                <input
+                  className="form-input"
+                  type="date"
+                  value={customFrom}
+                  onChange={(event) => setCustomFrom(event.target.value)}
+                />
+              </label>
+              <label className="usage-control-field">
+                <span>To</span>
+                <input
+                  className="form-input"
+                  type="date"
+                  value={customTo}
+                  onChange={(event) => setCustomTo(event.target.value)}
+                  min={customFrom || undefined}
+                />
+              </label>
+              <div className="usage-stats-custom-range-actions">
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  onClick={applyCustomRange}
+                  disabled={!customRangeValid}
+                >
+                  Apply
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => setCustomRangeOpen(false)}
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
           <select
             className="form-select usage-template-select"
             value={query.templateId ?? ''}
