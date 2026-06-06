@@ -49,7 +49,6 @@ export interface ModelExitEvent {
   code: number | null
   signal: string | null
 }
-export type UsageStatsWindow = 'today' | '7d' | 'all'
 export type UsageSessionStatus = 'running' | 'stopped' | 'error'
 export interface UsageTimingSnapshot {
   cacheN?: number
@@ -143,7 +142,8 @@ export interface UsageSessionRollup extends UsageSummaryRollup {
   status: UsageSessionStatus
 }
 export interface UsageStatsQuery {
-  window: UsageStatsWindow
+  fromTimestamp: number
+  toTimestamp: number
   templateId?: string | null
   limit?: number
 }
