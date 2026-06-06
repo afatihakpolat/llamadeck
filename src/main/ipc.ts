@@ -43,6 +43,7 @@ import type {
   ModelOutputEvent,
   ModelOutputStream,
   Template,
+  TemplatePricing,
   UsageCostSettings,
   UsageLiveSession,
   UsageRequestRecord,
@@ -1174,6 +1175,28 @@ function getTemplateById(templateId: string): Template | null {
   return listTemplatesFromDirectory(getAppPaths().templates).find((template) => template.id === templateId) ?? null
 }
 
+function normalizeTemplatePricing(value: unknown): TemplatePricing | undefined {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return undefined
+  }
+  const candidate = value as Record<string, unknown>
+  const input = candidate.inputCostPerMillion
+  const cache = candidate.cacheCostPerMillion
+  const output = candidate.outputCostPerMillion
+  if (
+    typeof input !== 'number' || !Number.isFinite(input) || input < 0 ||
+    typeof cache !== 'number' || !Number.isFinite(cache) || cache < 0 ||
+    typeof output !== 'number' || !Number.isFinite(output) || output < 0
+  ) {
+    return undefined
+  }
+  return {
+    inputCostPerMillion: input,
+    cacheCostPerMillion: cache,
+    outputCostPerMillion: output
+  }
+}
+
 function normalizeTemplateRecord(
   template: Record<string, unknown>,
   options: { fileName?: string; idFallback?: string } = {}
@@ -1202,6 +1225,7 @@ function normalizeTemplateRecord(
   const updatedAt = typeof template.updatedAt === 'string' && template.updatedAt.trim()
     ? template.updatedAt
     : createdAt
+  const pricing = normalizeTemplatePricing(template.pricing)
 
   return {
     id,
@@ -1216,6 +1240,7 @@ function normalizeTemplateRecord(
     launchMode: template.launchMode === 'api' ? 'api' : 'chat',
     createdAt,
     updatedAt,
+    ...(pricing ? { pricing } : {}),
     ...(options.fileName ? { _file: options.fileName } : {})
   }
 }
