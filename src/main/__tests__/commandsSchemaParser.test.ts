@@ -57,3 +57,85 @@ describe('parseHelpOutput — fim-qwen (dot in flag name)', () => {
     expect(out[0].type).toBe('boolean')
   })
 })
+
+describe('parseHelpOutput — b9202 full fixture', () => {
+  const full = fixtures('b9202-help.txt')
+  const all = parseHelpOutput(full)
+
+  it('parses at least 240 commands', () => {
+    expect(all.length).toBeGreaterThanOrEqual(240)
+  })
+
+  it('recognizes all 4 sections', () => {
+    const sections = new Set(all.map(c => c.section))
+    expect(sections).toEqual(new Set([
+      'common params', 'sampling params', 'speculative params', 'example-specific params'
+    ]))
+  })
+
+  it('--ctx-size: number, default 0, env recorded', () => {
+    const c = all.find(x => x.arg === '--ctx-size')!
+    expect(c.type).toBe('number')
+    expect(c.default).toBe(0)
+    expect(c.env).toBe('LLAMA_ARG_CTX_SIZE')
+    expect(c.description).not.toMatch(/default:/)
+  })
+
+  it('--flash-attn: select with [on|off|auto] options', () => {
+    const c = all.find(x => x.arg === '--flash-attn')!
+    expect(c.type).toBe('select')
+    expect(c.options).toEqual(['on', 'off', 'auto'])
+  })
+
+  it('--hf-repo: string with angle-bracket placeholder', () => {
+    const c = all.find(x => x.arg === '--hf-repo')!
+    expect(c.type).toBe('string')
+  })
+
+  it('--n-gpu-layers: number, last positive long wins', () => {
+    const c = all.find(x => x.arg === '--n-gpu-layers')!
+    expect(c.type).toBe('number')
+    expect(c.aliasLongs).toContain('--gpu-layers')
+  })
+
+  it('--repack: boolean, default enabled coerced to true', () => {
+    const c = all.find(x => x.arg === '--repack')!
+    expect(c.type).toBe('boolean')
+    expect(c.default).toBe(true)
+  })
+
+  it('--no-perf: recorded as negation, not separate arg', () => {
+    expect(all.find(x => x.arg === '--no-perf')).toBeUndefined()
+    const perf = all.find(x => x.arg === '--perf')!
+    expect(perf.negationLongs).toContain('--no-perf')
+  })
+
+  it('--fim-qwen-1.5b-default: boolean, dot in name', () => {
+    const c = all.find(x => x.arg === '--fim-qwen-1.5b-default')!
+    expect(c.type).toBe('boolean')
+  })
+
+  it('--pooling: select with curly-brace enum', () => {
+    const c = all.find(x => x.arg === '--pooling')!
+    expect(c.type).toBe('select')
+    expect(c.options).toEqual(['none', 'mean', 'cls', 'last', 'rank'])
+  })
+
+  it('--spec-type: select with comma-separated enum', () => {
+    const c = all.find(x => x.arg === '--spec-type')!
+    expect(c.type).toBe('select')
+    expect(c.options).toContain('draft-eagle3')
+  })
+
+  it('every command has a non-empty description', () => {
+    for (const c of all) {
+      expect(c.description.length).toBeGreaterThan(0)
+    }
+  })
+
+  it('no description contains a (default: ...) clause', () => {
+    for (const c of all) {
+      expect(c.description).not.toMatch(/\(default:/)
+    }
+  })
+})

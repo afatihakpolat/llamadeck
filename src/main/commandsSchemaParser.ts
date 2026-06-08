@@ -173,7 +173,17 @@ export function parseHelpOutput(stdout: string): Command[] {
         descLines.push(trimmed.replace(/\s*\(default:.*$/, ''))
       }
 
-      const description = descLines.join(' ').replace(/\s+/g, ' ').trim()
+      const joined = descLines.join(' ').replace(/\s+/g, ' ').trim()
+      // Final pass: strip a (default: ...) clause that may have wrapped across
+      // the flag line and a continuation line, and capture its value.
+      const wrappedDefault = joined.match(/\(default:\s*([^)]+)\)\s*$/)
+      let description = joined
+      if (wrappedDefault) {
+        if (defaults.length === 0) defaults.push(wrappedDefault[1].trim())
+        description = joined.replace(/\s*\(default:[^)]*\)\s*$/, '').trim()
+      } else {
+        description = joined
+      }
 
       let type: Command['type'] = 'string'
       let options: string[] | undefined
