@@ -77,20 +77,16 @@ function isBlankOrIndented(line: string): boolean {
   return line.trim() === '' || isIndented(line)
 }
 
-function extractAndStripDefault(s: string): { default: string | null; cleaned: string } {
-  if (!s) return { default: null, cleaned: s }
-  const m = s.match(/\(default:\s*([^,)]+)/)
-  if (!m) return { default: null, cleaned: s }
-  return { default: m[1].trim(), cleaned: s.replace(/\s*\(default:.*$/, '').trim() }
-}
-
 function coerceDefault(raw: string, type: Command['type']): string | number | boolean | null {
   if (type === 'number' || type === 'boolean') {
     const n = Number(raw)
     if (!Number.isNaN(n)) return n
     if (/^(enabled|true|on)$/i.test(raw)) return true
     if (/^(disabled|false|off)$/i.test(raw)) return false
-    return null
+    // Fall through: value can't be coerced to number/boolean, return as string.
+    // This covers wrapped defaults like "same as --threads" or string-valued
+    // enums where the placeholder type is 'number' but the default is a reference.
+    return raw.replace(/^['"]|['"]$/g, '')
   }
   return raw.replace(/^['"]|['"]$/g, '')
 }
@@ -126,26 +122,22 @@ export function parseHelpOutput(stdout: string): Command[] {
         i++
       }
 
-      let descLines = [flag.descStart]
-      let defaults: string[] = []
+      // Build description from raw lines WITHOUT stripping any (default: ...)
+      // clauses mid-loop. The (default: ...) clause may wrap across lines or
+      // span multiple tokens (commas, references like "same as --threads"),
+      // so we keep the raw text in place during the join and run a single
+      // multi-line regex pass afterwards to capture and strip all clauses.
+      const descLines: string[] = []
+      descLines.push(flag.descStart.trim())
       let envs: string[] = []
       let allowedValues: string[] | null = null
       let deprecated = false
       let deprecationNote: string | null = null
       let validRange: { min: number; max: number } | null = null
 
-      const inline = extractAndStripDefault(flag.descStart)
-      if (inline.default) defaults.push(inline.default)
-      descLines = [inline.cleaned]
-
       for (const cl of cont) {
         const trimmed = cl.trim()
         if (!trimmed) continue
-        if (trimmed.startsWith('(default:')) {
-          const m = trimmed.match(/^\(default:\s*([^,)]+)/)
-          if (m) defaults.push(m[1].trim())
-          continue
-        }
         if (trimmed.startsWith('(env:')) {
           const m = trimmed.match(/^\(env:\s*([A-Z_][A-Z0-9_]*)\)\s*$/)
           if (m) envs.push(m[1])
@@ -170,19 +162,29 @@ export function parseHelpOutput(stdout: string): Command[] {
         if (rangeMatch && !validRange) {
           validRange = { min: parseFloat(rangeMatch[1]), max: parseFloat(rangeMatch[2]) }
         }
-        descLines.push(trimmed.replace(/\s*\(default:.*$/, ''))
+        descLines.push(trimmed)
       }
 
       const joined = descLines.join(' ').replace(/\s+/g, ' ').trim()
-      // Final pass: strip a (default: ...) clause that may have wrapped across
-      // the flag line and a continuation line, and capture its value.
-      const wrappedDefault = joined.match(/\(default:\s*([^)]+)\)\s*$/)
+
+      // Single multi-line pass: find the first (default: ... ) clause, capture
+      // its value (first match wins), and strip ALL such clauses from the
+      // description. The regex is non-greedy and matches across newlines,
+      // which is what lets the value span multiple wrapped lines.
+      const defaultRegex = /\(default:\s*([\s\S]+?)\)/g
+      const firstMatch = defaultRegex.exec(joined)
       let description = joined
-      if (wrappedDefault) {
-        if (defaults.length === 0) defaults.push(wrappedDefault[1].trim())
-        description = joined.replace(/\s*\(default:[^)]*\)\s*$/, '').trim()
-      } else {
-        description = joined
+      let capturedDefault: string | null = null
+      if (firstMatch) {
+        // Collapse whitespace in the captured value (e.g. "same as\n--threads"
+        // becomes "same as --threads") and apply the existing smart split:
+        // when the value contains a comma, take only the part before the
+        // first comma. This matches the previous behavior for values like
+        // "(default: 0, 0 = loaded from model)" which should capture "0".
+        const rawValue = firstMatch[1].replace(/\s+/g, ' ').trim()
+        const commaIdx = rawValue.indexOf(',')
+        capturedDefault = commaIdx >= 0 ? rawValue.slice(0, commaIdx).trim() : rawValue
+        description = joined.replace(/\(default:\s*[\s\S]+?\)/g, '').replace(/\s+/g, ' ').trim()
       }
 
       let type: Command['type'] = 'string'
@@ -217,8 +219,8 @@ export function parseHelpOutput(stdout: string): Command[] {
       if (flag.aliasLongs.length > 0) cmd.aliasLongs = flag.aliasLongs
       if (flag.negationLongs.length > 0) cmd.negationLongs = flag.negationLongs
       if (flag.negationShort) cmd.negationShort = flag.negationShort
-      if (defaults.length > 0) {
-        const coerced = coerceDefault(defaults[0], type)
+      if (capturedDefault !== null) {
+        const coerced = coerceDefault(capturedDefault, type)
         if (coerced !== null) cmd.default = coerced
       }
       if (envs.length > 0) cmd.env = envs[0]

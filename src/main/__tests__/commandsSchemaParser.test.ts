@@ -138,4 +138,36 @@ describe('parseHelpOutput — b9202 full fixture', () => {
       expect(c.description).not.toMatch(/\(default:/)
     }
   })
+
+  it('every description has balanced parentheses', () => {
+    for (const c of all) {
+      const opens = (c.description.match(/\(/g) || []).length
+      const closes = (c.description.match(/\)/g) || []).length
+      expect({ arg: c.arg, opens, closes }).toMatchObject({ opens: closes })
+    }
+  })
+
+  it('--samplers: default captured, description has no stray paren', () => {
+    const c = all.find(x => x.arg === '--samplers')!
+    expect(c.default).toBe('penalties;dry;top_n_sigma;top_k;typ_p;top_p;min_p;xtc;temperature')
+    expect(c.description).not.toMatch(/\)$/)
+  })
+
+  it('--sampling-seq: default captured', () => {
+    const c = all.find(x => x.arg === '--sampling-seq')!
+    expect(c.default).toBe('edskypmxt')
+    expect(c.description).not.toMatch(/\)$/)
+  })
+
+  it('--threads-draft: default captured, value is "same as --threads"', () => {
+    const c = all.find(x => x.arg === '--threads-draft')!
+    expect(c.default).toBe('same as --threads')
+    expect(c.description).not.toMatch(/\)$/)
+  })
+
+  it('--spec-type: default captured', () => {
+    const c = all.find(x => x.arg === '--spec-type')!
+    expect(c.default).toBe('none')
+    expect(c.description).not.toMatch(/\)$/)
+  })
 })
