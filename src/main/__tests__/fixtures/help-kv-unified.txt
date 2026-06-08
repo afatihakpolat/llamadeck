@@ -1,0 +1,6 @@
+----- example-specific params -----
+
+-kvu,  --kv-unified, -no-kvu, --no-kv-unified
+                                        use single unified KV buffer shared across all sequences (default:
+                                        enabled if number of slots is auto)
+                                        (env: LLAMA_ARG_KV_UNIFIED)
