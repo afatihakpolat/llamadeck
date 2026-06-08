@@ -58,7 +58,10 @@ export type Overlay = z.infer<typeof OverlaySchema>
 // validation when loading from disk.
 export const MergedCommandSchema = CommandSchema.extend({
   label: z.string(),
-  category: z.string().optional()
+  category: z.string().optional(),
+  placeholder: z.string().optional(),
+  min: z.number().optional(),
+  max: z.number().optional()
 })
 export const MergedCategorySchema = z.object({
   name: z.string(),
