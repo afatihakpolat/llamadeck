@@ -167,6 +167,21 @@ export function parseHelpOutput(stdout: string): Command[] {
 
       const joined = descLines.join(' ').replace(/\s+/g, ' ').trim()
 
+      // The deprecation marker `[DEPRECATED: ...]` may appear either on the
+      // flag line itself (captured into `flag.descStart` and thus into
+      // `joined`) or on a continuation line (already handled by the loop
+      // above). Detect it on the joined description so flags like
+      // `--webui-config`, `--webui-config-file`, and `--webui` are
+      // correctly marked deprecated. Also pull a deprecation note from the
+      // description if none was captured from a continuation line.
+      if (!deprecated && joined.includes('[DEPRECATED:')) {
+        deprecated = true
+      }
+      if (deprecated && !deprecationNote) {
+        const match = joined.match(/\[DEPRECATED:[^\]]*\]/)
+        if (match) deprecationNote = match[0]
+      }
+
       // Single multi-line pass: find the first (default: ... ) clause, capture
       // its value (first match wins), and strip ALL such clauses from the
       // description. The regex is non-greedy and matches across newlines,

@@ -170,4 +170,12 @@ describe('parseHelpOutput — b9202 full fixture', () => {
     expect(c.default).toBe('none')
     expect(c.description).not.toMatch(/\)$/)
   })
+
+  it('every command with [DEPRECATED: in its raw line ends up with deprecated: true', () => {
+    // Count deprecations in the raw fixture
+    const raw = fixtures('b9202-help.txt')
+    const rawCount = (raw.match(/\[DEPRECATED:/g) || []).length
+    const parsedDepCount = all.filter(c => c.deprecated).length
+    expect({ rawCount, parsedDepCount }).toMatchObject({ rawCount: parsedDepCount })
+  })
 })
