@@ -2323,14 +2323,20 @@ export function registerIpcHandlers(): void {
 
         event.sender.send('download-progress', { percent: 95, phase: 'generating-schema' })
         void (async () => {
-          const genResult = await generateCommandsSchema({ backend: nextBackend })
-          if (!genResult.ok) {
-            console.warn('[commands-schema-gen] post-build generation failed:', genResult.error)
-            // Continue — don't fail the build
-          }
+          try {
+            const genResult = await generateCommandsSchema({ backend: nextBackend })
+            if (!genResult.ok) {
+              console.warn('[commands-schema-gen] post-build generation failed:', genResult.error)
+              // Continue — don't fail the build
+            }
 
-          event.sender.send('download-progress', { percent: 100, phase: 'done' })
-          resolve({ success: true, result: buildBackendUpdateResult(nextBackend.name) })
+            event.sender.send('download-progress', { percent: 100, phase: 'done' })
+            resolve({ success: true, result: buildBackendUpdateResult(nextBackend.name) })
+          } catch (err) {
+            console.error('[commands-schema-gen] unexpected error:', err)
+            event.sender.send('download-progress', { percent: 100, phase: 'done' })
+            resolve({ success: false, error: `Schema generation crashed: ${(err as Error).message}` })
+          }
         })()
       })
     })
