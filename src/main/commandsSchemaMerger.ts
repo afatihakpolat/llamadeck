@@ -1,4 +1,4 @@
-import type { Command, Overlay, MergedSchemaType } from './schemas'
+import type { Command, Overlay, MergedCommandType, MergedCategoryType, MergedSchemaType } from './schemas'
 
 const CATEGORY_ORDER = [
   'Model', 'Performance', 'GPU', 'KV Cache', 'Sampling',
@@ -7,7 +7,7 @@ const CATEGORY_ORDER = [
 
 interface UserOverride {
   version: string
-  categories: { name: string; icon: string; commands: any[] }[]
+  categories: MergedCategoryType[]
 }
 
 function deriveLabel(arg: string): string {
@@ -25,18 +25,25 @@ function findOverlayEntry(cmd: Command, overlay: Overlay) {
   return null
 }
 
-function findUserOverride(cmd: Command, userOverride: UserOverride | null): any | null {
-  if (!userOverride) return null
-  const allUserArgs = new Map<string, any>()
+function buildUserArgsMap(userOverride: UserOverride | null): Map<string, MergedCommandType> {
+  const map = new Map<string, MergedCommandType>()
+  if (!userOverride) return map
   for (const cat of userOverride.categories) {
-    for (const c of cat.commands) allUserArgs.set(c.arg, c)
+    for (const c of cat.commands) map.set(c.arg, c)
   }
-  if (allUserArgs.has(cmd.arg)) return allUserArgs.get(cmd.arg)
+  return map
+}
+
+function findUserOverride(
+  cmd: Command,
+  userArgs: Map<string, MergedCommandType>
+): MergedCommandType | null {
+  if (userArgs.has(cmd.arg)) return userArgs.get(cmd.arg)!
   for (const alias of cmd.aliasLongs || []) {
-    if (allUserArgs.has(alias)) return allUserArgs.get(alias)
+    if (userArgs.has(alias)) return userArgs.get(alias)!
   }
   for (const neg of cmd.negationLongs || []) {
-    if (allUserArgs.has(neg)) return allUserArgs.get(neg)
+    if (userArgs.has(neg)) return userArgs.get(neg)!
   }
   return null
 }
@@ -46,53 +53,54 @@ export function mergeCommandsSchema(
   overlay: Overlay,
   userOverride: UserOverride | null
 ): MergedSchemaType {
-  const byCategory = new Map<string, { name: string; icon: string; commands: any[] }>()
+  const byCategory = new Map<string, MergedCategoryType>()
+  const userArgs = buildUserArgsMap(userOverride)
 
-  for (const cmd of structural) {
-    const curated = findOverlayEntry(cmd, overlay)
-    const userOverride_ = findUserOverride(cmd, userOverride)
+  for (const command of structural) {
+    const curated = findOverlayEntry(command, overlay)
+    const userEntry = findUserOverride(command, userArgs)
 
-    const sectionMapEntry = overlay.sectionMap[cmd.section || '']
+    const sectionMapEntry = overlay.sectionMap[command.section || '']
     const fallbackName = sectionMapEntry?.name || 'Other'
     const fallbackIcon = sectionMapEntry?.icon || 'Settings'
 
-    const categoryName = userOverride_?.category || curated?.category || fallbackName
-    const categoryIcon = userOverride_?.icon || curated?.icon || fallbackIcon
+    const categoryName = userEntry?.category || curated?.category || fallbackName
+    const categoryIcon = curated?.icon || fallbackIcon
 
     if (!byCategory.has(categoryName)) {
       byCategory.set(categoryName, { name: categoryName, icon: categoryIcon, commands: [] })
     }
 
-    const merged: any = {
-      arg: cmd.arg,
-      description: cmd.description,
-      type: cmd.type
+    const merged: MergedCommandType = {
+      arg: command.arg,
+      description: command.description,
+      type: command.type,
+      label: userEntry?.label || curated?.label || deriveLabel(command.arg)
     }
-    if (cmd.short) merged.short = cmd.short
-    if (cmd.default !== undefined) merged.default = cmd.default
-    if (cmd.env) merged.env = cmd.env
-    if (cmd.options) merged.options = cmd.options
-    if (cmd.deprecated) {
+    if (command.short) merged.short = command.short
+    if (command.default !== undefined) merged.default = command.default
+    if (command.env) merged.env = command.env
+    if (command.options) merged.options = command.options
+    if (command.deprecated) {
       merged.deprecated = true
-      if (cmd.deprecationNote) merged.deprecationNote = cmd.deprecationNote
+      if (command.deprecationNote) merged.deprecationNote = command.deprecationNote
     }
-    merged.label = userOverride_?.label || curated?.label || deriveLabel(cmd.arg)
-    if (userOverride_?.placeholder !== undefined) merged.placeholder = userOverride_.placeholder
+    if (userEntry?.placeholder !== undefined) merged.placeholder = userEntry.placeholder
     else if (curated?.placeholder) merged.placeholder = curated.placeholder
-    if (userOverride_?.min !== undefined) merged.min = userOverride_.min
+    if (userEntry?.min !== undefined) merged.min = userEntry.min
     else if (curated?.min !== undefined) merged.min = curated.min
-    if (userOverride_?.max !== undefined) merged.max = userOverride_.max
+    if (userEntry?.max !== undefined) merged.max = userEntry.max
     else if (curated?.max !== undefined) merged.max = curated.max
 
     // User override wins for any field it sets, including structural fields
     // like default, description, options, etc.
-    if (userOverride_) {
-      if (userOverride_.default !== undefined) merged.default = userOverride_.default
-      if (userOverride_.description !== undefined) merged.description = userOverride_.description
-      if (userOverride_.type !== undefined) merged.type = userOverride_.type
-      if (userOverride_.short !== undefined) merged.short = userOverride_.short
-      if (userOverride_.env !== undefined) merged.env = userOverride_.env
-      if (userOverride_.options !== undefined) merged.options = userOverride_.options
+    if (userEntry) {
+      if (userEntry.default !== undefined) merged.default = userEntry.default
+      if (userEntry.description !== undefined) merged.description = userEntry.description
+      if (userEntry.type !== undefined) merged.type = userEntry.type
+      if (userEntry.short !== undefined) merged.short = userEntry.short
+      if (userEntry.env !== undefined) merged.env = userEntry.env
+      if (userEntry.options !== undefined) merged.options = userEntry.options
     }
 
     byCategory.get(categoryName)!.commands.push(merged)
