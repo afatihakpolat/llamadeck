@@ -1,0 +1,4 @@
+----- common params -----
+
+-c,    --ctx-size N                     size of the prompt context (default: 0, 0 = loaded from model)
+                                        (env: LLAMA_ARG_CTX_SIZE)

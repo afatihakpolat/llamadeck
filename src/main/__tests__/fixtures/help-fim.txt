@@ -1,0 +1,4 @@
+----- example-specific params -----
+
+--fim-qwen-1.5b-default                 use default Qwen 2.5 Coder 1.5B (note: can download weights from the
+                                        internet)

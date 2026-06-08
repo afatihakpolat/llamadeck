@@ -8,7 +8,8 @@ files:
   - out/renderer/**/*
   - assets/icon.png
   - assets/icon_256.png
-  - resources/commands.json
+  - resources/commands/overlay.json
+  - resources/commands/b9202.json
 win:
   target:
     - target: nsis

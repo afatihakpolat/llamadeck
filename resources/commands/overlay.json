@@ -1,0 +1,1195 @@
+{
+  "version": "1.0",
+  "sectionMap": {
+    "common params": {
+      "name": "Performance",
+      "icon": "Cpu"
+    },
+    "sampling params": {
+      "name": "Sampling",
+      "icon": "Sliders"
+    },
+    "speculative params": {
+      "name": "Speculative Decoding",
+      "icon": "GitBranch"
+    },
+    "example-specific params": {
+      "name": "Server",
+      "icon": "Server"
+    }
+  },
+  "args": {
+    "--model": {
+      "label": "Model Path",
+      "category": "Model",
+      "icon": "Box",
+      "placeholder": "/path/to/model.gguf"
+    },
+    "--model-url": {
+      "label": "Model URL",
+      "category": "Model",
+      "icon": "Box",
+      "placeholder": "https://..."
+    },
+    "--hf-repo": {
+      "label": "HuggingFace Repo",
+      "category": "Model",
+      "icon": "Box",
+      "placeholder": "ggml-org/GLM-4.7-Flash-GGUF:Q4_K_M"
+    },
+    "--hf-file": {
+      "label": "HuggingFace File",
+      "category": "Model",
+      "icon": "Box",
+      "placeholder": "model.gguf"
+    },
+    "--hf-token": {
+      "label": "HuggingFace Token",
+      "category": "Model",
+      "icon": "Box",
+      "placeholder": "hf_..."
+    },
+    "--ctx-size": {
+      "label": "Context Size",
+      "category": "Model",
+      "icon": "Box",
+      "min": 0
+    },
+    "--n-predict": {
+      "label": "Max Tokens to Predict",
+      "category": "Model",
+      "icon": "Box",
+      "min": -1,
+      "max": 65536
+    },
+    "--lora": {
+      "label": "LoRA Adapter",
+      "category": "Model",
+      "icon": "Box",
+      "placeholder": "/path/to/lora.gguf"
+    },
+    "--mmproj": {
+      "label": "Multimodal Projector",
+      "category": "Model",
+      "icon": "Box",
+      "placeholder": "/path/to/mmproj.gguf"
+    },
+    "--control-vector": {
+      "label": "Control Vector",
+      "category": "Model",
+      "icon": "Box",
+      "placeholder": "/path/to/file"
+    },
+    "--control-vector-layer-range": {
+      "label": "Control Vector Layer Range",
+      "category": "Model",
+      "icon": "Box"
+    },
+    "--control-vector-scaled": {
+      "label": "Control Vector Scaled",
+      "category": "Model",
+      "icon": "Box",
+      "placeholder": "/path/to/file"
+    },
+    "--hf-file-v": {
+      "label": "Hf File V",
+      "category": "Model",
+      "icon": "Box",
+      "placeholder": "/path/to/file"
+    },
+    "--lora-init-without-apply": {
+      "label": "Lora Init Without Apply",
+      "category": "Model",
+      "icon": "Box"
+    },
+    "--lora-scaled": {
+      "label": "Lora Scaled",
+      "category": "Model",
+      "icon": "Box",
+      "placeholder": "/path/to/file"
+    },
+    "--mmproj-auto": {
+      "label": "Mmproj Auto",
+      "category": "Model",
+      "icon": "Box"
+    },
+    "--mmproj-offload": {
+      "label": "Mmproj Offload",
+      "category": "Model",
+      "icon": "Box"
+    },
+    "--models-autoload": {
+      "label": "Models Autoload",
+      "category": "Model",
+      "icon": "Box"
+    },
+    "--models-dir": {
+      "label": "Models Dir",
+      "category": "Model",
+      "icon": "Box"
+    },
+    "--models-max": {
+      "label": "Models Max",
+      "category": "Model",
+      "icon": "Box"
+    },
+    "--models-preset": {
+      "label": "Models Preset",
+      "category": "Model",
+      "icon": "Box"
+    },
+    "--override-kv": {
+      "label": "Override Kv",
+      "category": "Model",
+      "icon": "Box"
+    },
+    "--threads": {
+      "label": "CPU Threads",
+      "category": "Performance",
+      "icon": "Cpu",
+      "min": -1,
+      "max": 256
+    },
+    "--threads-batch": {
+      "label": "Batch Threads",
+      "category": "Performance",
+      "icon": "Cpu",
+      "min": -1,
+      "max": 256
+    },
+    "--batch-size": {
+      "label": "Batch Size",
+      "category": "Performance",
+      "icon": "Cpu",
+      "min": 1,
+      "max": 65536
+    },
+    "--ubatch-size": {
+      "label": "Micro-Batch Size",
+      "category": "Performance",
+      "icon": "Cpu",
+      "min": 1,
+      "max": 65536
+    },
+    "--parallel": {
+      "label": "Parallel Sequences",
+      "category": "Performance",
+      "icon": "Cpu",
+      "min": 1,
+      "max": 64
+    },
+    "--keep": {
+      "label": "Keep Tokens",
+      "category": "Performance",
+      "icon": "Cpu",
+      "min": -1,
+      "max": 65536
+    },
+    "--mlock": {
+      "label": "Memory Lock",
+      "category": "Performance",
+      "icon": "Cpu"
+    },
+    "--mmap": {
+      "label": "Memory Map",
+      "category": "Performance",
+      "icon": "Cpu"
+    },
+    "--flash-attn": {
+      "label": "Flash Attention",
+      "category": "Performance",
+      "icon": "Cpu"
+    },
+    "--swa-full": {
+      "label": "Full SWA Cache",
+      "category": "Performance",
+      "icon": "Cpu"
+    },
+    "--check-tensors": {
+      "label": "Check Tensors",
+      "category": "Performance",
+      "icon": "Cpu"
+    },
+    "--prio": {
+      "label": "Process Priority",
+      "category": "Performance",
+      "icon": "Cpu"
+    },
+    "--poll": {
+      "label": "Poll Level",
+      "category": "Performance",
+      "icon": "Cpu",
+      "min": 0,
+      "max": 100
+    },
+    "--numa": {
+      "label": "NUMA Mode",
+      "category": "Performance",
+      "icon": "Cpu"
+    },
+    "--adaptive-decay": {
+      "label": "Adaptive Decay",
+      "category": "Performance",
+      "icon": "Cpu"
+    },
+    "--adaptive-target": {
+      "label": "Adaptive Target",
+      "category": "Performance",
+      "icon": "Cpu"
+    },
+    "--cache-idle-slots": {
+      "label": "Cache Idle Slots",
+      "category": "Performance",
+      "icon": "Cpu"
+    },
+    "--cache-prompt": {
+      "label": "Cache Prompt",
+      "category": "Performance",
+      "icon": "Cpu"
+    },
+    "--cache-ram": {
+      "label": "Cache Ram",
+      "category": "Performance",
+      "icon": "Cpu"
+    },
+    "--cache-reuse": {
+      "label": "Cache Reuse",
+      "category": "Performance",
+      "icon": "Cpu"
+    },
+    "--checkpoint-every-n-tokens": {
+      "label": "Checkpoint Every N Tokens",
+      "category": "Performance",
+      "icon": "Cpu"
+    },
+    "--context-shift": {
+      "label": "Context Shift",
+      "category": "Performance",
+      "icon": "Cpu"
+    },
+    "--cpu-strict": {
+      "label": "Cpu Strict",
+      "category": "Performance",
+      "icon": "Cpu"
+    },
+    "--cpu-strict-batch": {
+      "label": "Cpu Strict Batch",
+      "category": "Performance",
+      "icon": "Cpu"
+    },
+    "--ctx-checkpoints": {
+      "label": "Ctx Checkpoints",
+      "category": "Performance",
+      "icon": "Cpu"
+    },
+    "--draft": {
+      "label": "Draft",
+      "category": "Performance",
+      "icon": "Cpu"
+    },
+    "--draft-min": {
+      "label": "Draft Min",
+      "category": "Performance",
+      "icon": "Cpu"
+    },
+    "--embd-gemma-default": {
+      "label": "Embd Gemma Default",
+      "category": "Performance",
+      "icon": "Cpu"
+    },
+    "--embd-normalize": {
+      "label": "Embd Normalize",
+      "category": "Performance",
+      "icon": "Cpu"
+    },
+    "--embedding": {
+      "label": "Embedding",
+      "category": "Performance",
+      "icon": "Cpu"
+    },
+    "--fim-qwen-1": {
+      "label": "Fim Qwen 1",
+      "category": "Performance",
+      "icon": "Cpu"
+    },
+    "--fim-qwen-14b-spec": {
+      "label": "Fim Qwen 14b Spec",
+      "category": "Performance",
+      "icon": "Cpu"
+    },
+    "--fim-qwen-30b-default": {
+      "label": "Fim Qwen 30b Default",
+      "category": "Performance",
+      "icon": "Cpu"
+    },
+    "--fim-qwen-3b-default": {
+      "label": "Fim Qwen 3b Default",
+      "category": "Performance",
+      "icon": "Cpu"
+    },
+    "--fim-qwen-7b-default": {
+      "label": "Fim Qwen 7b Default",
+      "category": "Performance",
+      "icon": "Cpu"
+    },
+    "--fim-qwen-7b-spec": {
+      "label": "Fim Qwen 7b Spec",
+      "category": "Performance",
+      "icon": "Cpu"
+    },
+    "--gpt-oss-120b-default": {
+      "label": "Gpt Oss 120b Default",
+      "category": "Performance",
+      "icon": "Cpu"
+    },
+    "--gpt-oss-20b-default": {
+      "label": "Gpt Oss 20b Default",
+      "category": "Performance",
+      "icon": "Cpu"
+    },
+    "--image-max-tokens": {
+      "label": "Image Max Tokens",
+      "category": "Performance",
+      "icon": "Cpu"
+    },
+    "--image-min-tokens": {
+      "label": "Image Min Tokens",
+      "category": "Performance",
+      "icon": "Cpu"
+    },
+    "--media-path": {
+      "label": "Media Path",
+      "category": "Performance",
+      "icon": "Cpu",
+      "placeholder": "/path/to/file"
+    },
+    "--no-host": {
+      "label": "No Host",
+      "category": "Performance",
+      "icon": "Cpu"
+    },
+    "--path": {
+      "label": "Path",
+      "category": "Performance",
+      "icon": "Cpu",
+      "placeholder": "/path/to/file"
+    },
+    "--perf": {
+      "label": "Perf",
+      "category": "Performance",
+      "icon": "Cpu"
+    },
+    "--poll-batch": {
+      "label": "Poll Batch",
+      "category": "Performance",
+      "icon": "Cpu"
+    },
+    "--pooling": {
+      "label": "Pooling",
+      "category": "Performance",
+      "icon": "Cpu"
+    },
+    "--prefill-assistant": {
+      "label": "Prefill Assistant",
+      "category": "Performance",
+      "icon": "Cpu"
+    },
+    "--prio-batch": {
+      "label": "Prio Batch",
+      "category": "Performance",
+      "icon": "Cpu"
+    },
+    "--props": {
+      "label": "Props",
+      "category": "Performance",
+      "icon": "Cpu"
+    },
+    "--rerank": {
+      "label": "Rerank",
+      "category": "Performance",
+      "icon": "Cpu"
+    },
+    "--reuse-port": {
+      "label": "Reuse Port",
+      "category": "Performance",
+      "icon": "Cpu"
+    },
+    "--skip-chat-parsing": {
+      "label": "Skip Chat Parsing",
+      "category": "Performance",
+      "icon": "Cpu"
+    },
+    "--sleep-idle-seconds": {
+      "label": "Sleep Idle Seconds",
+      "category": "Performance",
+      "icon": "Cpu"
+    },
+    "--slot-save-path": {
+      "label": "Slot Save Path",
+      "category": "Performance",
+      "icon": "Cpu",
+      "placeholder": "/path/to/file"
+    },
+    "--spm-infill": {
+      "label": "Spm Infill",
+      "category": "Performance",
+      "icon": "Cpu"
+    },
+    "--tags": {
+      "label": "Tags",
+      "category": "Performance",
+      "icon": "Cpu"
+    },
+    "--threads-http": {
+      "label": "Threads Http",
+      "category": "Performance",
+      "icon": "Cpu"
+    },
+    "--tools": {
+      "label": "Tools",
+      "category": "Performance",
+      "icon": "Cpu"
+    },
+    "--tts-use-guide-tokens": {
+      "label": "Tts Use Guide Tokens",
+      "category": "Performance",
+      "icon": "Cpu"
+    },
+    "--ui": {
+      "label": "Ui",
+      "category": "Performance",
+      "icon": "Cpu"
+    },
+    "--ui-config": {
+      "label": "Ui Config",
+      "category": "Performance",
+      "icon": "Cpu"
+    },
+    "--ui-config-file": {
+      "label": "Ui Config File",
+      "category": "Performance",
+      "icon": "Cpu",
+      "placeholder": "/path/to/file"
+    },
+    "--ui-mcp-proxy": {
+      "label": "Ui Mcp Proxy",
+      "category": "Performance",
+      "icon": "Cpu"
+    },
+    "--vision-gemma-12b-default": {
+      "label": "Vision Gemma 12b Default",
+      "category": "Performance",
+      "icon": "Cpu"
+    },
+    "--vision-gemma-4b-default": {
+      "label": "Vision Gemma 4b Default",
+      "category": "Performance",
+      "icon": "Cpu"
+    },
+    "--warmup": {
+      "label": "Warmup",
+      "category": "Performance",
+      "icon": "Cpu"
+    },
+    "--webui": {
+      "label": "Webui",
+      "category": "Performance",
+      "icon": "Cpu"
+    },
+    "--webui-config": {
+      "label": "Webui Config",
+      "category": "Performance",
+      "icon": "Cpu"
+    },
+    "--webui-config-file": {
+      "label": "Webui Config File",
+      "category": "Performance",
+      "icon": "Cpu",
+      "placeholder": "/path/to/file"
+    },
+    "--webui-mcp-proxy": {
+      "label": "Webui Mcp Proxy",
+      "category": "Performance",
+      "icon": "Cpu"
+    },
+    "--gpu-layers": {
+      "label": "GPU Layers",
+      "category": "GPU",
+      "icon": "Zap",
+      "placeholder": "auto"
+    },
+    "--split-mode": {
+      "label": "Split Mode",
+      "category": "GPU",
+      "icon": "Zap"
+    },
+    "--main-gpu": {
+      "label": "Main GPU",
+      "category": "GPU",
+      "icon": "Zap",
+      "min": 0,
+      "max": 16
+    },
+    "--device": {
+      "label": "Devices",
+      "category": "GPU",
+      "icon": "Zap",
+      "placeholder": "CUDA0,CUDA1"
+    },
+    "--tensor-split": {
+      "label": "Tensor Split",
+      "category": "GPU",
+      "icon": "Zap",
+      "placeholder": "3,1"
+    },
+    "--kv-offload": {
+      "label": "KV Cache Offload",
+      "category": "GPU",
+      "icon": "Zap"
+    },
+    "--op-offload": {
+      "label": "Op Offload",
+      "category": "GPU",
+      "icon": "Zap"
+    },
+    "--fit": {
+      "label": "Auto Fit Memory",
+      "category": "GPU",
+      "icon": "Zap"
+    },
+    "--cpu-moe": {
+      "label": "CPU MoE",
+      "category": "GPU",
+      "icon": "Zap"
+    },
+    "--fit-ctx": {
+      "label": "Fit Ctx",
+      "category": "GPU",
+      "icon": "Zap"
+    },
+    "--fit-target": {
+      "label": "Fit Target",
+      "category": "GPU",
+      "icon": "Zap"
+    },
+    "--n-cpu-moe": {
+      "label": "N Cpu Moe",
+      "category": "GPU",
+      "icon": "Zap"
+    },
+    "--cache-type-k": {
+      "label": "KV Cache Type (K)",
+      "category": "KV Cache",
+      "icon": "Database"
+    },
+    "--cache-type-v": {
+      "label": "KV Cache Type (V)",
+      "category": "KV Cache",
+      "icon": "Database"
+    },
+    "--repack": {
+      "label": "Weight Repacking",
+      "category": "KV Cache",
+      "icon": "Database"
+    },
+    "--temperature": {
+      "label": "Temperature",
+      "category": "Sampling",
+      "icon": "Sliders",
+      "min": 0,
+      "max": 2
+    },
+    "--top-k": {
+      "label": "Top-K",
+      "category": "Sampling",
+      "icon": "Sliders",
+      "min": 0,
+      "max": 1000
+    },
+    "--top-p": {
+      "label": "Top-P",
+      "category": "Sampling",
+      "icon": "Sliders",
+      "min": 0,
+      "max": 1
+    },
+    "--min-p": {
+      "label": "Min-P",
+      "category": "Sampling",
+      "icon": "Sliders",
+      "min": 0,
+      "max": 1
+    },
+    "--seed": {
+      "label": "Seed",
+      "category": "Sampling",
+      "icon": "Sliders",
+      "min": -1,
+      "max": 2147483647
+    },
+    "--repeat-penalty": {
+      "label": "Repeat Penalty",
+      "category": "Sampling",
+      "icon": "Sliders",
+      "min": 0,
+      "max": 2
+    },
+    "--repeat-last-n": {
+      "label": "Repeat Last N",
+      "category": "Sampling",
+      "icon": "Sliders",
+      "min": -1,
+      "max": 65536
+    },
+    "--presence-penalty": {
+      "label": "Presence Penalty",
+      "category": "Sampling",
+      "icon": "Sliders",
+      "min": 0,
+      "max": 2
+    },
+    "--frequency-penalty": {
+      "label": "Frequency Penalty",
+      "category": "Sampling",
+      "icon": "Sliders",
+      "min": 0,
+      "max": 2
+    },
+    "--dynatemp-range": {
+      "label": "Dynamic Temp Range",
+      "category": "Sampling",
+      "icon": "Sliders",
+      "min": 0,
+      "max": 2
+    },
+    "--dynatemp-exp": {
+      "label": "Dynamic Temp Exponent",
+      "category": "Sampling",
+      "icon": "Sliders",
+      "min": 0,
+      "max": 4
+    },
+    "--mirostat": {
+      "label": "Mirostat",
+      "category": "Sampling",
+      "icon": "Sliders"
+    },
+    "--mirostat-lr": {
+      "label": "Mirostat LR (eta)",
+      "category": "Sampling",
+      "icon": "Sliders",
+      "min": 0,
+      "max": 1
+    },
+    "--mirostat-ent": {
+      "label": "Mirostat Entropy (tau)",
+      "category": "Sampling",
+      "icon": "Sliders",
+      "min": 0,
+      "max": 10
+    },
+    "--xtc-probability": {
+      "label": "XTC Probability",
+      "category": "Sampling",
+      "icon": "Sliders",
+      "min": 0,
+      "max": 1
+    },
+    "--xtc-threshold": {
+      "label": "XTC Threshold",
+      "category": "Sampling",
+      "icon": "Sliders",
+      "min": 0,
+      "max": 1
+    },
+    "--dry-multiplier": {
+      "label": "DRY Multiplier",
+      "category": "Sampling",
+      "icon": "Sliders",
+      "min": 0,
+      "max": 4
+    },
+    "--dry-base": {
+      "label": "DRY Base",
+      "category": "Sampling",
+      "icon": "Sliders",
+      "min": 1,
+      "max": 4
+    },
+    "--ignore-eos": {
+      "label": "Ignore EOS",
+      "category": "Sampling",
+      "icon": "Sliders"
+    },
+    "--samplers": {
+      "label": "Sampler Pipeline",
+      "category": "Sampling",
+      "icon": "Sliders"
+    },
+    "--grammar": {
+      "label": "Grammar (BNF)",
+      "category": "Sampling",
+      "icon": "Sliders"
+    },
+    "--json-schema": {
+      "label": "JSON Schema",
+      "category": "Sampling",
+      "icon": "Sliders"
+    },
+    "--dry-allowed-length": {
+      "label": "Dry Allowed Length",
+      "category": "Sampling",
+      "icon": "Sliders"
+    },
+    "--dry-penalty-last-n": {
+      "label": "Dry Penalty Last N",
+      "category": "Sampling",
+      "icon": "Sliders"
+    },
+    "--dry-sequence-breaker": {
+      "label": "Dry Sequence Breaker",
+      "category": "Sampling",
+      "icon": "Sliders"
+    },
+    "--grammar-file": {
+      "label": "Grammar File",
+      "category": "Sampling",
+      "icon": "Sliders",
+      "placeholder": "/path/to/file"
+    },
+    "--sampler-seq": {
+      "label": "Sampler Seq",
+      "category": "Sampling",
+      "icon": "Sliders"
+    },
+    "--top-nsigma": {
+      "label": "Top Nsigma",
+      "category": "Sampling",
+      "icon": "Sliders"
+    },
+    "--typical": {
+      "label": "Typical",
+      "category": "Sampling",
+      "icon": "Sliders"
+    },
+    "--rope-scaling": {
+      "label": "RoPE Scaling",
+      "category": "RoPE / YaRN",
+      "icon": "Wind"
+    },
+    "--rope-scale": {
+      "label": "RoPE Scale",
+      "category": "RoPE / YaRN",
+      "icon": "Wind",
+      "min": 0.1,
+      "max": 32
+    },
+    "--rope-freq-base": {
+      "label": "RoPE Freq Base",
+      "category": "RoPE / YaRN",
+      "icon": "Wind",
+      "min": 0,
+      "max": 10000000
+    },
+    "--rope-freq-scale": {
+      "label": "RoPE Freq Scale",
+      "category": "RoPE / YaRN",
+      "icon": "Wind",
+      "min": 0,
+      "max": 1
+    },
+    "--yarn-orig-ctx": {
+      "label": "YaRN Original Context",
+      "category": "RoPE / YaRN",
+      "icon": "Wind",
+      "min": 0,
+      "max": 131072
+    },
+    "--yarn-ext-factor": {
+      "label": "YaRN Ext Factor",
+      "category": "RoPE / YaRN",
+      "icon": "Wind",
+      "min": -1,
+      "max": 2
+    },
+    "--yarn-attn-factor": {
+      "label": "YaRN Attn Factor",
+      "category": "RoPE / YaRN",
+      "icon": "Wind",
+      "min": -1,
+      "max": 4
+    },
+    "--yarn-beta-slow": {
+      "label": "YaRN Beta Slow",
+      "category": "RoPE / YaRN",
+      "icon": "Wind",
+      "min": -1,
+      "max": 128
+    },
+    "--yarn-beta-fast": {
+      "label": "YaRN Beta Fast",
+      "category": "RoPE / YaRN",
+      "icon": "Wind",
+      "min": -1,
+      "max": 128
+    },
+    "--port": {
+      "label": "Server Port",
+      "category": "Server",
+      "icon": "Server",
+      "min": 1024,
+      "max": 65535
+    },
+    "--host": {
+      "label": "Server Host",
+      "category": "Server",
+      "icon": "Server",
+      "placeholder": "127.0.0.1"
+    },
+    "--chat-template": {
+      "label": "Chat Template",
+      "category": "Server",
+      "icon": "Server",
+      "placeholder": "llama3"
+    },
+    "--system-prompt": {
+      "label": "System Prompt",
+      "category": "Server",
+      "icon": "Server"
+    },
+    "--jinja": {
+      "label": "Use Jinja Templating",
+      "category": "Server",
+      "icon": "Server"
+    },
+    "--reasoning-format": {
+      "label": "Reasoning Format",
+      "category": "Server",
+      "icon": "Server"
+    },
+    "--reasoning": {
+      "label": "Reasoning Mode",
+      "category": "Server",
+      "icon": "Server"
+    },
+    "--reasoning-budget": {
+      "label": "Reasoning Budget (tokens)",
+      "category": "Server",
+      "icon": "Server",
+      "min": -1,
+      "max": 65536
+    },
+    "--api-key": {
+      "label": "Api Key",
+      "category": "Server",
+      "icon": "Server"
+    },
+    "--api-key-file": {
+      "label": "Api Key File",
+      "category": "Server",
+      "icon": "Server",
+      "placeholder": "/path/to/file"
+    },
+    "--api-prefix": {
+      "label": "Api Prefix",
+      "category": "Server",
+      "icon": "Server"
+    },
+    "--chat-template-file": {
+      "label": "Chat Template File",
+      "category": "Server",
+      "icon": "Server",
+      "placeholder": "/path/to/file"
+    },
+    "--chat-template-kwargs": {
+      "label": "Chat Template Kwargs",
+      "category": "Server",
+      "icon": "Server"
+    },
+    "--metrics": {
+      "label": "Metrics",
+      "category": "Server",
+      "icon": "Server"
+    },
+    "--reasoning-budget-message": {
+      "label": "Reasoning Budget Message",
+      "category": "Server",
+      "icon": "Server"
+    },
+    "--slots": {
+      "label": "Slots",
+      "category": "Server",
+      "icon": "Server"
+    },
+    "--ssl-cert-file": {
+      "label": "Ssl Cert File",
+      "category": "Server",
+      "icon": "Server",
+      "placeholder": "/path/to/file"
+    },
+    "--ssl-key-file": {
+      "label": "Ssl Key File",
+      "category": "Server",
+      "icon": "Server",
+      "placeholder": "/path/to/file"
+    },
+    "--log-disable": {
+      "label": "Disable Logging",
+      "category": "Logging",
+      "icon": "FileText"
+    },
+    "--log-file": {
+      "label": "Log File",
+      "category": "Logging",
+      "icon": "FileText",
+      "placeholder": "/path/to/llama.log"
+    },
+    "--log-colors": {
+      "label": "Log Colors",
+      "category": "Logging",
+      "icon": "FileText"
+    },
+    "--verbose": {
+      "label": "Verbose Mode",
+      "category": "Logging",
+      "icon": "FileText"
+    },
+    "--log-verbosity": {
+      "label": "Verbosity Level",
+      "category": "Logging",
+      "icon": "FileText"
+    },
+    "--log-prefix": {
+      "label": "Log Prefix",
+      "category": "Logging",
+      "icon": "FileText"
+    },
+    "--log-timestamps": {
+      "label": "Log Timestamps",
+      "category": "Logging",
+      "icon": "FileText"
+    },
+    "--offline": {
+      "label": "Offline Mode",
+      "category": "Logging",
+      "icon": "FileText"
+    },
+    "--spec-type": {
+      "label": "Speculative Type",
+      "category": "Speculative Decoding",
+      "icon": "GitBranch",
+      "placeholder": "draft-simple"
+    },
+    "--spec-draft-model": {
+      "label": "Draft Model",
+      "category": "Speculative Decoding",
+      "icon": "GitBranch",
+      "placeholder": "/path/to/draft.gguf"
+    },
+    "--spec-draft-ngl": {
+      "label": "Draft GPU Layers",
+      "category": "Speculative Decoding",
+      "icon": "GitBranch",
+      "placeholder": "auto"
+    },
+    "--spec-draft-n-max": {
+      "label": "Draft Max Tokens",
+      "category": "Speculative Decoding",
+      "icon": "GitBranch",
+      "min": 1,
+      "max": 128
+    },
+    "--spec-draft-n-min": {
+      "label": "Draft Min Tokens",
+      "category": "Speculative Decoding",
+      "icon": "GitBranch",
+      "min": 0,
+      "max": 128
+    },
+    "--spec-draft-p-min": {
+      "label": "Draft P-Min",
+      "category": "Speculative Decoding",
+      "icon": "GitBranch",
+      "min": 0,
+      "max": 1
+    },
+    "--spec-draft-p-split": {
+      "label": "Draft P-Split",
+      "category": "Speculative Decoding",
+      "icon": "GitBranch",
+      "min": 0,
+      "max": 1
+    },
+    "--spec-default": {
+      "label": "Spec Default",
+      "category": "Speculative Decoding",
+      "icon": "GitBranch"
+    },
+    "--spec-draft-cpu-mask": {
+      "label": "Spec Draft Cpu Mask",
+      "category": "Speculative Decoding",
+      "icon": "GitBranch"
+    },
+    "--spec-draft-cpu-mask-batch": {
+      "label": "Spec Draft Cpu Mask Batch",
+      "category": "Speculative Decoding",
+      "icon": "GitBranch"
+    },
+    "--spec-draft-cpu-moe": {
+      "label": "Spec Draft Cpu Moe",
+      "category": "Speculative Decoding",
+      "icon": "GitBranch"
+    },
+    "--spec-draft-cpu-range": {
+      "label": "Spec Draft Cpu Range",
+      "category": "Speculative Decoding",
+      "icon": "GitBranch"
+    },
+    "--spec-draft-cpu-strict": {
+      "label": "Spec Draft Cpu Strict",
+      "category": "Speculative Decoding",
+      "icon": "GitBranch"
+    },
+    "--spec-draft-cpu-strict-batch": {
+      "label": "Spec Draft Cpu Strict Batch",
+      "category": "Speculative Decoding",
+      "icon": "GitBranch"
+    },
+    "--spec-draft-device": {
+      "label": "Spec Draft Device",
+      "category": "Speculative Decoding",
+      "icon": "GitBranch",
+      "placeholder": "CUDA0,CUDA1"
+    },
+    "--spec-draft-hf": {
+      "label": "Spec Draft Hf",
+      "category": "Speculative Decoding",
+      "icon": "GitBranch"
+    },
+    "--spec-draft-n-cpu-moe": {
+      "label": "Spec Draft N Cpu Moe",
+      "category": "Speculative Decoding",
+      "icon": "GitBranch"
+    },
+    "--spec-draft-override-tensor": {
+      "label": "Spec Draft Override Tensor",
+      "category": "Speculative Decoding",
+      "icon": "GitBranch"
+    },
+    "--spec-draft-poll": {
+      "label": "Spec Draft Poll",
+      "category": "Speculative Decoding",
+      "icon": "GitBranch"
+    },
+    "--spec-draft-poll-batch": {
+      "label": "Spec Draft Poll Batch",
+      "category": "Speculative Decoding",
+      "icon": "GitBranch"
+    },
+    "--spec-draft-prio": {
+      "label": "Spec Draft Prio",
+      "category": "Speculative Decoding",
+      "icon": "GitBranch"
+    },
+    "--spec-draft-prio-batch": {
+      "label": "Spec Draft Prio Batch",
+      "category": "Speculative Decoding",
+      "icon": "GitBranch"
+    },
+    "--spec-draft-threads": {
+      "label": "Spec Draft Threads",
+      "category": "Speculative Decoding",
+      "icon": "GitBranch"
+    },
+    "--spec-draft-threads-batch": {
+      "label": "Spec Draft Threads Batch",
+      "category": "Speculative Decoding",
+      "icon": "GitBranch"
+    },
+    "--spec-draft-type-k": {
+      "label": "Spec Draft Type K",
+      "category": "Speculative Decoding",
+      "icon": "GitBranch"
+    },
+    "--spec-draft-type-v": {
+      "label": "Spec Draft Type V",
+      "category": "Speculative Decoding",
+      "icon": "GitBranch"
+    },
+    "--spec-ngram-map-k-min-hits": {
+      "label": "Spec Ngram Map K Min Hits",
+      "category": "Speculative Decoding",
+      "icon": "GitBranch"
+    },
+    "--spec-ngram-map-k-size-m": {
+      "label": "Spec Ngram Map K Size M",
+      "category": "Speculative Decoding",
+      "icon": "GitBranch"
+    },
+    "--spec-ngram-map-k-size-n": {
+      "label": "Spec Ngram Map K Size N",
+      "category": "Speculative Decoding",
+      "icon": "GitBranch"
+    },
+    "--spec-ngram-map-k4v-min-hits": {
+      "label": "Spec Ngram Map K4v Min Hits",
+      "category": "Speculative Decoding",
+      "icon": "GitBranch"
+    },
+    "--spec-ngram-map-k4v-size-m": {
+      "label": "Spec Ngram Map K4v Size M",
+      "category": "Speculative Decoding",
+      "icon": "GitBranch"
+    },
+    "--spec-ngram-map-k4v-size-n": {
+      "label": "Spec Ngram Map K4v Size N",
+      "category": "Speculative Decoding",
+      "icon": "GitBranch"
+    },
+    "--spec-ngram-min-hits": {
+      "label": "Spec Ngram Min Hits",
+      "category": "Speculative Decoding",
+      "icon": "GitBranch"
+    },
+    "--spec-ngram-mod-n-match": {
+      "label": "Spec Ngram Mod N Match",
+      "category": "Speculative Decoding",
+      "icon": "GitBranch"
+    },
+    "--spec-ngram-mod-n-max": {
+      "label": "Spec Ngram Mod N Max",
+      "category": "Speculative Decoding",
+      "icon": "GitBranch"
+    },
+    "--spec-ngram-mod-n-min": {
+      "label": "Spec Ngram Mod N Min",
+      "category": "Speculative Decoding",
+      "icon": "GitBranch"
+    },
+    "--spec-ngram-simple-min-hits": {
+      "label": "Spec Ngram Simple Min Hits",
+      "category": "Speculative Decoding",
+      "icon": "GitBranch"
+    },
+    "--spec-ngram-simple-size-m": {
+      "label": "Spec Ngram Simple Size M",
+      "category": "Speculative Decoding",
+      "icon": "GitBranch"
+    },
+    "--spec-ngram-simple-size-n": {
+      "label": "Spec Ngram Simple Size N",
+      "category": "Speculative Decoding",
+      "icon": "GitBranch"
+    },
+    "--spec-ngram-size-m": {
+      "label": "Spec Ngram Size M",
+      "category": "Speculative Decoding",
+      "icon": "GitBranch"
+    },
+    "--spec-ngram-size-n": {
+      "label": "Spec Ngram Size N",
+      "category": "Speculative Decoding",
+      "icon": "GitBranch"
+    }
+  }
+}

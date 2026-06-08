@@ -50,6 +50,9 @@ import type {
   UsageStatsQuery,
   UsageUpdatedEvent
 } from '../shared/types'
+import { OverlaySchema, type Overlay } from './schemas'
+import { loadMergedSchema, resetLoaderCache } from './commandsSchemaLoader'
+import { generateCommandsSchema } from './commandsSchemaGenerator'
 
 type ConfigurablePathKind = 'models' | 'backend'
 const LIGHT_WINDOW_BACKGROUND = '#f3f6fb'
@@ -272,6 +275,17 @@ finally {
 
 const APP_ROOT = app.isPackaged ? USER_DATA_ROOT : join(process.cwd())
 const BUNDLED_APP_ROOT = app.isPackaged ? app.getAppPath() : join(process.cwd())
+
+let cachedOverlay: Overlay | null = null
+function getOverlay(): Overlay {
+  if (cachedOverlay) return cachedOverlay
+  const overlayPath = join(BUNDLED_APP_ROOT, 'resources', 'commands', 'overlay.json')
+  const raw = JSON.parse(readFileSync(overlayPath, 'utf-8'))
+  cachedOverlay = OverlaySchema.parse(raw)
+  return cachedOverlay
+}
+
+const BUNDLED_COMMANDS_DIR = join(BUNDLED_APP_ROOT, 'resources', 'commands')
 
 const DEFAULT_PATHS: AppPaths = {
   models: join(APP_ROOT, 'models'),
@@ -1908,14 +1922,29 @@ export function registerIpcHandlers(): void {
       return { success: false, error: String(err) }
     }
   })
-  ipcMain.handle('get-commands', (_e, backendName: string) => {
+  ipcMain.handle('get-commands', async (_e, backendName: string) => {
     const backendDir = getAppPaths().backend
-    const commandsPath = join(backendDir, backendName, 'commands.json')
-    if (!isSafePath(backendDir, commandsPath)) return null
-    if (existsSync(commandsPath)) return JSON.parse(readFileSync(commandsPath, 'utf-8'))
-    const defaultPath = join(BUNDLED_APP_ROOT, 'resources', 'commands.json')
-    if (existsSync(defaultPath)) return JSON.parse(readFileSync(defaultPath, 'utf-8'))
-    return null
+    if (!isSafePath(backendDir, backendName)) return null
+    const perBuildPath = join(backendDir, backendName, 'generated.json')
+    const userOverridePath = join(backendDir, backendName, 'commands.json')
+    if (!existsSync(perBuildPath) && !existsSync(userOverridePath)) {
+      // Lazy first-access: try to generate now. If it fails, fall through
+      // to the bundled snapshot / overlay only.
+      const candidate = listBackendsFromDirectory(backendDir).find(b => b.name === backendName)
+      if (candidate) {
+        const genResult = await generateCommandsSchema({ backend: candidate })
+        if (!genResult.ok) {
+          console.warn('[commands-schema-gen] lazy generation failed:', genResult.error)
+        }
+      }
+    }
+    resetLoaderCache() // ensure fresh read after a possible lazy generation
+    return await loadMergedSchema({
+      buildTag: backendName,
+      backendDir,
+      bundledDir: BUNDLED_COMMANDS_DIR,
+      overlay: getOverlay()
+    })
   })
   ipcMain.handle('save-backend-commands', (_e, backendName: string, schema: unknown) => {
     try {
@@ -2292,8 +2321,23 @@ export function registerIpcHandlers(): void {
           return
         }
 
-        event.sender.send('download-progress', { percent: 100, phase: 'done' })
-        resolve({ success: true, result: buildBackendUpdateResult(nextBackend.name) })
+        event.sender.send('download-progress', { percent: 95, phase: 'generating-schema' })
+        void (async () => {
+          try {
+            const genResult = await generateCommandsSchema({ backend: nextBackend })
+            if (!genResult.ok) {
+              console.warn('[commands-schema-gen] post-build generation failed:', genResult.error)
+              // Continue — don't fail the build
+            }
+
+            event.sender.send('download-progress', { percent: 100, phase: 'done' })
+            resolve({ success: true, result: buildBackendUpdateResult(nextBackend.name) })
+          } catch (err) {
+            console.error('[commands-schema-gen] unexpected error:', err)
+            event.sender.send('download-progress', { percent: 100, phase: 'done' })
+            resolve({ success: false, error: `Schema generation crashed: ${(err as Error).message}` })
+          }
+        })()
       })
     })
   })
