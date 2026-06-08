@@ -72,3 +72,6 @@ export const MergedSchema = z.object({
   version: z.string(),
   categories: z.array(MergedCategorySchema)
 })
+export type MergedCommandType = z.infer<typeof MergedCommandSchema>
+export type MergedCategoryType = z.infer<typeof MergedCategorySchema>
+export type MergedSchemaType = z.infer<typeof MergedSchema>
