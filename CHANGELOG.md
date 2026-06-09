@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.3] - 2026-06-09
+
+### Fixed
+- Per-build backend parameter generation was silently failing for any per-build folder with `bin/llama-server.exe` (e.g. `b9464-cpu`, `b9534`). `listBackendsFromDirectory` returned a relative `exe` path, but the generator's `existsSync` guard checked the current working directory, so it bailed with "llama-server.exe not found" and the user saw an empty CommandsEditor. The `exe` field is now an absolute path.
+
 ## [1.0.2] - 2026-06-09
 
 ### Added
