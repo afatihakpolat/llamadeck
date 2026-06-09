@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.6] - 2026-06-09
+
+### Added
+- Commands-schema generation failures are now appended to `%APPDATA%\hexllama\commands-schema-gen.log` in addition to the existing `console.warn`. Line format: `[ISO timestamp] [phase] backend=<name> path=<path> error=<message>`. Lets you see why a backend's schema couldn't be generated without running the app from a terminal.
+
 ## [1.0.5] - 2026-06-09
 
 ### Fixed
