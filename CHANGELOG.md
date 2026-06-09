@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.7] - 2026-06-09
+
+### Fixed
+- `get-commands` IPC handler now logs unsafe-path rejections to `commands-schema-gen.log` instead of returning `null` silently. Path-traversal or other safety rejections were previously invisible; now they show up in the log file with the offending backend name and the parent dir.
+
 ## [1.0.6] - 2026-06-09
 
 ### Added
