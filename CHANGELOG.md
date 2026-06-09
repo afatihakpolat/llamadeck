@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.4] - 2026-06-09
+
+### Fixed
+- `CommandsEditor` now populates the global `commandsSchema` store on initial load (not just on save). Previously, `CmdParamsEditor` showed "No commands schema loaded. Ensure a backend is installed." because it reads from the global store while the schema was only set into local state. The local-vs-global split was a pre-existing bug; this fixes the symptom for the CommandsEditor path.
+
 ## [1.0.3] - 2026-06-09
 
 ### Fixed
