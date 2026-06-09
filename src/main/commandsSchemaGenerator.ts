@@ -1,6 +1,6 @@
 import { existsSync, writeFileSync, renameSync } from 'fs'
 import { spawn } from 'child_process'
-import { join } from 'path'
+import { isAbsolute, join } from 'path'
 import { parseHelpOutput } from './commandsSchemaParser'
 import { StructuralSchema } from './schemas'
 import type { StructuralSchemaType } from './schemas'
@@ -48,7 +48,11 @@ async function defaultSpawn(exe: string, args: string[], opts: { timeoutMs: numb
 export async function generateCommandsSchema(opts: GenerateOptions): Promise<GenerateResult> {
   const { backend, timeoutMs = DEFAULT_TIMEOUT_MS } = opts
   const spawn = opts.spawn ?? defaultSpawn
-  const exe = backend.exe || join(backend.path, 'bin', 'llama-server.exe')
+  // Resolve backend.exe to an absolute path. The IPC contract returns a
+  // relative exe (e.g. "bin/llama-server.exe"); we join with backend.path.
+  // If exe is already absolute, use it as-is.
+  const rawExe = backend.exe ?? join(backend.path, 'bin', 'llama-server.exe')
+  const exe = isAbsolute(rawExe) ? rawExe : join(backend.path, rawExe)
   if (!existsSync(exe)) {
     return { ok: false, error: `llama-server.exe not found at ${exe}` }
   }
