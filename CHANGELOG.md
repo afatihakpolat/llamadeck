@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-06-09
+
+### Fixed
+- Parser no longer treats angle-bracket placeholders with commas (e.g. `--device-draft`'s `<dev1,dev2,..>`) as `select` enums. Those are typed format placeholders, not fixed enums; the user enters free-form text.
+- Parser no longer treats square-bracket forms without `|` (e.g. `--docker-repo`'s `[<repo>/]<model>[:quant]`) as `select` enums. The brackets are optional-syntax markers. Real enums like `[on|off|auto]` (with `|`) still work.
+- Bundled `b9202.json` snapshot regenerated with the corrected parser: 18 commands have `options` (down from 19); no more nonsense options like `<repo>/]<model>[:quant`.
+
+### Added
+- `scripts/regen-b9202-snapshot.ts` to regenerate the bundled snapshot from the parser + b9202 fixture, without depending on the deleted legacy `resources/commands.json`.
+
 ## [1.0.9] - 2026-06-09
 
 ### Changed
