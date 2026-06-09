@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.8] - 2026-06-09
+
+### Fixed
+- **Root cause of "No commands schema loaded" for per-build backends.** `get-commands` called `isSafePath(backendDir, backendName)` with the bare basename (e.g. `"b9570"`). `isSafePath` resolves relative targets against the current working directory, so the resolved target was `CWD/b9570` — never a subpath of the actual backend folder. Every per-build backend was rejected as "unsafe path", the failure was logged to `commands-schema-gen.log`, and `get-commands` returned `null`. Joining `backendDir` and `backendName` before the safety check fixes it.
+
 ## [1.0.7] - 2026-06-09
 
 ### Fixed
