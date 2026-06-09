@@ -1,7 +1,7 @@
 import { ipcMain, dialog, shell, BrowserWindow, nativeTheme } from 'electron'
 import {
   existsSync, readdirSync, readFileSync, writeFileSync, mkdirSync,
-  unlinkSync, createWriteStream, statSync, rmdirSync, renameSync
+  unlinkSync, createWriteStream, statSync, rmdirSync, renameSync, appendFileSync
 } from 'fs'
 import { join, extname, basename, dirname, resolve, sep, relative } from 'path'
 import { spawn, ChildProcess, execFileSync } from 'child_process'
@@ -110,6 +110,18 @@ interface PythonRuntimeCommand {
 }
 
 const SOURCE_UPDATE_SCRIPT_PATH = join(USER_DATA_ROOT, 'update-llama-source.ps1')
+const COMMANDS_SCHEMA_LOG_PATH = join(USER_DATA_ROOT, 'commands-schema-gen.log')
+
+function logCommandsSchemaGen(phase: string, backend: { name: string; path: string }, error: string): void {
+  const timestamp = new Date().toISOString()
+  const line = `[${timestamp}] [${phase}] backend=${backend.name} path=${backend.path} error=${error}\n`
+  try {
+    appendFileSync(COMMANDS_SCHEMA_LOG_PATH, line, 'utf-8')
+  } catch {
+    // If we can't write the log file, fall back to console.
+  }
+  console.warn(line.trimEnd())
+}
 const LEGACY_USAGE_LEDGER_PATH = join(USER_DATA_ROOT, 'llama-usage-history.jsonl')
 const USAGE_SESSIONS_DIR = join(USER_DATA_ROOT, 'usage-sessions')
 const USAGE_SESSIONS_MIGRATION_MARKER = join(USER_DATA_ROOT, 'usage-sessions.migrated')
@@ -1939,7 +1951,7 @@ export function registerIpcHandlers(): void {
       if (candidate) {
         const genResult = await generateCommandsSchema({ backend: candidate })
         if (!genResult.ok) {
-          console.warn('[commands-schema-gen] lazy generation failed:', genResult.error)
+          logCommandsSchemaGen('lazy', candidate, genResult.error ?? 'unknown error')
         }
       }
     }
@@ -2348,7 +2360,7 @@ export function registerIpcHandlers(): void {
           try {
             const genResult = await generateCommandsSchema({ backend: nextBackend })
             if (!genResult.ok) {
-              console.warn('[commands-schema-gen] post-build generation failed:', genResult.error)
+              logCommandsSchemaGen('post-build', nextBackend, genResult.error ?? 'unknown error')
               // Continue — don't fail the build
             }
 
