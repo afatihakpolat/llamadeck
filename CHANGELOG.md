@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.1] - 2026-06-09
+
+### Fixed
+- **Root cause of "select with nonsense options" on bare-comma placeholders.** Several flags like `--tensor-split N0,N1,N2,...`, `--fit-target MiB0,MiB1,MiB2,...`, `--override-kv KEY=TYPE:VALUE,...`, `--lora-scaled FNAME:SCALE,...`, `--tools TOOL1,TOOL2,...` use uppercase-leading items to indicate a TYPE (first value, MiB value, key=value pair, etc.), not a fixed enum. The parser's bare-comma branch treated them as selects. New rule: a bare-comma placeholder is a select only if **all items start with a lowercase letter**; otherwise it's a free-form `string` for the user to fill in. Real enums like `--spec-type none,draft-simple,...` and `--pooling {none,mean,...}` still classify as `select`.
+- Bundled `b9202.json` snapshot regenerated: 12 commands have `options` (down from 18 in 1.1.0; 6 of those were the broken format placeholders).
+- New regression fixture `b9584-help.txt` (captured from the user's installed build, 642 lines, 243 commands) with parallel integration tests covering balanced parens, no-stray-`(` invariants, and the new format-placeholder rule.
+
 ## [1.1.0] - 2026-06-09
 
 ### Fixed
