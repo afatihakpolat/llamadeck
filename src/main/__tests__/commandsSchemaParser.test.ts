@@ -171,6 +171,15 @@ describe('parseHelpOutput — b9202 full fixture', () => {
     expect(c.description).not.toMatch(/\)$/)
   })
 
+  it('--device-draft: angle-bracket placeholder with commas is string, not select', () => {
+    const c = all.find(x => x.arg === '--device-draft')!
+    // The placeholder `<dev1,dev2,..>` is a typed format example, not
+    // a fixed enum. A user should be able to enter their own device
+    // list (e.g. "CUDA0,CUDA1") as free-form text.
+    expect(c.type).toBe('string')
+    expect(c.options).toBeUndefined()
+  })
+
   it('every command with [DEPRECATED: in its raw line ends up with deprecated: true', () => {
     // Count deprecations in the raw fixture
     const raw = fixtures('b9202-help.txt')

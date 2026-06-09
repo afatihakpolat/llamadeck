@@ -219,7 +219,11 @@ export function parseHelpOutput(stdout: string): Command[] {
       } else if (/^\[.+\]$/.test(flag.valuePlaceholder)) {
         type = 'select'
         options = flag.valuePlaceholder.slice(1, -1).split('|').map(s => s.trim()).filter(Boolean)
-      } else if (/,/.test(flag.valuePlaceholder)) {
+      } else if (/,/.test(flag.valuePlaceholder) && !flag.valuePlaceholder.startsWith('<')) {
+        // Bare comma-list (e.g. --spec-type none,draft-simple,...) is an enum.
+        // Angle-bracket placeholders with commas (e.g. <dev1,dev2,..>) are
+        // typed format examples, not enums — the user enters a free-form
+        // list of values. Those stay as type 'string'.
         type = 'select'
         options = flag.valuePlaceholder.split(',').map(s => s.trim()).filter(Boolean)
       }
