@@ -189,6 +189,20 @@ describe('parseHelpOutput — b9202 full fixture', () => {
     expect(c.options).toBeUndefined()
   })
 
+  it('uppercase-leading comma placeholders are string, not select', () => {
+    // Format placeholders like N0,N1,N2 or MiB0,MiB1,MiB2 use
+    // uppercase-leading items to indicate a type pattern. They should
+    // be type 'string' (free-form) with no options.
+    for (const arg of ['--tensor-split', '--fit-target', '--override-kv',
+                      '--lora-scaled', '--control-vector-scaled', '--tools']) {
+      const c = all.find(x => x.arg === arg)
+      if (c) {
+        expect(c.type, `${arg} should be string`).toBe('string')
+        expect(c.options, `${arg} should have no options`).toBeUndefined()
+      }
+    }
+  })
+
   it('every command with [DEPRECATED: in its raw line ends up with deprecated: true', () => {
     // Count deprecations in the raw fixture
     const raw = fixtures('b9202-help.txt')
@@ -196,4 +210,64 @@ describe('parseHelpOutput — b9202 full fixture', () => {
     const parsedDepCount = all.filter(c => c.deprecated).length
     expect({ rawCount, parsedDepCount }).toMatchObject({ rawCount: parsedDepCount })
   })
+})
+
+describe('parseHelpOutput — b9584 full fixture (regression for newer build)', () => {
+
+describe('parseHelpOutput — b9584 full fixture (regression for newer build)', () => {
+  const full = fixtures('b9584-help.txt')
+  const all = parseHelpOutput(full)
+
+  it('parses at least 240 commands', () => {
+    expect(all.length).toBeGreaterThanOrEqual(240)
+  })
+
+  it('recognizes all 4 sections', () => {
+    const sections = new Set(all.map(c => c.section))
+    expect(sections).toEqual(new Set([
+      'common params', 'sampling params', 'speculative params', 'example-specific params'
+    ]))
+  })
+
+  it('every description has balanced parentheses', () => {
+    for (const c of all) {
+      const opens = (c.description.match(/\(/g) || []).length
+      const closes = (c.description.match(/\)/g) || []).length
+      expect({ arg: c.arg, opens, closes }).toMatchObject({ opens: closes })
+    }
+  })
+
+  it('no description contains a (default: ...) clause', () => {
+    for (const c of all) {
+      expect(c.description).not.toMatch(/\(default:/)
+    }
+  })
+
+  it('uppercase-leading comma placeholders are string, not select', () => {
+    for (const arg of ['--tensor-split', '--fit-target', '--override-kv',
+                      '--lora-scaled', '--control-vector-scaled', '--tools',
+                      '--device', '--device-draft']) {
+      const c = all.find(x => x.arg === arg)
+      if (c) {
+        expect(c.type, `${arg} should be string`).toBe('string')
+        expect(c.options, `${arg} should have no options`).toBeUndefined()
+      }
+    }
+  })
+
+  it('real enums stay as select', () => {
+    const expectations: Array<[string, string[]]> = [
+      ['--flash-attn', ['on', 'off', 'auto']],
+      ['--rope-scaling', ['none', 'linear', 'yarn']],
+      ['--pooling', ['none', 'mean', 'cls', 'last', 'rank']],
+      ['--fit', ['on', 'off']],
+    ]
+    for (const [arg, expectedOptions] of expectations) {
+      const c = all.find(x => x.arg === arg)
+      expect(c, `${arg} should exist`).toBeDefined()
+      expect(c!.type, `${arg} should be select`).toBe('select')
+      expect(c!.options, `${arg} options`).toEqual(expectedOptions)
+    }
+  })
+})
 })

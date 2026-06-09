@@ -1,6 +1,6 @@
 {
   "version": "b9202",
-  "generatedAt": "2026-06-09T18:07:58.567Z",
+  "generatedAt": "2026-06-09T18:14:42.758Z",
   "categories": [
     {
       "name": "common params",
@@ -478,14 +478,8 @@
           "arg": "--tensor-split",
           "short": "-ts",
           "description": "fraction of the model to offload to each GPU, comma-separated list of proportions, e.g. 3,1",
-          "type": "select",
+          "type": "string",
           "env": "LLAMA_ARG_TENSOR_SPLIT",
-          "options": [
-            "N0",
-            "N1",
-            "N2",
-            "..."
-          ],
           "section": "common params"
         },
         {
@@ -513,14 +507,8 @@
           "arg": "--fit-target",
           "short": "-fitt",
           "description": "target margin per device for --fit, comma-separated list of values, single value is broadcast across all devices, default: 1024",
-          "type": "select",
+          "type": "string",
           "env": "LLAMA_ARG_FIT_TARGET",
-          "options": [
-            "MiB0",
-            "MiB1",
-            "MiB2",
-            "..."
-          ],
           "section": "common params"
         },
         {
@@ -541,11 +529,7 @@
         {
           "arg": "--override-kv",
           "description": "advanced option to override model metadata by key. to specify multiple overrides, either use comma-separated values. types: int, float, bool, str. example: --override-kv tokenizer.ggml.add_bos_token=bool:false,tokenizer.ggml.add_eos_token=bool:false",
-          "type": "select",
-          "options": [
-            "KEY=TYPE:VALUE",
-            "..."
-          ],
+          "type": "string",
           "section": "common params"
         },
         {
@@ -567,11 +551,7 @@
         {
           "arg": "--lora-scaled",
           "description": "path to LoRA adapter with user defined scaling (format: FNAME:SCALE,...) note: use comma-separated values",
-          "type": "select",
-          "options": [
-            "FNAME:SCALE",
-            "..."
-          ],
+          "type": "string",
           "section": "common params"
         },
         {
@@ -583,11 +563,7 @@
         {
           "arg": "--control-vector-scaled",
           "description": "add a control vector with user defined scaling SCALE note: use comma-separated values (format: FNAME:SCALE,...)",
-          "type": "select",
-          "options": [
-            "FNAME:SCALE",
-            "..."
-          ],
+          "type": "string",
           "section": "common params"
         },
         {
@@ -1747,14 +1723,9 @@
         {
           "arg": "--tools",
           "description": "experimental: whether to enable built-in tools for AI agents - do not enable in untrusted environments specify \"all\" to enable all tools available tools: read_file, file_glob_search, grep_search, exec_shell_command, write_file, edit_file, apply_diff, get_datetime",
-          "type": "select",
+          "type": "string",
           "default": "no tools",
           "env": "LLAMA_ARG_TOOLS",
-          "options": [
-            "TOOL1",
-            "TOOL2",
-            "..."
-          ],
           "section": "example-specific params"
         },
         {

@@ -223,12 +223,20 @@ export function parseHelpOutput(stdout: string): Command[] {
         type = 'select'
         options = flag.valuePlaceholder.slice(1, -1).split('|').map(s => s.trim()).filter(Boolean)
       } else if (/,/.test(flag.valuePlaceholder) && !flag.valuePlaceholder.startsWith('<')) {
-        // Bare comma-list (e.g. --spec-type none,draft-simple,...) is an enum.
-        // Angle-bracket placeholders with commas (e.g. <dev1,dev2,..>) are
-        // typed format examples, not enums — the user enters a free-form
-        // list of values. Those stay as type 'string'.
-        type = 'select'
-        options = flag.valuePlaceholder.split(',').map(s => s.trim()).filter(Boolean)
+        // Bare comma-list. Could be a real enum (--spec-type none,draft-simple,...)
+        // or a format placeholder (--tensor-split N0,N1,N2,... or
+        // --fit-target MiB0,MiB1,MiB2,... or --override-kv KEY=TYPE:VALUE,...).
+        // Distinguishing rule: real enum values are lowercase identifiers
+        // (none, draft-simple, on, f32, q4_0). Format placeholders start
+        // with an uppercase letter representing a type name (N, MiB, KEY,
+        // FNAME, TOOL). If any item starts with uppercase, the whole
+        // placeholder is treated as a type — type 'string', free-form text.
+        const items = flag.valuePlaceholder.split(',').map(s => s.trim()).filter(Boolean)
+        const allItemsStartLowercase = items.length > 0 && items.every(item => /^[a-z]/.test(item))
+        if (allItemsStartLowercase) {
+          type = 'select'
+          options = items
+        }
       }
 
       const cmd: Command = {
