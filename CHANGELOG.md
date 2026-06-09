@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.9] - 2026-06-09
+
+### Changed
+- Live Output: text in the output stream is now selectable (drag-select, copy). The body still has `user-select: none` globally for non-interactive UI, but the live output viewport and per-line text spans opt in.
+- Template start no longer auto-navigates to the Live Output view. The model starts, the card's status updates, and the user stays on whichever page they were on. The selected output is still tracked, so navigating to Live Output manually highlights the right card.
+
 ## [1.0.8] - 2026-06-09
 
 ### Fixed
