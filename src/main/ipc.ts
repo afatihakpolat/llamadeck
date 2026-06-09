@@ -1303,7 +1303,10 @@ function listBackendsFromDirectory(backendDir: string): BackendEntry[] {
     .map((entry) => {
       const basePath = join(backendDir, entry.name)
       const commandsPath = join(basePath, 'commands.json')
-      const exe = findBackendExecutable(basePath)
+      // exe must be absolute — commandsSchemaGenerator's existsSync() guard
+      // would otherwise check the current working directory, not the backend path.
+      const relativeExe = findBackendExecutable(basePath)
+      const exe = relativeExe ? join(basePath, relativeExe) : null
       const flavor = getBackendFlavor(entry.name)
 
       return {
