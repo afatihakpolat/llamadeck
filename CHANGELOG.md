@@ -39,7 +39,45 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Parser now detects `[DEPRECATED:` in the flag-line description body, not just continuation lines (3 of 4 deprecated flags in b9202 were silently un-marked).
 - `get-commands` path is hardened: `isSafePath(backendDir, backendName)` is called before any path construction.
 
-## [1.0.0] - 2026-05-XX
+## [1.0.0] - 2026-06-07
 
 ### Added
-- Initial release. (Hand-curate from `git log` before this date.)
+
+**Model management**
+- Integrated Model Hub: search Hugging Face directly within the app, browse repositories, view file details, download GGUF models with a single click.
+- Smart Download Manager: pause, resume, cancel large downloads; paste direct GGUF links; auto-generate an execution template with recommended threads, batch sizes, and context windows tailored to model size and quantization.
+- Multiple concurrent model runs on different ports.
+
+**Templates and execution**
+- Template-based execution: save configurations as reusable templates; run multiple models simultaneously without port conflicts.
+- Chat UI mode (auto-opens the built-in llama.cpp web interface) and API Only mode (silent background server).
+- Visual Command Editor: structured UI for backend-specific commands; toggle booleans, set limits on numerical inputs, define default parameter values.
+
+**Backends and source build**
+- Version and Backend Management: maintain and switch between multiple backend binaries; automatic update checks against the ggml-org repository with download + extract from the settings panel.
+- Source build flow: build llama.cpp from a local git checkout, versioned `b####` build folders, older folders preserved, new backend set active after a successful build.
+- CPU/CUDA backend flavors with persisted active backend.
+- Concurrent template launches.
+
+**LiteLLM and OpenAI proxy**
+- Managed LiteLLM loopback proxy for OpenAI-compatible access to local models.
+- Configurable paths.
+- Proxy-backed usage stats and Live Output.
+- Usage Cost settings and Cost tab; normalized token calculations.
+- OpenAI `/v1/responses` usage tracking in proxy.
+
+**Per-template pricing**
+- Per-template pricing with app-wide fallback.
+
+**Usage stats and filters**
+- Date filters with custom range support, from/to timestamp range query model (replaced the older `UsageStatsWindow` enum).
+- Sticky scroll with jump-to-bottom pill in Live Output.
+
+**UI**
+- Rebrand to LlamaDeck with theming support.
+- System tray icons.
+
+**CI / packaging**
+- GitHub Actions workflow for automated GitHub releases and auto-incrementing version tags.
+- Electron-builder packaging: Windows NSIS installer and portable `.zip` for both x64 and arm64.
+- `npm run package` reproduces the build locally.
