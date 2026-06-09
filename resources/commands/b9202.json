@@ -1,6 +1,6 @@
 {
   "version": "b9202",
-  "generatedAt": "2026-06-08T02:35:31.903Z",
+  "generatedAt": "2026-06-09T18:07:58.567Z",
   "categories": [
     {
       "name": "common params",
@@ -414,13 +414,8 @@
           "arg": "--device",
           "short": "-dev",
           "description": "comma-separated list of devices to use for offloading (none = don't offload) use --list-devices to see a list of available devices",
-          "type": "select",
+          "type": "string",
           "env": "LLAMA_ARG_DEVICE",
-          "options": [
-            "<dev1",
-            "dev2",
-            "..>"
-          ],
           "section": "common params"
         },
         {
@@ -622,12 +617,9 @@
           "arg": "--docker-repo",
           "short": "-dr",
           "description": "Docker Hub model repository. repo is optional, default to ai/. quant is optional, default to :latest. example: gemma3",
-          "type": "select",
+          "type": "string",
           "default": "unused",
           "env": "LLAMA_ARG_DOCKER_REPO",
-          "options": [
-            "<repo>/]<model>[:quant"
-          ],
           "section": "common params"
         },
         {
@@ -1259,12 +1251,7 @@
             "--spec-draft-device"
           ],
           "description": "comma-separated list of devices to use for offloading the draft model (none = don't offload) use --list-devices to see a list of available devices",
-          "type": "select",
-          "options": [
-            "<dev1",
-            "dev2",
-            "..>"
-          ],
+          "type": "string",
           "section": "speculative params"
         },
         {
@@ -1707,6 +1694,8 @@
           "description": "[DEPRECATED: use --ui-config] JSON that provides default WebUI settings (overrides WebUI defaults)",
           "type": "string",
           "env": "LLAMA_ARG_WEBUI_CONFIG",
+          "deprecated": true,
+          "deprecationNote": "[DEPRECATED: use --ui-config]",
           "section": "example-specific params"
         },
         {
@@ -1721,6 +1710,8 @@
           "description": "[DEPRECATED: use --ui-config-file] JSON file that provides default WebUI settings (overrides WebUI defaults)",
           "type": "string",
           "env": "LLAMA_ARG_WEBUI_CONFIG_FILE",
+          "deprecated": true,
+          "deprecationNote": "[DEPRECATED: use --ui-config-file]",
           "section": "example-specific params"
         },
         {
@@ -1774,6 +1765,8 @@
           "description": "[DEPRECATED: use --ui/--no-ui] whether to enable the Web UI",
           "type": "boolean",
           "env": "LLAMA_ARG_WEBUI",
+          "deprecated": true,
+          "deprecationNote": "[DEPRECATED: use --ui/--no-ui]",
           "section": "example-specific params"
         },
         {

@@ -216,7 +216,10 @@ export function parseHelpOutput(stdout: string): Command[] {
       } else if (/^\{[^}]+\}$/.test(flag.valuePlaceholder)) {
         type = 'select'
         options = flag.valuePlaceholder.slice(1, -1).split(',').map(s => s.trim())
-      } else if (/^\[.+\]$/.test(flag.valuePlaceholder)) {
+      } else if (/^\[.+\]$/.test(flag.valuePlaceholder) && flag.valuePlaceholder.includes('|')) {
+        // Square-bracket form with a `|` is a real enum like [on|off|auto].
+        // Without `|`, the brackets are optional-syntax markers
+        // (e.g. [<repo>/]<model>[:quant]) and the user enters free-form text.
         type = 'select'
         options = flag.valuePlaceholder.slice(1, -1).split('|').map(s => s.trim()).filter(Boolean)
       } else if (/,/.test(flag.valuePlaceholder) && !flag.valuePlaceholder.startsWith('<')) {

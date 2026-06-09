@@ -180,6 +180,15 @@ describe('parseHelpOutput — b9202 full fixture', () => {
     expect(c.options).toBeUndefined()
   })
 
+  it('--docker-repo: square-bracket without | is string, not select', () => {
+    const c = all.find(x => x.arg === '--docker-repo')!
+    // The placeholder `[<repo>/]<model>[:quant]` uses square brackets as
+    // optional-syntax markers (the [...] is the optional part), NOT as
+    // an enum. The user enters a free-form Docker Hub reference.
+    expect(c.type).toBe('string')
+    expect(c.options).toBeUndefined()
+  })
+
   it('every command with [DEPRECATED: in its raw line ends up with deprecated: true', () => {
     // Count deprecations in the raw fixture
     const raw = fixtures('b9202-help.txt')
