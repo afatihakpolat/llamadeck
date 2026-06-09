@@ -1941,8 +1941,9 @@ export function registerIpcHandlers(): void {
   })
   ipcMain.handle('get-commands', async (_e, backendName: string) => {
     const backendDir = getAppPaths().backend
-    if (!isSafePath(backendDir, backendName)) {
-      logCommandsSchemaGen('get-commands', { name: backendName, path: backendDir }, `unsafe path: ${backendName}`)
+    const backendPath = join(backendDir, backendName)
+    if (!isSafePath(backendDir, backendPath)) {
+      logCommandsSchemaGen('get-commands', { name: backendName, path: backendDir }, `unsafe path: ${backendPath}`)
       return null
     }
     const perBuildPath = join(backendDir, backendName, 'generated.json')
