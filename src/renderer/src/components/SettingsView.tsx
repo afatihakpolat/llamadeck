@@ -391,7 +391,6 @@ export default function SettingsView() {
                       {b.displayName}
                       <span className="version-badge">{b.flavor.toUpperCase()}</span>
                       {activeBackend?.name === b.name && <span className="version-badge active-version">Active</span>}
-                      {!b.hasCommands && <span className="version-badge">Fallback Schema</span>}
                     </div>
                     <div className="settings-row-sub mono">{b.name} · {b.exe || 'No executable found'}</div>
                   </div>
