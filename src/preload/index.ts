@@ -62,6 +62,7 @@ const api = {
   },
   removeUsageUpdatedListener: () => ipcRenderer.removeAllListeners('usage-updated'),
   checkUpdates: () => ipcRenderer.invoke('check-updates'),
+  getAppVersion: () => ipcRenderer.invoke('get-app-version'),
   updateBackendSource: (tagName?: string, flavor?: 'cuda' | 'cpu') => ipcRenderer.invoke('update-backend-source', tagName, flavor),
   downloadRelease: (opts: object) => ipcRenderer.invoke('download-release', opts),
   cancelBackendDownload: () => ipcRenderer.invoke('cancel-backend-download'),

@@ -2205,6 +2205,9 @@ export function registerIpcHandlers(): void {
     return sourceUpdateJob !== null || cancelBackendDl !== null || Array.from(downloadTasks.values()).some((task) => !['done', 'error', 'cancelled'].includes(task.phase))
   }
 
+  ipcMain.handle('get-app-version', () => {
+    try { return { version: app.getVersion() } } catch (err) { return { error: String(err) } }
+  })
   ipcMain.handle('check-updates', async () => {
     try {
       const latestTag = getLatestGitTag(getAppPaths().backend)

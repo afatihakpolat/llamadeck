@@ -80,6 +80,7 @@ interface LlamaCppApi {
   onUsageUpdated: (cb: (data: UsageUpdatedEvent) => void) => () => void
   removeUsageUpdatedListener: () => void
   checkUpdates: () => Promise<ReleaseInfo>
+  getAppVersion: () => Promise<{ version?: string; error?: string }>
   updateBackendSource: (tagName?: string, flavor?: BackendBuildFlavor) => Promise<{ success: true; result: BackendSourceUpdateResult } | { success: false; error?: string; cancelled?: boolean }>
   downloadRelease: (opts: { url: string; version: string; assetName: string }) => Promise<{ success: boolean; path?: string; error?: string }>
   cancelBackendDownload: () => Promise<{ success: boolean }>

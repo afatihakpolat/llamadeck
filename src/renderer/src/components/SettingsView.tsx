@@ -60,6 +60,10 @@ export default function SettingsView() {
   const [updatingSource, setUpdatingSource] = useState(false)
   const [expandedEditor, setExpandedEditor] = useState<string | null>(null)
   const [notifPref, setNotifPref] = useState<'banner' | 'manual'>(getNotifPref())
+  const [appVersion, setAppVersion] = useState<string>('')
+  useEffect(() => {
+    window.api.getAppVersion().then((res) => { if (res.version) setAppVersion(res.version) }).catch(() => {})
+  }, [])
   const [changingFolder, setChangingFolder] = useState<FolderKind | null>(null)
   const [windowBehaviorSettings, setWindowBehaviorSettings] = useState<AppWindowBehaviorSettings>({ minimizeToTray: false })
   const [loadingWindowBehaviorSettings, setLoadingWindowBehaviorSettings] = useState(true)
@@ -220,6 +224,7 @@ export default function SettingsView() {
           <h1 className="page-title">Settings</h1>
           <p className="page-subtitle">Manage llama.cpp backends and configurations</p>
         </div>
+        {appVersion && <span className="version-badge">LlamaDeck v{appVersion}</span>}
       </div>
 
       <div className="settings-section">
