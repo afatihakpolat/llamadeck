@@ -119,7 +119,8 @@ param(
   [string]$TargetRef,
   [string]$BuildFlavor = "cuda",
   [string]$CudaArch = "native",
-  [string]$BuildType = "Release"
+  [string]$BuildType = "Release",
+  [string]$BuildMode = "parallel"
 )
 
 $ErrorActionPreference = "Stop"
@@ -232,6 +233,10 @@ try {
     "-DCMAKE_C_COMPILER=$clPath",
     "-DCMAKE_CXX_COMPILER=$clPath"
   )
+
+  if ($BuildMode -eq "single") {
+    $cmakeArgs += "-DGGML_SCHED_MAX_COPIES=1"
+  }
 
   if ($BuildFlavor -eq "cuda") {
     $cmakeArgs += @(
@@ -2226,6 +2231,23 @@ export function registerIpcHandlers(): void {
   const buildFlavor: BackendBuildFlavor = requestedFlavor === 'cpu' ? 'cpu' : 'cuda'
   const cudaArch = buildFlavor === 'cuda' ? getConfiguredCudaArch(repoDir) : ''
     const buildType = process.env['HEXLLAMA_BUILD_TYPE']?.trim() || 'Release'
+
+    let buildMode: 'single' | 'parallel' = 'parallel'
+    if (buildFlavor === 'cuda') {
+      const choice = await dialog.showMessageBox({
+        type: 'question',
+        title: 'CUDA Build Mode',
+        message: 'How should the CUDA build run?',
+        detail: 'Single-threaded (-DGGML_SCHED_MAX_COPIES=1): slower, more stable, less likely to OOM during parallel compilation. Parallel: faster but may exhaust memory on large builds.',
+        buttons: ['Single', 'Parallel', 'Cancel'],
+        defaultId: 1,
+        cancelId: 2
+      })
+      if (choice.response === 2) {
+        return { success: false, error: 'Source update cancelled by user.', cancelled: true }
+      }
+      buildMode = choice.response === 0 ? 'single' : 'parallel'
+    }
     let targetTagName = requestedTagName?.trim()
 
     if (!targetTagName) {
@@ -2247,7 +2269,7 @@ export function registerIpcHandlers(): void {
     return await new Promise<{ success: true; result: BackendUpdateResult } | { success: false; error: string; cancelled?: boolean }>((resolve) => {
       const child = spawn(
         'powershell.exe',
-        ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', scriptPath, '-RepoDir', repoDir, '-TargetRef', targetTagName, '-BuildFlavor', buildFlavor, '-CudaArch', cudaArch, '-BuildType', buildType],
+        ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', scriptPath, '-RepoDir', repoDir, '-TargetRef', targetTagName, '-BuildFlavor', buildFlavor, '-CudaArch', cudaArch, '-BuildType', buildType, '-BuildMode', buildMode],
         { windowsHide: true }
       )
 
