@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.5] - 2026-06-09
+
+### Fixed
+- `run-model` IPC handler produced a doubled executable path (`C:\llm\llama.cpp\b9570\C:\llm\llama.cpp\b9570\bin\llama-server.exe`) because the 1.0.3 fix made `backend.exe` absolute but the spawn handler still did `join(backendPath, exe)`. Reverted `listBackendsFromDirectory` to its original (relative) `exe` and taught `commandsSchemaGenerator` to resolve relative `exe` against `backend.path`. Both the spawn handler and the generator now work.
+- Removed the misleading "Fallback Schema" badge from the Settings → Installed Backends list. The badge was shown for any backend without a user-override `commands.json`, but with the new auto-generated per-build schema pipeline, a backend can have a perfectly valid schema without any user override. "Fallback" implied something was broken; the badge added noise more than signal.
+
 ## [1.0.4] - 2026-06-09
 
 ### Fixed
