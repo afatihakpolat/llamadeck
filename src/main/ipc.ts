@@ -1941,7 +1941,10 @@ export function registerIpcHandlers(): void {
   })
   ipcMain.handle('get-commands', async (_e, backendName: string) => {
     const backendDir = getAppPaths().backend
-    if (!isSafePath(backendDir, backendName)) return null
+    if (!isSafePath(backendDir, backendName)) {
+      logCommandsSchemaGen('get-commands', { name: backendName, path: backendDir }, `unsafe path: ${backendName}`)
+      return null
+    }
     const perBuildPath = join(backendDir, backendName, 'generated.json')
     const userOverridePath = join(backendDir, backendName, 'commands.json')
     if (!existsSync(perBuildPath) && !existsSync(userOverridePath)) {
