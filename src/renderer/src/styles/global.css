@@ -937,6 +937,8 @@ input, textarea, select {
   line-height: 1.6;
   padding: 14px 16px;
   position: relative;
+  user-select: text;
+  -webkit-user-select: text;
 }
 .live-output-empty {
   color: var(--text-muted);
@@ -992,6 +994,8 @@ input, textarea, select {
 .live-output-text {
   white-space: pre-wrap;
   word-break: break-word;
+  user-select: text;
+  -webkit-user-select: text;
 }
 .usage-stats-page {
   display: flex;

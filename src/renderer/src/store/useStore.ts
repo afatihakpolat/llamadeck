@@ -154,7 +154,7 @@ export const useStore = create<AppStore>((set) => ({
     }
   }),
   setSelectedModelOutputId: (id) => set({ selectedModelOutputId: id }),
-  focusModelOutput: (id) => set({ selectedModelOutputId: id, view: 'live-output' }),
+  focusModelOutput: (id) => set({ selectedModelOutputId: id }),
   setHfDownload: (d) => set((s) => {
     const arr = s.hfDownloads.filter(x => x.filename !== d.filename)
     return { hfDownloads: [...arr, d] }
