@@ -164,7 +164,9 @@ export default function CommandsEditor({ backendName }: { backendName: string })
   useEffect(() => {
     setLoading(true)
     window.api.getCommands(backendName).then(s => {
-      setSchema(s ? JSON.parse(JSON.stringify(s)) : { version: '1.0', categories: [] })
+      const next = s ? JSON.parse(JSON.stringify(s)) : { version: '1.0', categories: [] }
+      setSchema(next)
+      setCommandsSchema(next)
       setLoading(false)
     })
   }, [backendName])
