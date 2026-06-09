@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.2] - 2026-06-09
+
+### Added
+- Settings page now shows a small `LlamaDeck vX.Y.Z` badge in the page header, sourced from `app.getVersion()` (i.e. `package.json`). Updates automatically with each version bump.
+
 ## [1.1.1] - 2026-06-09
 
 ### Fixed
