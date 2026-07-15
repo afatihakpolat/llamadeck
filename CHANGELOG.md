@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.1] - 2026-07-15
+
+### Fixed
+- **App Updates showed "Update manager not initialized" on launch.** The renderer called `update:check` before `initUpdateManager()` finished its async load of `electron-updater`. The bootstrap now awaits init before registering IPC handlers, catches load failures so the app still boots, and surfaces a clean "In-app updates are not available." error if init ever fails.
+
 ## [1.2.0] - 2026-07-15
 
 ### Added
