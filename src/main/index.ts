@@ -140,6 +140,15 @@ function createWindow(): void {
     mainWindow.loadFile(join(__dirname, '../renderer/index.html'))
   }
 }
+const gotSingleInstanceLock = app.requestSingleInstanceLock()
+if (!gotSingleInstanceLock) {
+  app.quit()
+}
+
+app.on('second-instance', () => {
+  showMainWindow()
+})
+
 app.whenReady().then(() => {
   electronApp.setAppUserModelId('com.llamadeck.app')
   app.on('browser-window-created', (_, window) => {

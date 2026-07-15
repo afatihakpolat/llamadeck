@@ -14,6 +14,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - NSIS installer no longer offers a path picker on new installs.
 
+### Fixed
+- Clicking the taskbar icon while LlamaDeck is already running no longer starts a second instance. LlamaDeck now uses `app.requestSingleInstanceLock()`; subsequent launches focus the existing window instead of spawning a new process.
+
 ## [1.1.5] - 2026-07-13
 
 ### Added
