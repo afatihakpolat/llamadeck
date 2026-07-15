@@ -37,6 +37,7 @@ export interface UpdateManagerDeps {
 
 let deps: UpdateManagerDeps | null = null
 let currentState: UpdateState | null = null
+let updateOperationInProgress = false
 
 function makeInitialState(currentVersion: string): UpdateState {
   return { status: 'idle', currentVersion }
@@ -45,11 +46,6 @@ function makeInitialState(currentVersion: string): UpdateState {
 function setStatus(next: UpdateState): void {
   currentState = next
   deps?.broadcast('update:state-changed', next)
-}
-
-function isUpdaterActive(): boolean {
-  const au = deps?.autoUpdater
-  return Boolean(au && typeof au.isUpdaterActive === 'function' && au.isUpdaterActive())
 }
 
 function defaultBroadcast(_channel: string, _payload: unknown): void {
@@ -189,22 +185,32 @@ export async function checkForUpdates(): Promise<UpdateState> {
   writeInitLog(`check: deps=${!!deps}, autoUpdater=${deps ? typeof deps.autoUpdater : 'n/a'}`)
   if (!deps) throw new Error('Update manager not initialized.')
   if (!deps.autoUpdater) throw new Error('In-app updates are not available.')
-  if (isUpdaterActive()) throw new Error('An update check or download is already in progress.')
+  if (updateOperationInProgress) throw new Error('An update check or download is already in progress.')
   if (hasActiveWork(deps.getActiveWork())) {
     throw new Error('Updates are blocked while another operation is in progress.')
   }
-  await deps.autoUpdater.checkForUpdates()
-  return getUpdateState()
+  updateOperationInProgress = true
+  try {
+    await deps.autoUpdater.checkForUpdates()
+    return getUpdateState()
+  } finally {
+    updateOperationInProgress = false
+  }
 }
 
 export async function downloadUpdate(): Promise<void> {
   if (!deps) throw new Error('Update manager not initialized.')
   if (!deps.autoUpdater) throw new Error('In-app updates are not available.')
-  if (isUpdaterActive()) throw new Error('An update check or download is already in progress.')
+  if (updateOperationInProgress) throw new Error('An update check or download is already in progress.')
   if (hasActiveWork(deps.getActiveWork())) {
     throw new Error('Updates are blocked while another operation is in progress.')
   }
-  await deps.autoUpdater.downloadUpdate()
+  updateOperationInProgress = true
+  try {
+    await deps.autoUpdater.downloadUpdate()
+  } finally {
+    updateOperationInProgress = false
+  }
 }
 
 export function quitAndInstall(): void {
@@ -220,4 +226,5 @@ export function isAutoDownloadAllowed(): boolean {
 export function __resetUpdateManagerForTests(): void {
   deps = null
   currentState = null
+  updateOperationInProgress = false
 }

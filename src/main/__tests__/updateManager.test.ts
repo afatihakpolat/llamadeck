@@ -19,7 +19,6 @@ const defaultUpdaterModule = vi.hoisted(() => ({
     checkForUpdates: vi.fn().mockResolvedValue(null),
     downloadUpdate: vi.fn().mockResolvedValue([]),
     quitAndInstall: vi.fn(),
-    isUpdaterActive: vi.fn().mockReturnValue(false),
     on: vi.fn()
   }
 }))
@@ -34,7 +33,6 @@ class FakeAutoUpdater extends EventEmitter {
   checkForUpdates = vi.fn().mockResolvedValue(null)
   downloadUpdate = vi.fn().mockResolvedValue([])
   quitAndInstall = vi.fn()
-  isUpdaterActive = vi.fn().mockReturnValue(false)
 }
 
 let updateManager: UpdateManagerModule
@@ -184,10 +182,28 @@ describe('checkForUpdates', () => {
     expect(fakeUpdater.checkForUpdates).toHaveBeenCalledTimes(1)
   })
 
-  it('rejects when updater is already active', async () => {
+  it('rejects a second operation while a check is genuinely in progress', async () => {
     await initWith()
-    fakeUpdater.isUpdaterActive.mockReturnValue(true)
+    let finishCheck: (() => void) | undefined
+    fakeUpdater.checkForUpdates.mockImplementationOnce(() => new Promise<null>((resolve) => {
+      finishCheck = () => resolve(null)
+    }))
+
+    const firstCheck = updateManager.checkForUpdates()
     await expect(updateManager.checkForUpdates()).rejects.toThrow(/already in progress/)
+    await expect(updateManager.downloadUpdate()).rejects.toThrow(/already in progress/)
+
+    finishCheck?.()
+    await firstCheck
+  })
+
+  it('allows another check after a failed check releases the operation lock', async () => {
+    await initWith()
+    fakeUpdater.checkForUpdates.mockRejectedValueOnce(new Error('network unavailable'))
+
+    await expect(updateManager.checkForUpdates()).rejects.toThrow('network unavailable')
+    await expect(updateManager.checkForUpdates()).resolves.toMatchObject({ currentVersion: '1.1.5' })
+    expect(fakeUpdater.checkForUpdates).toHaveBeenCalledTimes(2)
   })
 
   it('rejects when active work is in progress', async () => {

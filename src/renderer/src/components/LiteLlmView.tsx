@@ -1,8 +1,12 @@
-import React, { useEffect, useRef, useState } from 'react'
-import { RefreshCw, Loader2, Download, Upload, Play, Square, Save, Terminal, FileText, Package, AlertCircle } from 'lucide-react'
+import React, { lazy, Suspense, useEffect, useRef, useState } from 'react'
+import { RefreshCw, Loader2, Download, Upload, Play, Square, Save, Terminal, FileText, Package, AlertCircle, Braces, CheckCircle2, RotateCcw } from 'lucide-react'
 import type { LiteLlmLogLevel, LiteLlmManagerSnapshot, LiteLlmModelEntry } from '../../../shared/types'
+import type { LiteLlmConfigValidation } from '../../../shared/liteLlmConfig'
 
-type BusyAction = 'refresh' | 'save-runtime' | 'save-config' | 'install' | 'update' | 'start' | 'stop' | 'test' | 'models' | null
+const LiteLlmConfigEditor = lazy(() => import('./LiteLlmConfigEditor'))
+
+type BusyAction = 'refresh' | 'save-runtime' | 'save-config' | 'reload-config' | 'install' | 'update' | 'start' | 'stop' | 'test' | 'models' | null
+type StatusMessage = { tone: 'muted' | 'success' | 'danger'; text: string }
 
 function buildLocalBaseUrl(port: number): string {
   return `http://127.0.0.1:${port}`
@@ -21,8 +25,10 @@ export default function LiteLlmView() {
   const configDirtyRef = useRef(false)
   const [liteLlmModels, setLiteLlmModels] = useState<LiteLlmModelEntry[]>([])
   const [busyAction, setBusyAction] = useState<BusyAction>(null)
-  const [managerStatus, setManagerStatus] = useState<{ tone: 'muted' | 'success' | 'danger'; text: string } | null>(null)
-  const [proxyStatus, setProxyStatus] = useState<{ tone: 'muted' | 'success' | 'danger'; text: string } | null>(null)
+  const [managerStatus, setManagerStatus] = useState<StatusMessage | null>(null)
+  const [proxyStatus, setProxyStatus] = useState<StatusMessage | null>(null)
+  const [configStatus, setConfigStatus] = useState<StatusMessage | null>(null)
+  const [configValidation, setConfigValidation] = useState<{ source: string; result: LiteLlmConfigValidation } | null>(null)
 
   function applyManagerSnapshot(snapshot: LiteLlmManagerSnapshot, syncDrafts = false) {
     setManager(snapshot)
@@ -86,6 +92,17 @@ export default function LiteLlmView() {
   }
 
   async function handleSaveConfig() {
+    const currentValidation = configValidation?.source === configText ? configValidation.result : null
+    const firstError = currentValidation?.diagnostics.find((diagnostic) => diagnostic.severity === 'error')
+    if (firstError) {
+      setConfigStatus({ tone: 'danger', text: `Fix line ${firstError.line}, column ${firstError.column} before saving: ${firstError.message}` })
+      return
+    }
+    if (!currentValidation) {
+      setConfigStatus({ tone: 'muted', text: 'Wait for YAML validation to finish before saving.' })
+      return
+    }
+
     setBusyAction('save-config')
     try {
       const result = await window.api.saveLiteLlmConfig(configText)
@@ -93,12 +110,38 @@ export default function LiteLlmView() {
         throw new Error(result.error || 'Failed to save LiteLLM config.')
       }
 
-      applyManagerSnapshot(result.snapshot, false)
+      setManager(result.snapshot)
+      setConfigText(result.snapshot.configText)
       setConfigDirty(false)
       configDirtyRef.current = false
-      setManagerStatus({ tone: 'success', text: 'LiteLLM config saved.' })
+      setConfigStatus({ tone: 'success', text: manager?.running ? 'Config saved. Restart the proxy to apply it.' : 'Config saved and ready for the next proxy start.' })
     } catch (error) {
-      setManagerStatus({ tone: 'danger', text: String(error) })
+      setConfigStatus({ tone: 'danger', text: String(error) })
+    } finally {
+      setBusyAction(null)
+    }
+  }
+
+  function handleConfigChange(nextValue: string) {
+    setConfigText(nextValue)
+    setConfigDirty(true)
+    configDirtyRef.current = true
+    setConfigStatus(null)
+  }
+
+  async function handleReloadConfig() {
+    if (configDirty && !window.confirm('Discard your unsaved config changes and reload the saved file?')) return
+
+    setBusyAction('reload-config')
+    try {
+      const snapshot = await window.api.getLiteLlmManager()
+      setManager(snapshot)
+      setConfigText(snapshot.configText)
+      setConfigDirty(false)
+      configDirtyRef.current = false
+      setConfigStatus({ tone: 'success', text: 'Reloaded the saved config from disk.' })
+    } catch (error) {
+      setConfigStatus({ tone: 'danger', text: `Failed to reload the config: ${String(error)}` })
     } finally {
       setBusyAction(null)
     }
@@ -176,9 +219,16 @@ export default function LiteLlmView() {
   const localBaseUrl = buildLocalBaseUrl(port)
   const activeLocalBaseUrl = buildLocalBaseUrl(manager?.settings.port ?? port)
   const install = manager?.install
+  const currentConfigValidation = configValidation?.source === configText ? configValidation.result : null
+  const configValidationPending = currentConfigValidation === null
+  const configError = currentConfigValidation?.diagnostics.find((diagnostic) => diagnostic.severity === 'error')
+  const configWarningCount = currentConfigValidation?.diagnostics.filter((diagnostic) => diagnostic.severity === 'warning').length ?? 0
+  const configCanSave = configDirty && currentConfigValidation?.valid === true && busyAction === null
+  const configFileName = manager?.settings.configPath.split(/[\\/]/).pop() || 'litellm-config.yaml'
+  const configLineCount = configText.length === 0 ? 1 : configText.split(/\r?\n/).length
 
   return (
-    <div className="max-w-3xl">
+    <div className="litellm-page">
       <div className="page-header">
         <div>
           <h1 className="page-title">LiteLLM</h1>
@@ -320,29 +370,73 @@ export default function LiteLlmView() {
         </div>
       </div>
 
-      <div className="settings-section">
-        <div className="settings-section-title"><FileText /> Proxy Config</div>
-        <div className="settings-row" style={{ borderBottom: 'none', flexDirection: 'column', alignItems: 'stretch', gap: 12 }}>
-          <div className="form-hint" style={{ margin: 0 }}>
-            Edit the LiteLLM proxy `config.yaml` used by the local managed process. Save the config before restarting the proxy.
+      <div className="settings-section litellm-config-section">
+        <div className="litellm-config-heading">
+          <div>
+            <div className="settings-section-title"><FileText /> Proxy Config</div>
+            <p>Author the YAML used by the managed LiteLLM proxy. Validation runs as you type.</p>
           </div>
-          <textarea
-            className="form-textarea mono"
-            value={configText}
-            onChange={(event) => { setConfigText(event.target.value); setConfigDirty(true); configDirtyRef.current = true }}
-            rows={16}
-            style={{ fontSize: 12, fontFamily: "'SF Mono','Fira Code',monospace" }}
-          />
-          <div className="flex gap-2" style={{ flexWrap: 'wrap' }}>
-            <button className="btn btn-primary btn-sm" onClick={handleSaveConfig} disabled={busyAction !== null || !configDirty}>
+          <div className="litellm-config-actions">
+            <button className="btn btn-ghost btn-sm" onClick={() => void handleReloadConfig()} disabled={busyAction !== null} title="Reload the saved file">
+              {busyAction === 'reload-config' ? <Loader2 size={14} className="spin" /> : <RotateCcw size={14} />}
+              Revert
+            </button>
+            <button className="btn btn-primary btn-sm" onClick={() => void handleSaveConfig()} disabled={!configCanSave} title="Save config (Ctrl+S)">
               {busyAction === 'save-config' ? <Loader2 size={14} className="spin" /> : <Save size={14} />}
               Save Config
-            </button>
-            <button className="btn btn-ghost btn-sm" onClick={handleRefreshManager} disabled={busyAction !== null}>
-              <RefreshCw size={14} /> Reload From Disk
+              <span className="litellm-key-hint">Ctrl S</span>
             </button>
           </div>
         </div>
+
+        <div className={`litellm-config-workbench ${configError ? 'has-error' : ''}`}>
+          <div className="litellm-config-tabbar">
+            <div className="litellm-config-file">
+              <Braces size={14} />
+              <span>{configFileName}</span>
+              {configDirty && <span className="litellm-unsaved-dot" aria-label="Unsaved changes" />}
+            </div>
+            <div className="litellm-config-badges">
+              <span className="litellm-language-badge">YAML</span>
+              {manager?.running && <span className="litellm-restart-badge">Restart after save</span>}
+            </div>
+          </div>
+
+          <Suspense fallback={<div className="litellm-editor-loading"><Loader2 size={16} className="spin" /> Loading editor…</div>}>
+            <LiteLlmConfigEditor
+              value={configText}
+              canSave={configCanSave}
+              onChange={handleConfigChange}
+              onSave={() => void handleSaveConfig()}
+              onValidationChange={(source, result) => setConfigValidation({ source, result })}
+            />
+          </Suspense>
+
+          <div className="litellm-config-statusbar" aria-live="polite">
+            <div className={configError ? 'is-invalid' : 'is-valid'}>
+              {configValidationPending ? (
+                <><Loader2 size={13} className="spin" /> Checking YAML…</>
+              ) : configError ? (
+                <><AlertCircle size={13} /> Line {configError.line}, column {configError.column}: {configError.message}</>
+              ) : (
+                <><CheckCircle2 size={13} /> Valid YAML{configWarningCount > 0 ? ` · ${configWarningCount} warning${configWarningCount === 1 ? '' : 's'}` : ''}</>
+              )}
+            </div>
+            <div>{configLineCount} lines · {configText.length.toLocaleString()} characters</div>
+          </div>
+        </div>
+
+        <div className="litellm-config-meta">
+          <span className="mono" title={manager?.settings.configPath}>{manager?.settings.configPath || 'Loading config path…'}</span>
+          <span>Search with Ctrl+F · indent with Tab · save with Ctrl+S</span>
+        </div>
+
+        {configStatus && (
+          <div className={`litellm-config-message ${configStatus.tone}`} role="status">
+            {configStatus.tone === 'danger' ? <AlertCircle size={14} /> : configStatus.tone === 'success' ? <CheckCircle2 size={14} /> : null}
+            {configStatus.text}
+          </div>
+        )}
       </div>
 
       <div className="settings-section">
