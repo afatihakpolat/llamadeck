@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-07-15
+
 ### Added
 - **In-app app updates.** LlamaDeck now checks GitHub Releases for new versions, downloads updates in the background, and prompts you to restart at your convenience. Open Settings → App Updates to check manually, see release notes, and toggle "Check on launch" / "Auto-download". Powered by `electron-updater`.
 - **Updates preserve the Windows taskbar pin.** The NSIS installer path is now locked, so updates install into the same `%LOCALAPPDATA%\Programs\llamadeck` folder and your pinned shortcut survives every future update.
