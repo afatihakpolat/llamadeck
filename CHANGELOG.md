@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.3] - 2026-07-15
+
+### Fixed
+- **In-app updates can now connect to GitHub Releases.** Packaged builds correctly initialize the updater, and releases now include the update manifest and download metadata under matching filenames.
+
 ## [1.2.2] - 2026-07-15
 
 ### Fixed

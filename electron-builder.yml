@@ -22,6 +22,7 @@ win:
         - arm64
   icon: assets/icon_256.png
 nsis:
+  artifactName: LlamaDeck-Setup-${version}.${ext}
   oneClick: false
   perMachine: false
   allowToChangeInstallationDirectory: false
