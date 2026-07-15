@@ -1,12 +1,30 @@
 import { app } from 'electron'
+import { appendFileSync, mkdirSync } from 'fs'
+import { join } from 'path'
 import type { AppUpdater, ProgressInfo, UpdateInfo } from 'electron-updater'
 import type { UpdatePreferences, UpdateState } from '../shared/update'
 import { hasActiveWork, type ActiveWorkSnapshot } from './activeWork'
 import { loadUpdateSettings, saveUpdateSettings, resolveUpdateSettingsPath } from './updateSettings'
 
+function writeInitLog(message: string): void {
+  try {
+    const dir = join(app.getPath('userData'), 'logs')
+    mkdirSync(dir, { recursive: true })
+    appendFileSync(join(dir, 'update-init.log'), `[${new Date().toISOString()}] ${message}\n`)
+  } catch {
+    // best effort
+  }
+}
+
 type BroadcastFn = (channel: string, payload: unknown) => void
 type AutoDownloadEnabled = () => boolean
 type SkippedVersionFn = () => string | undefined
+
+interface ElectronUpdaterModuleShape {
+  autoUpdater?: AppUpdater
+  default?: { autoUpdater?: AppUpdater }
+  'module.exports'?: { autoUpdater?: AppUpdater }
+}
 
 export interface UpdateManagerDeps {
   broadcast: BroadcastFn
@@ -40,8 +58,17 @@ function defaultBroadcast(_channel: string, _payload: unknown): void {
 }
 
 async function loadDefaultAutoUpdater(): Promise<AppUpdater> {
-  const mod = await import('electron-updater')
-  return mod.autoUpdater
+  const imported: unknown = await import('electron-updater')
+  if (typeof imported !== 'object' || imported === null) {
+    throw new Error('electron-updater returned an invalid module')
+  }
+
+  const mod = imported as ElectronUpdaterModuleShape
+  const autoUpdater = mod.autoUpdater ?? mod.default?.autoUpdater ?? mod['module.exports']?.autoUpdater
+  if (!autoUpdater) {
+    throw new Error('electron-updater did not expose autoUpdater')
+  }
+  return autoUpdater
 }
 
 function formatInitError(err: unknown): string {
@@ -65,9 +92,12 @@ export async function initUpdateManager(customDeps?: Partial<UpdateManagerDeps>)
   const getCurrentVersion = customDeps?.getCurrentVersion ?? (() => app.getVersion())
 
   let autoUpdater: AppUpdater | null = null
+  writeInitLog('init: starting')
   try {
     autoUpdater = customDeps?.autoUpdater ?? (await loadDefaultAutoUpdater())
+    writeInitLog(`init: autoUpdater loaded, type=${autoUpdater ? typeof autoUpdater : 'null'}`)
   } catch (err) {
+    writeInitLog(`init: load FAILED: ${err instanceof Error ? err.stack || err.message : String(err)}`)
     console.warn('[update] autoUpdater load failed, in-app updates disabled:', err)
     deps = unavailableDeps(broadcast, getCurrentVersion)
     setStatus({ status: 'error', currentVersion: getCurrentVersion(), error: formatInitError(err) })
@@ -156,6 +186,7 @@ export function setUpdatePreferences(prefs: UpdatePreferences): UpdatePreference
 }
 
 export async function checkForUpdates(): Promise<UpdateState> {
+  writeInitLog(`check: deps=${!!deps}, autoUpdater=${deps ? typeof deps.autoUpdater : 'n/a'}`)
   if (!deps) throw new Error('Update manager not initialized.')
   if (!deps.autoUpdater) throw new Error('In-app updates are not available.')
   if (isUpdaterActive()) throw new Error('An update check or download is already in progress.')

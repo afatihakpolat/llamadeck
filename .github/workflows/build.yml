@@ -76,7 +76,9 @@ jobs:
           tag_name: ${{ needs.create-release.outputs.tag_name }}
           files: |
             dist/*.exe
+            dist/*.blockmap
             dist/*.zip
             dist/*.AppImage
+            dist/latest*.yml
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -12,6 +12,20 @@ vi.mock('electron', () => ({
   }
 }))
 
+const defaultUpdaterModule = vi.hoisted(() => ({
+  autoUpdater: {
+    autoDownload: true,
+    autoInstallOnAppQuit: true,
+    checkForUpdates: vi.fn().mockResolvedValue(null),
+    downloadUpdate: vi.fn().mockResolvedValue([]),
+    quitAndInstall: vi.fn(),
+    isUpdaterActive: vi.fn().mockReturnValue(false),
+    on: vi.fn()
+  }
+}))
+
+vi.mock('electron-updater', () => ({ autoUpdater: undefined, default: defaultUpdaterModule }))
+
 type UpdateManagerModule = typeof import('../updateManager')
 
 class FakeAutoUpdater extends EventEmitter {
@@ -32,6 +46,9 @@ let work: string
 
 beforeEach(async () => {
   vi.resetModules()
+  vi.clearAllMocks()
+  defaultUpdaterModule.autoUpdater.autoDownload = true
+  defaultUpdaterModule.autoUpdater.autoInstallOnAppQuit = true
   updateManager = await import('../updateManager')
   work = mkdtempSync(join(tmpdir(), 'hexllama-updatemanager-'))
   autoDownloadEnabled = false
@@ -77,6 +94,14 @@ function initWith(activeWork: ActiveWorkSnapshotLike = makeActiveWork()): Promis
 }
 
 describe('initUpdateManager', () => {
+  it('loads autoUpdater from the CommonJS default export', async () => {
+    await updateManager.initUpdateManager({ getCurrentVersion: () => '1.1.5' })
+
+    expect(updateManager.getUpdateState().status).toBe('idle')
+    expect(defaultUpdaterModule.autoUpdater.autoDownload).toBe(false)
+    expect(defaultUpdaterModule.autoUpdater.autoInstallOnAppQuit).toBe(false)
+  })
+
   it('initializes state to idle with the current version', async () => {
     await initWith()
     const state = updateManager.getUpdateState()
