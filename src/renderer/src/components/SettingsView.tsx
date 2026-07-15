@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react'
 import { useStore } from '../store/useStore'
 import { HardDrive, Download, Trash, RefreshCw, Loader2, ChevronDown, Terminal, Bell, BellOff, FolderOpen, Moon, Sun, Monitor } from 'lucide-react'
 import CommandsEditor from './CommandsEditor'
+import UpdateSettings from './UpdateSettings'
 import type { AppWindowBehaviorSettings, BackendBuildFlavor, BackendVersion, Template } from '../../../shared/types'
 import type { ModelFileInfo, ThemeMode } from '../store/useStore'
 
@@ -485,6 +486,10 @@ export default function SettingsView() {
             <RefreshCw size={14} className={checkingUpdate ? 'spin' : ''} /> Check Now
           </button>
         </div>
+      </div>
+      <div className="settings-section">
+        <div className="settings-section-title"><Download /> App Updates</div>
+        <UpdateSettings />
       </div>
     </div>
   )

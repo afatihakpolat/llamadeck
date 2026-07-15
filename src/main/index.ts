@@ -2,9 +2,14 @@ import { app, shell, BrowserWindow, nativeTheme, Tray, Menu, nativeImage } from 
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import './userData'
-import { registerIpcHandlers, shutdownManagedProcesses } from './ipc'
+import { broadcastToRenderer, registerIpcHandlers, shutdownManagedProcesses } from './ipc'
 import { existsSync } from 'fs'
 import { getAppWindowBehaviorSettings } from './appSettings'
+import {
+  checkForUpdates,
+  getUpdatePreferences,
+  initUpdateManager
+} from './updateManager'
 
 let isShuttingDown = false
 let mainWindow: BrowserWindow | null = null
@@ -148,6 +153,15 @@ app.whenReady().then(() => {
     void shutdownManagedProcesses().finally(() => {
       app.quit()
     })
+  })
+  void initUpdateManager({ broadcast: broadcastToRenderer }).then(() => {
+    if (getUpdatePreferences().checkOnLaunch && app.isPackaged) {
+      setImmediate(() => {
+        void checkForUpdates().catch((err) => {
+          console.warn('[update] initial check failed:', err)
+        })
+      })
+    }
   })
   registerIpcHandlers()
   createWindow()
