@@ -55,6 +55,16 @@ import { OverlaySchema, type Overlay } from './schemas'
 import { loadMergedSchema, resetLoaderCache } from './commandsSchemaLoader'
 import { generateCommandsSchema } from './commandsSchemaGenerator'
 import { readBackendBuildMode, writeBackendBuildMetadata } from './backendBuildMetadata'
+import { hasActiveWork } from './activeWork'
+import { UpdatePreferencesSchema, type UpdatePreferences } from '../shared/update'
+import {
+  checkForUpdates as checkForUpdatesImpl,
+  downloadUpdate as downloadUpdateImpl,
+  getUpdatePreferences as getUpdatePreferencesImpl,
+  getUpdateState,
+  quitAndInstall as quitAndInstallImpl,
+  setUpdatePreferences as setUpdatePreferencesImpl
+} from './updateManager'
 
 type ConfigurablePathKind = 'models' | 'backend'
 const LIGHT_WINDOW_BACKGROUND = '#f3f6fb'
@@ -1373,6 +1383,8 @@ function broadcastToRenderer(channel: string, payload: unknown): void {
   })
 }
 
+export { broadcastToRenderer }
+
 function broadcastModelOutput(payload: ModelOutputEvent): void {
   broadcastToRenderer('model-output', payload)
 }
@@ -2205,10 +2217,6 @@ export function registerIpcHandlers(): void {
 
   let cancelBackendDl: (() => void) | null = null
 
-  function hasActiveTransfers(): boolean {
-    return sourceUpdateJob !== null || cancelBackendDl !== null || Array.from(downloadTasks.values()).some((task) => !['done', 'error', 'cancelled'].includes(task.phase))
-  }
-
   ipcMain.handle('get-app-version', () => {
     try { return { version: app.getVersion() } } catch (err) { return { error: String(err) } }
   })
@@ -2238,7 +2246,7 @@ export function registerIpcHandlers(): void {
       return { success: false, error: 'Stop running model processes before updating the backend.' }
     }
 
-    if (hasActiveTransfers()) {
+    if (hasActiveWork({ sourceUpdateJob, cancelBackendDl, downloadTasks })) {
       return { success: false, error: 'Finish or cancel active downloads or updates before starting a source update.' }
     }
 
@@ -2437,6 +2445,36 @@ export function registerIpcHandlers(): void {
     }
     return { success: true }
   })
+  ipcMain.handle('update:get-state', () => getUpdateState())
+  ipcMain.handle('update:check', async () => {
+    try {
+      const state = await checkForUpdatesImpl()
+      return { success: true, state }
+    } catch (err) {
+      return { success: false, error: String(err) }
+    }
+  })
+  ipcMain.handle('update:download', async () => {
+    try {
+      await downloadUpdateImpl()
+      return { success: true }
+    } catch (err) {
+      return { success: false, error: String(err) }
+    }
+  })
+  ipcMain.handle('update:install-and-restart', () => {
+    try {
+      quitAndInstallImpl()
+      return { success: true }
+    } catch (err) {
+      return { success: false, error: String(err) }
+    }
+  })
+  ipcMain.handle('update:get-preferences', () => getUpdatePreferencesImpl())
+  ipcMain.handle('update:set-preferences', (_e, prefs: UpdatePreferences) => {
+    const parsed = UpdatePreferencesSchema.parse(prefs)
+    return setUpdatePreferencesImpl(parsed)
+  })
   ipcMain.handle('open-folder', (_e, folderPath: string) => shell.openPath(folderPath))
   ipcMain.handle('get-paths', () => getAppPaths())
   ipcMain.handle('choose-app-folder', async (_e, kind: ConfigurablePathKind) => {
@@ -2456,7 +2494,7 @@ export function registerIpcHandlers(): void {
       return { success: false, error: 'Invalid folder kind' }
     }
 
-    if (hasActiveTransfers()) {
+    if (hasActiveWork({ sourceUpdateJob, cancelBackendDl, downloadTasks })) {
       return { success: false, error: 'Finish or cancel active downloads before changing storage folders' }
     }
 

@@ -53,7 +53,8 @@ function MainApp() {
     setBackends, setModels, setActiveBackend, setCommandsSchema,
     setCards, setPaths, setReleaseInfo, setCheckingUpdate,
     setHfDownload, removeHfDownload, addCard, appendModelOutput,
-    upsertModelDownload, removeModelDownload
+    upsertModelDownload, removeModelDownload,
+    setAppUpdateState, setAppUpdatePreferences
   } = useStore()
 
   useEffect(() => {
@@ -207,6 +208,19 @@ function MainApp() {
     })
     return () => window.api.removeDownloadListener()
   }, [])
+
+  useEffect(() => {
+    void window.api.updateGetState().then((state) => {
+      setAppUpdateState(state as any)
+    })
+    void window.api.updateGetPreferences().then((prefs) => {
+      setAppUpdatePreferences(prefs as any)
+    })
+    const unsubscribe = window.api.onUpdateStateChanged((state) => {
+      setAppUpdateState(state as any)
+    })
+    return unsubscribe
+  }, [setAppUpdateState, setAppUpdatePreferences])
 
   async function checkUpdates() {
     setCheckingUpdate(true)

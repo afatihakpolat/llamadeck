@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import type { AppView, Template, BackendVersion, CommandsSchema, ReleaseInfo, RunningStatus, ModelOutputEvent } from '../../../shared/types'
+import type { UpdatePreferences, UpdateState } from '../../../shared/update'
 
 export type ThemeMode = 'system' | 'light' | 'dark'
 
@@ -52,6 +53,8 @@ interface AppStore {
   updateDismissed: boolean
   checkingUpdate: boolean
   downloadProgress: { percent: number; phase: string } | null
+  appUpdateState: UpdateState | null
+  appUpdatePreferences: UpdatePreferences | null
   templateSearch: string
   modelDownloads: Record<string, ModelDownloadInfo>
   modelOutput: Record<string, ModelOutputEvent[]>
@@ -73,6 +76,8 @@ interface AppStore {
   setUpdateDismissed: (v: boolean) => void
   setCheckingUpdate: (v: boolean) => void
   setDownloadProgress: (data: { percent: number; phase: string } | null) => void
+  setAppUpdateState: (state: UpdateState | null) => void
+  setAppUpdatePreferences: (prefs: UpdatePreferences | null) => void
   setTemplateSearch: (q: string) => void
   upsertModelDownload: (d: ModelDownloadInfo) => void
   removeModelDownload: (id: string) => void
@@ -97,6 +102,7 @@ export const useStore = create<AppStore>((set) => ({
   commandsSchema: null, releaseInfo: null, paths: null,
   view: 'cards', themeMode: getInitialThemeMode(), showCreateModal: false, editingTemplate: null,
   updateDismissed: false, checkingUpdate: false, downloadProgress: null,
+  appUpdateState: null, appUpdatePreferences: null,
   templateSearch: '', modelDownloads: {}, modelOutput: {}, selectedModelOutputId: null, hfDownloads: [],
   hubQuery: '', hubResults: [], hubSelectedModelId: null,
   setView: (v) => set({ view: v }),
@@ -128,6 +134,8 @@ export const useStore = create<AppStore>((set) => ({
   setUpdateDismissed: (v) => set({ updateDismissed: v }),
   setCheckingUpdate: (v) => set({ checkingUpdate: v }),
   setDownloadProgress: (data) => set({ downloadProgress: data }),
+  setAppUpdateState: (state) => set({ appUpdateState: state }),
+  setAppUpdatePreferences: (prefs) => set({ appUpdatePreferences: prefs }),
   setTemplateSearch: (q) => set({ templateSearch: q }),
   upsertModelDownload: (d) => set((s) => ({ modelDownloads: { ...s.modelDownloads, [d.id]: d } })),
   removeModelDownload: (id) => set((s) => {

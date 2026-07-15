@@ -127,6 +127,8 @@ Design and implementation: `docs/superpowers/specs/2026-06-07-per-build-commands
 - **Don't refactor `src/main/ipc.ts` opportunistically.** It's large but it's the conventional hub. New IPC handlers go there; if a refactor is needed, file a follow-up task.
 - **Renderer-side data assumptions** — the renderer reads schemas through the IPC contract, not by reading `resources/commands.json` directly. If you change a schema, check the renderer consumer.
 - **Windows path semantics** — `fs.writeFileSync` from a generator using `renameSync` updates mtime (verified). User-override writes from `save-backend-commands` use plain `writeFileSync` and inherit the inode's mtime, so the loader's mtime-hash check invalidates correctly.
+- **App updates use `electron-updater` against the GitHub `publish` block in `electron-builder.yml`.** The NSIS installer path is locked (`allowToChangeInstallationDirectory: false`) so updates write into the same `%LOCALAPPDATA%\Programs\llamadeck` folder and the Windows taskbar pin survives. Distinct from the llama.cpp source-build update flow, which is unchanged.
+- **Active-work coordination.** Anything that should not race with model downloads, source builds, or running models uses `hasActiveWork()` from `src/main/activeWork.ts`. The function takes a snapshot — pass the current state containers, don't refactor the state out of `ipc.ts`.
 
 ## Versioning and Release Process
 

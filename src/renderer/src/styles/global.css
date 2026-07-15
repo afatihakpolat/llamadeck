@@ -500,6 +500,12 @@ input, textarea, select, pre {
 .update-banner a, .update-banner button { color: inherit; text-decoration: underline; background: none; border: none; cursor: pointer; font: inherit; padding: 0; }
 .update-banner .dismiss { margin-left: auto; opacity: .7; text-decoration: none !important; }
 .update-banner .dismiss:hover { opacity: 1; }
+.update-progress { display: flex; flex-direction: column; gap: 4px; margin-top: 4px; }
+.update-progress-bar { height: 6px; background: var(--border); border-radius: 3px; overflow: hidden; }
+.update-progress-fill { height: 100%; background: var(--accent); transition: width 200ms ease-out; }
+.update-progress-label { font-size: 11px; color: var(--text-muted); }
+.update-settings .update-notes summary { color: var(--text-secondary); }
+.update-settings .update-notes summary:hover { color: var(--text); }
 .empty-state { text-align: center; padding: 64px 24px; color: var(--text-muted); }
 .empty-state-icon { width: 56px; height: 56px; margin: 0 auto 16px; background: var(--border); border-radius: 16px; display: flex; align-items: center; justify-content: center; }
 .empty-state-icon svg { width: 28px; height: 28px; color: var(--text-muted); }

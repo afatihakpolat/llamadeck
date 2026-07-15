@@ -89,6 +89,17 @@ const api = {
   getAppWindowBehaviorSettings: () => ipcRenderer.invoke('get-app-window-behavior-settings'),
   saveAppWindowBehaviorSettings: (settings: object) => ipcRenderer.invoke('save-app-window-behavior-settings', settings),
   saveUsageCostSettings: (settings: object) => ipcRenderer.invoke('save-usage-cost-settings', settings),
+  updateGetState: () => ipcRenderer.invoke('update:get-state'),
+  updateCheck: () => ipcRenderer.invoke('update:check'),
+  updateDownload: () => ipcRenderer.invoke('update:download'),
+  updateInstallAndRestart: () => ipcRenderer.invoke('update:install-and-restart'),
+  updateGetPreferences: () => ipcRenderer.invoke('update:get-preferences'),
+  updateSetPreferences: (prefs: object) => ipcRenderer.invoke('update:set-preferences', prefs),
+  onUpdateStateChanged: (cb: (data: object) => void) => {
+    const listener = (_e: Electron.IpcRendererEvent, data: object) => cb(data)
+    ipcRenderer.on('update:state-changed', listener)
+    return () => { ipcRenderer.removeListener('update:state-changed', listener) }
+  }
 }
 if (process.contextIsolated) {
   try {
