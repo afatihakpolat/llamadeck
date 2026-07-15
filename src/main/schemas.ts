@@ -1,5 +1,12 @@
 import { z } from 'zod'
 
+const MAX_LITELLM_CONFIG_CHARACTERS = 1024 * 1024
+
+export const LiteLlmConfigTextSchema = z.string().max(
+  MAX_LITELLM_CONFIG_CHARACTERS,
+  'LiteLLM config must be 1,048,576 characters or fewer.'
+)
+
 export const CommandTypeSchema = z.enum(['boolean', 'number', 'string', 'select', 'text'])
 export type CommandType = z.infer<typeof CommandTypeSchema>
 

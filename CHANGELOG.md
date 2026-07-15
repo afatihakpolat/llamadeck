@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.4] - 2026-07-15
+
+### Added
+- **A proper YAML editor for LiteLLM proxy configuration.** The editor now includes line numbers, syntax highlighting, folding, search, indentation support, live validation, file status, and Ctrl+S saving.
+
+### Changed
+- LiteLLM config saving is now atomic, and malformed or duplicate-key YAML is blocked before it can replace the last working config.
+- Reloading the LiteLLM config now discards only config edits instead of also resetting unrelated runtime fields.
+
+### Fixed
+- **App update checks no longer always report that an update is already in progress.** The updater now blocks only genuinely overlapping checks or downloads and releases the guard after success or failure.
+
 ## [1.2.3] - 2026-07-15
 
 ### Fixed

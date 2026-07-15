@@ -51,11 +51,12 @@ import type {
   UsageStatsQuery,
   UsageUpdatedEvent
 } from '../shared/types'
-import { OverlaySchema, type Overlay } from './schemas'
+import { LiteLlmConfigTextSchema, OverlaySchema, type Overlay } from './schemas'
 import { loadMergedSchema, resetLoaderCache } from './commandsSchemaLoader'
 import { generateCommandsSchema } from './commandsSchemaGenerator'
 import { readBackendBuildMode, writeBackendBuildMetadata } from './backendBuildMetadata'
 import { hasActiveWork } from './activeWork'
+import { saveLiteLlmConfigFile } from './liteLlmConfigFile'
 import { UpdatePreferencesSchema, type UpdatePreferences } from '../shared/update'
 import {
   checkForUpdates as checkForUpdatesImpl,
@@ -549,8 +550,7 @@ function readLiteLlmConfigText(): string {
 }
 
 function saveLiteLlmConfigText(configText: string): void {
-  ensureDirectory(dirname(liteLlmManagerSettings.configPath))
-  writeFileSync(liteLlmManagerSettings.configPath, configText, 'utf-8')
+  saveLiteLlmConfigFile(liteLlmManagerSettings.configPath, configText)
 }
 
 function shouldDisableLiteLlmAuth(configText: string): boolean {
@@ -1735,8 +1735,9 @@ export function registerIpcHandlers(): void {
       return { success: false, error: String(error) }
     }
   })
-  ipcMain.handle('save-litellm-config', async (_e, configText: string) => {
+  ipcMain.handle('save-litellm-config', async (_e, input: unknown) => {
     try {
+      const configText = LiteLlmConfigTextSchema.parse(input)
       saveLiteLlmConfigText(configText)
       appendLiteLlmLog(`Saved LiteLLM config to ${liteLlmManagerSettings.configPath}`)
       return { success: true, snapshot: await buildLiteLlmManagerSnapshot() }
