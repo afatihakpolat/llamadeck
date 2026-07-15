@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.2] - 2026-07-15
+
+### Fixed
+- **ReferenceError on update check.** A previous edit left `throw new Error(NOT_AVAILABLE_ERROR)` referring to a constant that had been inlined into a helper, so the throw sites threw `ReferenceError` instead of the intended message. Now inline the error string at each throw site.
+
 ## [1.2.1] - 2026-07-15
 
 ### Fixed

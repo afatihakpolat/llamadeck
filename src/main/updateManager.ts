@@ -44,7 +44,10 @@ async function loadDefaultAutoUpdater(): Promise<AppUpdater> {
   return mod.autoUpdater
 }
 
-const NOT_AVAILABLE_ERROR = 'In-app updates are not available.'
+function formatInitError(err: unknown): string {
+  const detail = err instanceof Error ? err.message : String(err)
+  return `In-app updates are not available: ${detail}`
+}
 
 function unavailableDeps(broadcast: BroadcastFn, getCurrentVersion: () => string): UpdateManagerDeps {
   return {
@@ -67,7 +70,7 @@ export async function initUpdateManager(customDeps?: Partial<UpdateManagerDeps>)
   } catch (err) {
     console.warn('[update] autoUpdater load failed, in-app updates disabled:', err)
     deps = unavailableDeps(broadcast, getCurrentVersion)
-    setStatus({ status: 'error', currentVersion: getCurrentVersion(), error: NOT_AVAILABLE_ERROR })
+    setStatus({ status: 'error', currentVersion: getCurrentVersion(), error: formatInitError(err) })
     return
   }
 
@@ -154,7 +157,7 @@ export function setUpdatePreferences(prefs: UpdatePreferences): UpdatePreference
 
 export async function checkForUpdates(): Promise<UpdateState> {
   if (!deps) throw new Error('Update manager not initialized.')
-  if (!deps.autoUpdater) throw new Error(NOT_AVAILABLE_ERROR)
+  if (!deps.autoUpdater) throw new Error('In-app updates are not available.')
   if (isUpdaterActive()) throw new Error('An update check or download is already in progress.')
   if (hasActiveWork(deps.getActiveWork())) {
     throw new Error('Updates are blocked while another operation is in progress.')
@@ -165,7 +168,7 @@ export async function checkForUpdates(): Promise<UpdateState> {
 
 export async function downloadUpdate(): Promise<void> {
   if (!deps) throw new Error('Update manager not initialized.')
-  if (!deps.autoUpdater) throw new Error(NOT_AVAILABLE_ERROR)
+  if (!deps.autoUpdater) throw new Error('In-app updates are not available.')
   if (isUpdaterActive()) throw new Error('An update check or download is already in progress.')
   if (hasActiveWork(deps.getActiveWork())) {
     throw new Error('Updates are blocked while another operation is in progress.')
@@ -175,7 +178,7 @@ export async function downloadUpdate(): Promise<void> {
 
 export function quitAndInstall(): void {
   if (!deps) throw new Error('Update manager not initialized.')
-  if (!deps.autoUpdater) throw new Error(NOT_AVAILABLE_ERROR)
+  if (!deps.autoUpdater) throw new Error('In-app updates are not available.')
   deps.autoUpdater.quitAndInstall()
 }
 
