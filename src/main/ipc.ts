@@ -2451,7 +2451,7 @@ export function registerIpcHandlers(): void {
       const state = await checkForUpdatesImpl()
       return { success: true, state }
     } catch (err) {
-      return { success: false, error: String(err) }
+      return { success: false, error: err instanceof Error ? err.message : String(err) }
     }
   })
   ipcMain.handle('update:download', async () => {
@@ -2459,7 +2459,7 @@ export function registerIpcHandlers(): void {
       await downloadUpdateImpl()
       return { success: true }
     } catch (err) {
-      return { success: false, error: String(err) }
+      return { success: false, error: err instanceof Error ? err.message : String(err) }
     }
   })
   ipcMain.handle('update:install-and-restart', () => {
@@ -2467,7 +2467,7 @@ export function registerIpcHandlers(): void {
       quitAndInstallImpl()
       return { success: true }
     } catch (err) {
-      return { success: false, error: String(err) }
+      return { success: false, error: err instanceof Error ? err.message : String(err) }
     }
   })
   ipcMain.handle('update:get-preferences', () => getUpdatePreferencesImpl())

@@ -149,7 +149,7 @@ app.on('second-instance', () => {
   showMainWindow()
 })
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   electronApp.setAppUserModelId('com.llamadeck.app')
   app.on('browser-window-created', (_, window) => {
     optimizer.watchWindowShortcuts(window)
@@ -163,15 +163,16 @@ app.whenReady().then(() => {
       app.quit()
     })
   })
-  void initUpdateManager({ broadcast: broadcastToRenderer }).then(() => {
-    if (getUpdatePreferences().checkOnLaunch && app.isPackaged) {
-      setImmediate(() => {
-        void checkForUpdates().catch((err) => {
-          console.warn('[update] initial check failed:', err)
-        })
-      })
-    }
+  await initUpdateManager({ broadcast: broadcastToRenderer }).catch((err) => {
+    console.warn('[update] init failed, in-app updates disabled:', err)
   })
+  if (getUpdatePreferences().checkOnLaunch && app.isPackaged) {
+    setImmediate(() => {
+      void checkForUpdates().catch((err) => {
+        console.warn('[update] initial check failed:', err)
+      })
+    })
+  }
   registerIpcHandlers()
   createWindow()
   app.on('activate', function () {

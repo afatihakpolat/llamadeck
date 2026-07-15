@@ -44,12 +44,36 @@ async function loadDefaultAutoUpdater(): Promise<AppUpdater> {
   return mod.autoUpdater
 }
 
+const NOT_AVAILABLE_ERROR = 'In-app updates are not available.'
+
+function unavailableDeps(broadcast: BroadcastFn, getCurrentVersion: () => string): UpdateManagerDeps {
+  return {
+    broadcast,
+    getCurrentVersion,
+    getActiveWork: () => ({ sourceUpdateJob: null, cancelBackendDl: null, downloadTasks: new Map() }),
+    isAutoDownloadEnabled: () => false,
+    getSkippedVersion: () => undefined,
+    autoUpdater: null
+  }
+}
+
 export async function initUpdateManager(customDeps?: Partial<UpdateManagerDeps>): Promise<void> {
   const broadcast = customDeps?.broadcast ?? defaultBroadcast
-  const autoUpdater = customDeps?.autoUpdater ?? (await loadDefaultAutoUpdater())
+  const getCurrentVersion = customDeps?.getCurrentVersion ?? (() => app.getVersion())
+
+  let autoUpdater: AppUpdater | null = null
+  try {
+    autoUpdater = customDeps?.autoUpdater ?? (await loadDefaultAutoUpdater())
+  } catch (err) {
+    console.warn('[update] autoUpdater load failed, in-app updates disabled:', err)
+    deps = unavailableDeps(broadcast, getCurrentVersion)
+    setStatus({ status: 'error', currentVersion: getCurrentVersion(), error: NOT_AVAILABLE_ERROR })
+    return
+  }
+
   deps = {
     broadcast,
-    getCurrentVersion: customDeps?.getCurrentVersion ?? (() => app.getVersion()),
+    getCurrentVersion,
     getActiveWork: customDeps?.getActiveWork ?? (() => ({ sourceUpdateJob: null, cancelBackendDl: null, downloadTasks: new Map() })),
     isAutoDownloadEnabled: customDeps?.isAutoDownloadEnabled ?? (() => false),
     getSkippedVersion: customDeps?.getSkippedVersion ?? (() => undefined),
@@ -129,7 +153,8 @@ export function setUpdatePreferences(prefs: UpdatePreferences): UpdatePreference
 }
 
 export async function checkForUpdates(): Promise<UpdateState> {
-  if (!deps?.autoUpdater) throw new Error('Update manager not initialized.')
+  if (!deps) throw new Error('Update manager not initialized.')
+  if (!deps.autoUpdater) throw new Error(NOT_AVAILABLE_ERROR)
   if (isUpdaterActive()) throw new Error('An update check or download is already in progress.')
   if (hasActiveWork(deps.getActiveWork())) {
     throw new Error('Updates are blocked while another operation is in progress.')
@@ -139,7 +164,8 @@ export async function checkForUpdates(): Promise<UpdateState> {
 }
 
 export async function downloadUpdate(): Promise<void> {
-  if (!deps?.autoUpdater) throw new Error('Update manager not initialized.')
+  if (!deps) throw new Error('Update manager not initialized.')
+  if (!deps.autoUpdater) throw new Error(NOT_AVAILABLE_ERROR)
   if (isUpdaterActive()) throw new Error('An update check or download is already in progress.')
   if (hasActiveWork(deps.getActiveWork())) {
     throw new Error('Updates are blocked while another operation is in progress.')
@@ -148,7 +174,8 @@ export async function downloadUpdate(): Promise<void> {
 }
 
 export function quitAndInstall(): void {
-  if (!deps?.autoUpdater) throw new Error('Update manager not initialized.')
+  if (!deps) throw new Error('Update manager not initialized.')
+  if (!deps.autoUpdater) throw new Error(NOT_AVAILABLE_ERROR)
   deps.autoUpdater.quitAndInstall()
 }
 
