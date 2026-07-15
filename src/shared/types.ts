@@ -4,11 +4,13 @@ export interface ModelFile {
 }
 
 export type BackendBuildFlavor = 'cuda' | 'cpu'
+export type BackendBuildMode = 'single' | 'parallel'
 
 export interface BackendVersion {
   name: string
   displayName: string
   flavor: BackendBuildFlavor
+  buildMode: BackendBuildMode | null
   path: string
   hasCommands: boolean
   exe: string | null

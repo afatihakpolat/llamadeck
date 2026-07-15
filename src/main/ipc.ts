@@ -33,6 +33,7 @@ import {
 import type {
   AppWindowBehaviorSettings,
   BackendBuildFlavor,
+  BackendBuildMode,
   LiteLlmInstallStatus,
   LiteLlmLogLevel,
   LiteLlmManagerSettings,
@@ -53,6 +54,7 @@ import type {
 import { OverlaySchema, type Overlay } from './schemas'
 import { loadMergedSchema, resetLoaderCache } from './commandsSchemaLoader'
 import { generateCommandsSchema } from './commandsSchemaGenerator'
+import { readBackendBuildMode, writeBackendBuildMetadata } from './backendBuildMetadata'
 
 type ConfigurablePathKind = 'models' | 'backend'
 const LIGHT_WINDOW_BACKGROUND = '#f3f6fb'
@@ -79,6 +81,7 @@ interface BackendEntry {
   name: string
   displayName: string
   flavor: BackendBuildFlavor
+  buildMode: BackendBuildMode | null
   path: string
   hasCommands: boolean
   exe: string | null
@@ -1322,6 +1325,7 @@ function listBackendsFromDirectory(backendDir: string): BackendEntry[] {
         name: entry.name,
         displayName: getBackendDisplayName(basePath, entry.name),
         flavor,
+        buildMode: readBackendBuildMode(basePath, flavor),
         path: basePath,
         hasCommands: existsSync(commandsPath),
         exe
@@ -2251,13 +2255,13 @@ export function registerIpcHandlers(): void {
   const cudaArch = buildFlavor === 'cuda' ? getConfiguredCudaArch(repoDir) : ''
     const buildType = process.env['HEXLLAMA_BUILD_TYPE']?.trim() || 'Release'
 
-    let buildMode: 'single' | 'parallel' = 'parallel'
+    let buildMode: BackendBuildMode = 'parallel'
     if (buildFlavor === 'cuda') {
       const choice = await dialog.showMessageBox({
         type: 'question',
         title: 'CUDA Build Mode',
         message: 'How should the CUDA build run?',
-        detail: 'Single-threaded (-DGGML_SCHED_MAX_COPIES=1): slower, more stable, less likely to OOM during parallel compilation. Parallel: faster but may exhaust memory on large builds.',
+        detail: 'Single uses one scheduler copy at runtime, reducing memory use but potentially lowering concurrent throughput. Parallel uses the default scheduler copies for higher throughput with greater memory use. Both options build with CUDA.',
         buttons: ['Single', 'Parallel', 'Cancel'],
         defaultId: 1,
         cancelId: 2
@@ -2282,6 +2286,8 @@ export function registerIpcHandlers(): void {
     }
 
     const buildName = getSourceBuildName(targetTagName, buildFlavor)
+    const targetBuildPath = join(repoDir, buildName)
+    const hadRunnableBuild = findBackendExecutable(targetBuildPath) !== null
 
     event.sender.send('download-progress', { percent: 3, phase: 'starting' })
 
@@ -2352,6 +2358,14 @@ export function registerIpcHandlers(): void {
           event.sender.send('download-progress', null)
           resolve({ success: false, error: stderrBuffer.trim() || 'Source update failed.' })
           return
+        }
+
+        if (buildFlavor === 'cuda' && !hadRunnableBuild) {
+          try {
+            writeBackendBuildMetadata(targetBuildPath, buildMode)
+          } catch (error) {
+            console.warn('[backend-source-update] Could not save CUDA build mode:', error)
+          }
         }
 
         const backends = listBackendsFromDirectory(repoDir)

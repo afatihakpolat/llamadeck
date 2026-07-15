@@ -1,0 +1,84 @@
+<h2>Date filter layout options</h2>
+<p class="subtitle">The 5 preset chips are the same in both options. The difference is how the custom date range picker is exposed.</p>
+
+<div class="split">
+
+  <div class="mockup">
+    <div class="mockup-header">Approach A — Single row, custom range on the right (recommended)</div>
+    <div class="mockup-body">
+      <div style="padding: 12px 0; border-bottom: 1px solid #e2e8f0; margin-bottom: 12px;">
+        <div style="display: flex; align-items: center; justify-content: space-between; gap: 16px;">
+          <div>
+            <strong style="font-size: 18px;">Usage Stats</strong>
+            <div class="subtitle" style="font-size: 11px; margin-top: 2px;">Live and historical API usage for proxied llama.cpp sessions.</div>
+          </div>
+          <div style="display: flex; gap: 6px; align-items: center; flex-wrap: wrap;">
+            <button class="mock-button" style="background: #111827; color: #fff; border-color: #111827;">Today</button>
+            <button class="mock-button">Last 7 days</button>
+            <button class="mock-button">Last 30 days</button>
+            <button class="mock-button">This month</button>
+            <button class="mock-button">All time</button>
+            <select class="mock-input" style="width: 130px;"><option>All templates</option></select>
+            <button class="mock-button" style="background: #f1f5f9;">📅 Custom ▾</button>
+          </div>
+        </div>
+        <div style="margin-top: 10px; padding: 8px 12px; background: #f8fafc; border-radius: 6px; display: flex; gap: 8px; align-items: center; font-size: 12px;">
+          <span style="color: #64748b;">Custom range:</span>
+          <label>From <input class="mock-input" type="date" value="2026-05-01" style="width: 140px;"></label>
+          <label>To <input class="mock-input" type="date" value="2026-06-05" style="width: 140px;"></label>
+          <button class="mock-button" style="background: #111827; color: #fff; border-color: #111827;">Apply</button>
+          <button class="mock-button" style="background: transparent; border-color: transparent; color: #64748b;">×</button>
+        </div>
+      </div>
+      <div class="placeholder" style="background: #f1f5f9; color: #94a3b8; padding: 40px; text-align: center;">Summary cards + rollup tables render below</div>
+    </div>
+  </div>
+
+  <div class="mockup">
+    <div class="mockup-header">Approach B — Two rows, custom range in its own collapsible band</div>
+    <div class="mockup-body">
+      <div style="padding: 12px 0; border-bottom: 1px solid #e2e8f0; margin-bottom: 12px;">
+        <div style="display: flex; align-items: center; justify-content: space-between; gap: 16px;">
+          <div>
+            <strong style="font-size: 18px;">Usage Stats</strong>
+            <div class="subtitle" style="font-size: 11px; margin-top: 2px;">Live and historical API usage for proxied llama.cpp sessions.</div>
+          </div>
+          <div style="display: flex; gap: 6px; align-items: center; flex-wrap: wrap;">
+            <button class="mock-button" style="background: #111827; color: #fff; border-color: #111827;">Today</button>
+            <button class="mock-button">Last 7 days</button>
+            <button class="mock-button">Last 30 days</button>
+            <button class="mock-button">This month</button>
+            <button class="mock-button">All time</button>
+            <select class="mock-input" style="width: 130px;"><option>All templates</option></select>
+          </div>
+        </div>
+      </div>
+      <div style="padding: 10px 12px; background: #f8fafc; border-radius: 6px; margin-bottom: 12px; display: flex; gap: 8px; align-items: center; font-size: 12px;">
+        <span style="color: #64748b;">▾ Custom range</span>
+        <label>From <input class="mock-input" type="date" value="2026-05-01" style="width: 140px;"></label>
+        <label>To <input class="mock-input" type="date" value="2026-06-05" style="width: 140px;"></label>
+        <button class="mock-button" style="background: #111827; color: #fff; border-color: #111827;">Apply</button>
+        <button class="mock-button" style="background: transparent; border-color: transparent; color: #64748b;">×</button>
+      </div>
+      <div class="placeholder" style="background: #f1f5f9; color: #94a3b8; padding: 40px; text-align: center;">Summary cards + rollup tables render below</div>
+    </div>
+  </div>
+
+</div>
+
+<div class="options" style="margin-top: 24px;">
+  <div class="option" data-choice="a" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>Single row, custom on the right</h3>
+      <p>Compact. Header stays one row. Custom range hidden by default; appears inline when toggled.</p>
+    </div>
+  </div>
+  <div class="option" data-choice="b" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>Two rows, custom in its own band</h3>
+      <p>More vertical space. Custom range is always discoverable (no toggle). Header reads as two distinct controls.</p>
+    </div>
+  </div>
+</div>

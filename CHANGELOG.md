@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.5] - 2026-07-13
+
+### Added
+- CUDA backends now show their Single or Parallel scheduler mode in the sidebar. New source builds remember the selected mode, while existing source builds are detected from their build cache when possible.
+
+### Changed
+- The CUDA build prompt now accurately describes the runtime memory and throughput tradeoff between Single and Parallel modes.
+
+## [1.1.4] - 2026-07-09
+
+### Added
+- `--spec-type` can now select multiple speculative decoding modes, such as `draft-mtp,ngram-mod`, while still launching llama.cpp with the required comma-separated value.
+
+## [1.1.3] - 2026-07-01
+
+### Fixed
+- **Recent Logs text not selectable in LiteLLM view.** The `body` element has `user-select: none` globally, but `<pre>` was not included in the opt-in list, making log output impossible to drag-select and copy.
+
 ## [1.1.2] - 2026-06-09
 
 ### Added

@@ -3,6 +3,13 @@ import { z } from 'zod'
 export const CommandTypeSchema = z.enum(['boolean', 'number', 'string', 'select', 'text'])
 export type CommandType = z.infer<typeof CommandTypeSchema>
 
+export const BackendBuildMetadataSchema = z.object({
+  version: z.literal(1),
+  flavor: z.literal('cuda'),
+  buildMode: z.enum(['single', 'parallel'])
+})
+export type BackendBuildMetadata = z.infer<typeof BackendBuildMetadataSchema>
+
 // Per-command structural shape produced by the parser.
 export const CommandSchema = z.object({
   arg: z.string().regex(/^--[a-zA-Z][\w.-]*$/),

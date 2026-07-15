@@ -1,5 +1,8 @@
 # Handoff
 
+## In Progress
+- Planning **smooth update path** for LlamaDeck itself (electron-updater + locked NSIS install path) so Windows taskbar pins and Start-menu shortcuts survive updates. Spec at `docs/specs/smooth-update-path/` (requirements, design, tasks). Existing users accept a one-time repin; new installs and all future updates use the locked `%LOCALAPPDATA%\Programs\llamadeck` path. Distinct from the existing in-app llama.cpp source-build update flow, which remains unchanged.
+
 ## Completed
 - Implemented proxy-backed usage statistics for local llama.cpp templates: LlamaDeck now binds the public template port, launches `llama-server` on a hidden loopback port, records proxied completion/chat requests, persists compact per-session summaries under `userData/usage-sessions/`, and exposes live plus historical snapshots to the renderer.
 - Expanded tracked usage endpoints to include legacy llama.cpp completion routes (`/completion`, `/completions`, `/chat/completions`) in addition to the OpenAI-compatible `/v1/*` paths.

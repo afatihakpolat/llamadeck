@@ -2,7 +2,13 @@ import React, { useMemo, useState } from 'react'
 import { useStore } from '../store/useStore'
 import { Box, Cpu, Zap, Database, Sliders, Wind, Server, FileText, GitBranch, Search, Star, Lock } from 'lucide-react'
 import type { CommandParam } from '../../../shared/types'
-import { getBooleanCommandFlag, isDefaultTrueBooleanCommand } from '../utils/commandArgs'
+import {
+  getBooleanCommandFlag,
+  isCommaListSelectCommand,
+  isDefaultTrueBooleanCommand,
+  parseCommaListCommandValue,
+  toggleCommaListCommandValue
+} from '../utils/commandArgs'
 
 interface DisplayCategory {
   name: string
@@ -244,6 +250,7 @@ export default function CmdParamsEditor({ templateId, args, onChange, modelPathF
   const renderCommand = (cmd: CommandParam) => {
     if (cmd.arg === '--model' || cmd.arg === '--port') return null
     const hasExplicitValue = Object.prototype.hasOwnProperty.call(args, cmd.arg)
+    const isCommaListSelect = isCommaListSelectCommand(cmd)
     const val = hasExplicitValue
       ? args[cmd.arg]
       : cmd.type === 'boolean'
@@ -255,8 +262,9 @@ export default function CmdParamsEditor({ templateId, args, onChange, modelPathF
     const numericStep = cmd.type === 'number' ? getNumberStep(cmd) : undefined
     const numericMin = cmd.type === 'number' ? (cmd.min ?? descriptionRange.min) : undefined
     const numericMax = cmd.type === 'number' ? (cmd.max ?? descriptionRange.max) : undefined
+    const commaListValues = isCommaListSelect ? parseCommaListCommandValue(val) : []
     return (
-      <div key={cmd.arg} className={`cmd-row ${isActive ? 'active-param' : ''} ${cmd.type === 'text' ? 'cmd-row-full' : ''}`}>
+      <div key={cmd.arg} className={`cmd-row ${isActive ? 'active-param' : ''} ${cmd.type === 'text' || isCommaListSelect ? 'cmd-row-full' : ''}`}>
         <div className="cmd-label-group">
           <div className="cmd-label tooltip-wrap">
             {cmd.label}
@@ -289,7 +297,25 @@ export default function CmdParamsEditor({ templateId, args, onChange, modelPathF
           {cmd.type === 'string' && (
             <input type="text" className="cmd-input" value={val} placeholder={cmd.placeholder || cmd.default?.toString()} onChange={(e) => handleUpdate(cmd, e.target.value)} disabled={disabled} />
           )}
-          {cmd.type === 'select' && (
+          {cmd.type === 'select' && isCommaListSelect && (
+            <div className="cmd-multi-select" role="group" aria-label={cmd.label}>
+              {(cmd.options || []).map((opt) => {
+                const checked = commaListValues.includes(opt)
+                return (
+                  <label key={opt} className={`cmd-multi-option ${checked ? 'active' : ''} ${disabled ? 'disabled' : ''}`}>
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={() => handleUpdate(cmd, toggleCommaListCommandValue(val, opt, cmd.options || [], cmd.default))}
+                      disabled={disabled}
+                    />
+                    <span>{opt}</span>
+                  </label>
+                )
+              })}
+            </div>
+          )}
+          {cmd.type === 'select' && !isCommaListSelect && (
             <select className="cmd-select" value={val} onChange={(e) => handleUpdate(cmd, e.target.value)} disabled={disabled}>
               <option value="">{defaultValue !== null ? `Default (${defaultValue})` : 'Default'}</option>
               {cmd.options?.map(opt => <option key={opt} value={opt}>{opt}</option>)}

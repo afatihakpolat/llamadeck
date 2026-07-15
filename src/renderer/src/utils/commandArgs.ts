@@ -22,6 +22,67 @@ export function getBooleanCommandFlag(command: Pick<CommandParam, 'arg' | 'type'
   return null
 }
 
+export function isCommaListSelectCommand(command: Pick<CommandParam, 'arg' | 'type'>): boolean {
+  return command.type === 'select' && command.arg === '--spec-type'
+}
+
+export function parseCommaListCommandValue(value: unknown): string[] {
+  if (typeof value !== 'string') {
+    return []
+  }
+
+  return value
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean)
+}
+
+function serializeCommaListCommandValue(values: readonly string[]): string {
+  const seen = new Set<string>()
+  const uniqueValues: string[] = []
+
+  for (const value of values) {
+    const trimmedValue = value.trim()
+    if (!trimmedValue || seen.has(trimmedValue)) continue
+    seen.add(trimmedValue)
+    uniqueValues.push(trimmedValue)
+  }
+
+  return uniqueValues.join(',')
+}
+
+export function toggleCommaListCommandValue(
+  currentValue: unknown,
+  option: string,
+  orderedOptions: readonly string[] = [],
+  defaultValue?: CommandParam['default']
+): string {
+  const normalizedOption = option.trim()
+  if (!normalizedOption) {
+    return serializeCommaListCommandValue(parseCommaListCommandValue(currentValue))
+  }
+
+  const selectedValues = new Set(parseCommaListCommandValue(currentValue))
+
+  if (selectedValues.has(normalizedOption)) {
+    selectedValues.delete(normalizedOption)
+  } else {
+    if (typeof defaultValue === 'string') {
+      if (normalizedOption === defaultValue) {
+        selectedValues.clear()
+      } else {
+        selectedValues.delete(defaultValue)
+      }
+    }
+    selectedValues.add(normalizedOption)
+  }
+
+  const orderedSelectedValues = orderedOptions.filter((orderedOption) => selectedValues.has(orderedOption))
+  const remainingSelectedValues = Array.from(selectedValues).filter((selectedValue) => !orderedOptions.includes(selectedValue))
+
+  return serializeCommaListCommandValue([...orderedSelectedValues, ...remainingSelectedValues])
+}
+
 function buildArgAliasMap(commandsSchema: CommandsSchema | null): Map<string, string> {
   const aliasMap = new Map<string, string>()
 

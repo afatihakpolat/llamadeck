@@ -7,7 +7,7 @@ interface BackendSourceUpdateResult {
   snapshot: {
     paths: { models: string; templates: string; backend: string }
     models: Array<{ name: string; path: string; size: number; folder: string }>
-    backends: Array<{ name: string; displayName: string; path: string; hasCommands: boolean; exe: string | null }>
+    backends: BackendVersion[]
   }
   templates: Template[]
   activeBackendName: string

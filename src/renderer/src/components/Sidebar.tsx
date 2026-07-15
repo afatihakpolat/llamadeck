@@ -1,6 +1,13 @@
 import React from 'react'
 import { useStore } from '../store/useStore'
 import { LayoutGrid, Settings, FolderOpen, HardDrive, Search, Globe, Terminal, BarChart3 } from 'lucide-react'
+import type { BackendBuildMode } from '../../../shared/types'
+
+function getBuildModeLabel(buildMode: BackendBuildMode | null): string {
+  if (buildMode === 'single') return 'Single'
+  if (buildMode === 'parallel') return 'Parallel'
+  return 'Unknown'
+}
 
 export default function Sidebar() {
   const { view, setView, backends, activeBackend, setActiveBackend, setCommandsSchema, paths } = useStore()
@@ -12,6 +19,7 @@ export default function Sidebar() {
     const cmds = await window.api.getCommands(name)
     setCommandsSchema(cmds)
   }
+
   return (
     <nav className="sidebar">
       <span className="nav-section-label">Navigation</span>
@@ -72,12 +80,15 @@ export default function Sidebar() {
               key={b.name}
               className={`nav-item ${activeBackend?.name === b.name ? 'active' : ''}`}
               onClick={() => switchBackend(b.name)}
-              title={b.path}
+              title={`${b.path}${b.flavor === 'cuda' ? `\nCUDA scheduler: ${getBuildModeLabel(b.buildMode)}` : ''}`}
             >
               <HardDrive size={16} />
-              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, textAlign: 'left' }}>
+              <span className="backend-nav-name">
                 {b.displayName}
               </span>
+              {b.flavor === 'cuda' && (
+                <span className="backend-nav-mode">{getBuildModeLabel(b.buildMode)}</span>
+              )}
             </button>
           ))}
         </>

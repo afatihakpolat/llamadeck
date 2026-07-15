@@ -24,6 +24,7 @@ function fakeBackend() {
     name: 'b9202',
     displayName: 'b9202',
     flavor: 'cuda' as const,
+    buildMode: null,
     path: work,
     hasCommands: false,
     exe: join(work, 'bin', 'llama-server.exe')
