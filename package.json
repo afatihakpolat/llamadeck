@@ -1,6 +1,6 @@
 {
   "name": "llamadeck",
-  "version": "1.2.4",
+  "version": "1.2.5",
   "description": "LlamaDeck — a GUI for llama.cpp",
   "main": "out/main/index.js",
   "homepage": "./",

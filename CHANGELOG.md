@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.5] - 2026-07-18
+
+### Added
+- Templates are now organized into collapsible groups by their model subfolder, keeping provider folders out of the template list and making large collections easier to browse.
+
 ## [1.2.4] - 2026-07-15
 
 ### Added
