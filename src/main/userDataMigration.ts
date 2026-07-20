@@ -1,11 +1,20 @@
 import {
   existsSync,
+  mkdirSync,
   readFileSync,
   readdirSync,
   renameSync,
-  rmSync
+  rmSync,
+  writeFileSync
 } from 'fs'
-import { basename, dirname, join, resolve } from 'path'
+import {
+  basename,
+  dirname,
+  isAbsolute,
+  join,
+  relative,
+  resolve
+} from 'path'
 
 const USER_DATA_MARKERS = [
   'folder-paths.json',
@@ -28,10 +37,22 @@ const TRANSIENT_PROFILE_ENTRIES = [
   'lockfile'
 ]
 
+const RESIDUAL_PROFILE_ENTRIES = new Set([
+  ...TRANSIENT_PROFILE_ENTRIES,
+  'litellm-config.yaml'
+])
+
+export const PROFILE_MIGRATION_MARKER_FILE = '.llamadeck-profile-migrated'
+
 export type UserDataMigrationResult =
   | { status: 'not-needed' }
   | { status: 'in-use'; legacyDir: string }
   | { status: 'migrated'; legacyDir: string; backupDir?: string }
+
+export interface UserDataRepairResult {
+  referencesRebased: boolean
+  removedResidualDirs: string[]
+}
 
 interface UserDataMigrationOptions {
   isProcessAlive?: (pid: number) => boolean
@@ -42,9 +63,128 @@ function normalizePath(path: string): string {
   return resolve(path).toLowerCase()
 }
 
+function hasMigrationMarker(dir: string): boolean {
+  return existsSync(join(dir, PROFILE_MIGRATION_MARKER_FILE))
+}
+
 export function hasExistingUserData(dir: string): boolean {
   if (!existsSync(dir)) return false
   return USER_DATA_MARKERS.some((marker) => existsSync(join(dir, marker)))
+}
+
+function isPathWithin(parentDir: string, targetPath: string): boolean {
+  const relativePath = relative(resolve(parentDir), resolve(targetPath))
+  return relativePath === '' ||
+    (!relativePath.startsWith('..') && !isAbsolute(relativePath))
+}
+
+function rebaseLegacyPath(
+  storedPath: string,
+  currentDir: string,
+  legacyCandidates: string[]
+): string | null {
+  for (const legacyDir of legacyCandidates) {
+    if (!isPathWithin(legacyDir, storedPath)) continue
+    return join(currentDir, relative(resolve(legacyDir), resolve(storedPath)))
+  }
+
+  return null
+}
+
+function writeJsonAtomically(filePath: string, value: Record<string, unknown>): void {
+  mkdirSync(dirname(filePath), { recursive: true })
+  const temporaryFile = `${filePath}.tmp`
+  writeFileSync(temporaryFile, `${JSON.stringify(value, null, 2)}\n`, 'utf-8')
+  renameSync(temporaryFile, filePath)
+}
+
+function writeMigrationMarker(currentDir: string): void {
+  const markerPath = join(currentDir, PROFILE_MIGRATION_MARKER_FILE)
+  const temporaryPath = `${markerPath}.tmp`
+  writeFileSync(temporaryPath, '1\n', 'utf-8')
+  renameSync(temporaryPath, markerPath)
+}
+
+function rebaseLiteLlmConfigPath(
+  currentDir: string,
+  legacyCandidates: string[]
+): boolean {
+  const managerFile = join(currentDir, 'litellm-manager.json')
+  if (!existsSync(managerFile)) return false
+
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(readFileSync(managerFile, 'utf-8')) as unknown
+  } catch {
+    return false
+  }
+  if (
+    typeof parsed !== 'object' ||
+    parsed === null ||
+    !('configPath' in parsed) ||
+    typeof parsed.configPath !== 'string'
+  ) {
+    return false
+  }
+
+  const rebasedPath = rebaseLegacyPath(parsed.configPath, currentDir, legacyCandidates)
+  if (!rebasedPath || normalizePath(rebasedPath) === normalizePath(parsed.configPath)) {
+    return false
+  }
+
+  const currentConfigDir = dirname(rebasedPath)
+  if (!existsSync(rebasedPath) && existsSync(parsed.configPath)) {
+    mkdirSync(currentConfigDir, { recursive: true })
+    renameSync(parsed.configPath, rebasedPath)
+  }
+
+  writeJsonAtomically(managerFile, {
+    ...(parsed as Record<string, unknown>),
+    configPath: rebasedPath
+  })
+  return true
+}
+
+function isResidualProfileDir(dir: string): boolean {
+  if (!existsSync(dir)) return false
+  return readdirSync(dir).every((entry) => RESIDUAL_PROFILE_ENTRIES.has(entry))
+}
+
+export function repairMigratedUserData(
+  currentDir: string,
+  legacyCandidates: string[]
+): UserDataRepairResult {
+  if (!hasExistingUserData(currentDir) && !hasMigrationMarker(currentDir)) {
+    return { referencesRebased: false, removedResidualDirs: [] }
+  }
+
+  const referencesRebased = rebaseLiteLlmConfigPath(currentDir, legacyCandidates)
+  const removedResidualDirs: string[] = []
+  const currentConfig = join(currentDir, 'litellm-config.yaml')
+  const seen = new Set<string>()
+
+  for (const legacyDir of legacyCandidates) {
+    const legacyKey = normalizePath(legacyDir)
+    if (legacyKey === normalizePath(currentDir) || seen.has(legacyKey)) continue
+    seen.add(legacyKey)
+    if (!isResidualProfileDir(legacyDir)) continue
+
+    const legacyConfig = join(legacyDir, 'litellm-config.yaml')
+    if (!existsSync(currentConfig) && existsSync(legacyConfig)) {
+      mkdirSync(dirname(currentConfig), { recursive: true })
+      renameSync(legacyConfig, currentConfig)
+    }
+    if (existsSync(currentConfig)) {
+      rmSync(legacyDir, { recursive: true, force: true })
+      removedResidualDirs.push(legacyDir)
+    }
+  }
+
+  if (referencesRebased || removedResidualDirs.length > 0) {
+    writeMigrationMarker(currentDir)
+  }
+
+  return { referencesRebased, removedResidualDirs }
 }
 
 export function findLegacyUserDataDir(
@@ -130,6 +270,8 @@ export function migrateLegacyUserData(
   legacyCandidates: string[],
   options: UserDataMigrationOptions = {}
 ): UserDataMigrationResult {
+  if (hasMigrationMarker(currentDir)) return { status: 'not-needed' }
+
   const legacyDir = findLegacyUserDataDir(currentDir, legacyCandidates)
   if (!legacyDir) return { status: 'not-needed' }
 
@@ -162,6 +304,8 @@ export function migrateLegacyUserData(
   }
 
   removeTransientProfileEntries(currentDir)
+  rebaseLiteLlmConfigPath(currentDir, legacyCandidates)
+  writeMigrationMarker(currentDir)
   return backupDir
     ? { status: 'migrated', legacyDir, backupDir }
     : { status: 'migrated', legacyDir }

@@ -11,7 +11,9 @@ import { join } from 'path'
 import { afterEach, describe, expect, it } from 'vitest'
 import {
   findLegacyUserDataDir,
-  migrateLegacyUserData
+  migrateLegacyUserData,
+  PROFILE_MIGRATION_MARKER_FILE,
+  repairMigratedUserData
 } from '../userDataMigration'
 
 const tempDirs: string[] = []
@@ -62,6 +64,33 @@ describe('userDataMigration', () => {
     expect(readFileSync(join(currentDir, 'templates', 'agent.json'), 'utf-8')).toBe('{"name":"Agent"}')
     expect(existsSync(join(currentDir, 'cli-endpoint.json'))).toBe(false)
     expect(existsSync(join(currentDir, 'lockfile'))).toBe(false)
+    expect(existsSync(join(currentDir, PROFILE_MIGRATION_MARKER_FILE))).toBe(true)
+  })
+
+  it('rebases a saved LiteLLM config path during the profile move', () => {
+    const workDir = createWorkDir()
+    const currentDir = join(workDir, 'llamadeck')
+    const legacyDir = join(workDir, 'hexllama')
+    const legacyConfig = join(legacyDir, 'litellm-config.yaml')
+    mkdirSync(legacyDir, { recursive: true })
+    writeFileSync(legacyConfig, 'model_list:\n  - model_name: real\n', 'utf-8')
+    writeFileSync(join(legacyDir, 'litellm-manager.json'), JSON.stringify({
+      host: '127.0.0.1',
+      port: 4000,
+      configPath: legacyConfig,
+      logLevel: 'info'
+    }), 'utf-8')
+
+    expect(migrateLegacyUserData(currentDir, [legacyDir])).toEqual({
+      status: 'migrated',
+      legacyDir
+    })
+
+    const manager = JSON.parse(
+      readFileSync(join(currentDir, 'litellm-manager.json'), 'utf-8')
+    ) as { configPath: string }
+    expect(manager.configPath).toBe(join(currentDir, 'litellm-config.yaml'))
+    expect(readFileSync(manager.configPath, 'utf-8')).toContain('model_name: real')
   })
 
   it('preserves an existing LlamaDeck profile as a timestamped backup', () => {
@@ -106,5 +135,48 @@ describe('userDataMigration', () => {
     })).toEqual({ status: 'in-use', legacyDir })
     expect(existsSync(legacyDir)).toBe(true)
     expect(existsSync(currentDir)).toBe(false)
+  })
+
+  it('repairs the residual profile state produced by version 1.5.1', () => {
+    const workDir = createWorkDir()
+    const currentDir = join(workDir, 'llamadeck')
+    const legacyDir = join(workDir, 'hexllama')
+    const currentConfig = join(currentDir, 'litellm-config.yaml')
+    mkdirSync(join(currentDir, 'templates'), { recursive: true })
+    mkdirSync(legacyDir, { recursive: true })
+    writeFileSync(join(currentDir, 'templates', 'canonical.json'), 'canonical', 'utf-8')
+    writeFileSync(currentConfig, 'model_list:\n  - model_name: real\n', 'utf-8')
+    writeFileSync(join(legacyDir, 'litellm-config.yaml'), 'model_list: []\n', 'utf-8')
+    writeFileSync(join(currentDir, 'litellm-manager.json'), JSON.stringify({
+      configPath: join(legacyDir, 'litellm-config.yaml')
+    }), 'utf-8')
+
+    expect(repairMigratedUserData(currentDir, [legacyDir])).toEqual({
+      referencesRebased: true,
+      removedResidualDirs: [legacyDir]
+    })
+
+    const manager = JSON.parse(
+      readFileSync(join(currentDir, 'litellm-manager.json'), 'utf-8')
+    ) as { configPath: string }
+    expect(manager.configPath).toBe(currentConfig)
+    expect(readFileSync(currentConfig, 'utf-8')).toContain('model_name: real')
+    expect(existsSync(legacyDir)).toBe(false)
+    expect(existsSync(join(currentDir, PROFILE_MIGRATION_MARKER_FILE))).toBe(true)
+  })
+
+  it('does not replace a marked migrated profile with a later legacy directory', () => {
+    const workDir = createWorkDir()
+    const currentDir = join(workDir, 'llamadeck')
+    const legacyDir = join(workDir, 'hexllama')
+    mkdirSync(join(currentDir, 'templates'), { recursive: true })
+    mkdirSync(join(legacyDir, 'templates'), { recursive: true })
+    writeFileSync(join(currentDir, 'templates', 'canonical.json'), 'canonical', 'utf-8')
+    writeFileSync(join(currentDir, PROFILE_MIGRATION_MARKER_FILE), '1\n', 'utf-8')
+    writeFileSync(join(legacyDir, 'templates', 'unexpected.json'), 'unexpected', 'utf-8')
+
+    expect(migrateLegacyUserData(currentDir, [legacyDir])).toEqual({ status: 'not-needed' })
+    expect(readFileSync(join(currentDir, 'templates', 'canonical.json'), 'utf-8')).toBe('canonical')
+    expect(existsSync(join(legacyDir, 'templates', 'unexpected.json'))).toBe(true)
   })
 })
