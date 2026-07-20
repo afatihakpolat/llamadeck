@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.2] - 2026-07-20
+
+### Fixed
+- Profile migration now rebases saved LiteLLM config paths into `%APPDATA%\llamadeck`, preserves the real migrated config, removes the partial legacy directory that version 1.5.1 could recreate, and records migration completion so a later stale directory cannot replace the canonical profile.
+
 ## [1.5.1] - 2026-07-20
 
 ### Changed
