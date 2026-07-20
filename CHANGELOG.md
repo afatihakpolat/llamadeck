@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.0] - 2026-07-20
+
+### Added
+- A new Agent Skills page detects Codex, Claude Code, Gemini CLI, and OpenCode; shows the skills each tool can discover; and installs, updates, or removes LlamaDeck-managed copies without overwriting personal skills.
+- LlamaDeck now bundles its own control skill, including the LiteLLM workflow, and can import validated local `SKILL.md` folders into a managed library for deployment to compatible agent tools.
+
 ## [1.4.0] - 2026-07-20
 
 ### Added
