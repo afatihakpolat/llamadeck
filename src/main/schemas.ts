@@ -7,6 +7,31 @@ export const LiteLlmConfigTextSchema = z.string().max(
   'LiteLLM config must be 1,048,576 characters or fewer.'
 )
 
+export const AgentHarnessIdSchema = z.enum(['codex', 'claude-code', 'gemini-cli', 'opencode'])
+export const AgentSkillNameSchema = z.string()
+  .min(1)
+  .max(64)
+  .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, 'Skill names must use lowercase letters, numbers, and single hyphens.')
+export const AgentSkillSourceIdSchema = z.string()
+  .min(1)
+  .max(160)
+  .regex(/^(?:bundled|library):[a-z0-9]+(?:-[a-z0-9]+)*$/)
+export const InstallAgentSkillInputSchema = z.object({
+  harnessId: AgentHarnessIdSchema,
+  sourceId: AgentSkillSourceIdSchema
+}).strict()
+export const RemoveAgentSkillInputSchema = z.object({
+  harnessId: AgentHarnessIdSchema,
+  skillName: AgentSkillNameSchema
+}).strict()
+export const DeleteAgentSkillSourceInputSchema = z.object({
+  sourceId: AgentSkillSourceIdSchema
+}).strict()
+export const OpenAgentSkillsFolderInputSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('library') }).strict(),
+  z.object({ kind: z.literal('harness'), harnessId: AgentHarnessIdSchema }).strict()
+])
+
 export const CommandTypeSchema = z.enum(['boolean', 'number', 'string', 'select', 'text'])
 export type CommandType = z.infer<typeof CommandTypeSchema>
 

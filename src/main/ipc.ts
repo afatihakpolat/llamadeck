@@ -4,6 +4,7 @@ import {
   unlinkSync, createWriteStream, statSync, rmdirSync, renameSync, appendFileSync
 } from 'fs'
 import { join, extname, basename, dirname, resolve, sep, relative } from 'path'
+import { homedir } from 'os'
 import { spawn, ChildProcess, execFileSync } from 'child_process'
 import { randomUUID } from 'crypto'
 import https from 'https'
@@ -56,7 +57,15 @@ import type {
   UsageStatsQuery,
   UsageUpdatedEvent
 } from '../shared/types'
-import { LiteLlmConfigTextSchema, OverlaySchema, type Overlay } from './schemas'
+import {
+  DeleteAgentSkillSourceInputSchema,
+  InstallAgentSkillInputSchema,
+  LiteLlmConfigTextSchema,
+  OpenAgentSkillsFolderInputSchema,
+  OverlaySchema,
+  RemoveAgentSkillInputSchema,
+  type Overlay
+} from './schemas'
 import { loadMergedSchema, resetLoaderCache } from './commandsSchemaLoader'
 import { generateCommandsSchema } from './commandsSchemaGenerator'
 import { readBackendBuildMode, writeBackendBuildMetadata } from './backendBuildMetadata'
@@ -97,6 +106,7 @@ import {
   type CliTemplateValidationResult
 } from './cliCommands'
 import type { CliRequest, CliResponse } from './cliProtocol'
+import { createAgentSkillsManager } from './agentSkills'
 
 type ConfigurablePathKind = 'models' | 'backend'
 const LIGHT_WINDOW_BACKGROUND = '#f3f6fb'
@@ -361,6 +371,29 @@ function getOverlay(): Overlay {
 }
 
 const BUNDLED_COMMANDS_DIR = join(BUNDLED_APP_ROOT, 'resources', 'commands')
+const BUNDLED_AGENT_SKILLS_DIR = app.isPackaged
+  ? join(process.resourcesPath, 'skills')
+  : join(process.cwd(), 'resources', 'skills')
+const AGENT_SKILLS_LIBRARY_DIR = join(USER_DATA_ROOT, 'agent-skills')
+
+function commandExists(command: string): boolean {
+  try {
+    execFileSync(process.platform === 'win32' ? 'where.exe' : 'which', [command], {
+      stdio: 'ignore',
+      windowsHide: true
+    })
+    return true
+  } catch {
+    return false
+  }
+}
+
+const agentSkillsManager = createAgentSkillsManager({
+  homeDirectory: homedir(),
+  libraryDirectory: AGENT_SKILLS_LIBRARY_DIR,
+  bundledSkillsDirectory: BUNDLED_AGENT_SKILLS_DIR,
+  commandExists
+})
 
 const DEFAULT_PATHS: AppPaths = {
   models: join(APP_ROOT, 'models'),
@@ -2442,6 +2475,65 @@ function startDownload(
 }
 
 export function registerIpcHandlers(): void {
+  ipcMain.handle('get-agent-skills', () => {
+    return agentSkillsManager.getSnapshot()
+  })
+  ipcMain.handle('import-agent-skill', async () => {
+    const result = await dialog.showOpenDialog({
+      title: 'Import Agent Skill',
+      message: 'Choose a folder containing SKILL.md',
+      properties: ['openDirectory']
+    })
+    if (result.canceled || !result.filePaths.length) return null
+
+    try {
+      return { success: true, snapshot: agentSkillsManager.importSkill(result.filePaths[0]) }
+    } catch (error) {
+      return { success: false, error: String(error) }
+    }
+  })
+  ipcMain.handle('install-agent-skill', (_event, input: unknown) => {
+    try {
+      const parsed = InstallAgentSkillInputSchema.parse(input)
+      return {
+        success: true,
+        snapshot: agentSkillsManager.installSkill(parsed.harnessId, parsed.sourceId)
+      }
+    } catch (error) {
+      return { success: false, error: String(error) }
+    }
+  })
+  ipcMain.handle('remove-agent-skill', (_event, input: unknown) => {
+    try {
+      const parsed = RemoveAgentSkillInputSchema.parse(input)
+      return {
+        success: true,
+        snapshot: agentSkillsManager.removeSkill(parsed.harnessId, parsed.skillName)
+      }
+    } catch (error) {
+      return { success: false, error: String(error) }
+    }
+  })
+  ipcMain.handle('delete-agent-skill-source', (_event, input: unknown) => {
+    try {
+      const parsed = DeleteAgentSkillSourceInputSchema.parse(input)
+      return { success: true, snapshot: agentSkillsManager.deleteSource(parsed.sourceId) }
+    } catch (error) {
+      return { success: false, error: String(error) }
+    }
+  })
+  ipcMain.handle('open-agent-skills-folder', async (_event, input: unknown) => {
+    try {
+      const parsed = OpenAgentSkillsFolderInputSchema.parse(input)
+      const folderPath = parsed.kind === 'library'
+        ? agentSkillsManager.getFolderPath('library')
+        : agentSkillsManager.getFolderPath('harness', parsed.harnessId)
+      const error = await shell.openPath(folderPath)
+      return error ? { success: false, error } : { success: true }
+    } catch (error) {
+      return { success: false, error: String(error) }
+    }
+  })
   ipcMain.handle('get-litellm-manager', async () => {
     return buildLiteLlmManagerSnapshot()
   })

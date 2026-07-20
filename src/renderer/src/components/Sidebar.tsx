@@ -1,6 +1,6 @@
 import React from 'react'
 import { useStore } from '../store/useStore'
-import { LayoutGrid, Settings, FolderOpen, HardDrive, Search, Globe, Terminal, BarChart3 } from 'lucide-react'
+import { LayoutGrid, Settings, FolderOpen, HardDrive, Search, Globe, Terminal, BarChart3, Sparkles } from 'lucide-react'
 import type { BackendBuildMode } from '../../../shared/types'
 
 function getBuildModeLabel(buildMode: BackendBuildMode | null): string {
@@ -57,6 +57,13 @@ export default function Sidebar() {
       >
         <Globe size={16} />
         LiteLLM
+      </button>
+      <button
+        className={`nav-item ${view === 'agent-skills' ? 'active' : ''}`}
+        onClick={() => setView('agent-skills')}
+      >
+        <Sparkles size={16} />
+        Agent Skills
       </button>
       <button
         className={`nav-item ${view === 'live-output' ? 'active' : ''}`}

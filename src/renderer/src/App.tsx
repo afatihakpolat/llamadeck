@@ -9,6 +9,7 @@ import SettingsView from './components/SettingsView'
 import HuggingFaceView from './components/HuggingFaceView'
 import ModelsView from './components/ModelsView'
 import LiteLlmView from './components/LiteLlmView'
+import AgentSkillsView from './components/AgentSkillsView'
 import LiveOutputView from './components/LiveOutputView'
 import UsageStatsView from './components/UsageStatsView'
 import CreateModal from './components/CreateModal'
@@ -293,6 +294,7 @@ function MainApp() {
     if (view === 'hub') return <HuggingFaceView />
     if (view === 'settings') return <SettingsView />
     if (view === 'litellm') return <LiteLlmView />
+    if (view === 'agent-skills') return <AgentSkillsView />
     if (view === 'models') return <ModelsView />
     if (view === 'live-output') return <LiveOutputView />
     if (view === 'usage-stats') return <UsageStatsView />

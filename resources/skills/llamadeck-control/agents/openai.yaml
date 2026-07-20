@@ -1,0 +1,4 @@
+interface:
+  display_name: "LlamaDeck Control"
+  short_description: "Control llama.cpp and LiteLLM with LlamaDeck"
+  default_prompt: "Use $llamadeck-control to inspect and safely control a LlamaDeck template or its managed LiteLLM proxy."

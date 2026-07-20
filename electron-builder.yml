@@ -13,6 +13,8 @@ files:
 extraResources:
   - from: resources/cli
     to: cli
+  - from: resources/skills
+    to: skills
 win:
   target:
     - target: nsis

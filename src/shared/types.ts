@@ -38,7 +38,7 @@ export interface CommandsSchema {
   version: string
   categories: CommandCategory[]
 }
-export type AppView = 'cards' | 'settings' | 'hub' | 'models' | 'litellm' | 'live-output' | 'usage-stats'
+export type AppView = 'cards' | 'settings' | 'hub' | 'models' | 'litellm' | 'agent-skills' | 'live-output' | 'usage-stats'
 export type ModelOutputStream = 'stdout' | 'stderr' | 'system'
 export interface ModelOutputEvent {
   id: string
@@ -233,6 +233,43 @@ export interface LiteLlmManagerSnapshot {
 export interface LiteLlmModelEntry {
   id: string
   label: string
+}
+
+export type AgentHarnessId = 'codex' | 'claude-code' | 'gemini-cli' | 'opencode'
+export type AgentSkillSourceKind = 'bundled' | 'imported'
+export type AgentSkillInstallState = 'not-installed' | 'managed' | 'update-available' | 'unmanaged' | 'shared'
+
+export interface AgentSkillSource {
+  id: string
+  name: string
+  description: string
+  kind: AgentSkillSourceKind
+  contentHash: string
+  fileCount: number
+}
+
+export interface InstalledAgentSkill {
+  name: string
+  description: string
+  path: string
+  managed: boolean
+  sourceId: string | null
+}
+
+export interface AgentHarnessSnapshot {
+  id: AgentHarnessId
+  name: string
+  command: string
+  detected: boolean
+  skillsDirectory: string
+  installedSkills: InstalledAgentSkill[]
+  sourceStates: Record<string, AgentSkillInstallState>
+}
+
+export interface AgentSkillsSnapshot {
+  sources: AgentSkillSource[]
+  harnesses: AgentHarnessSnapshot[]
+  libraryDirectory: string
 }
 
 export interface ReleaseInfo {

@@ -1,4 +1,4 @@
-import type { Template, BackendVersion, BackendBuildFlavor, CommandsSchema, LiteLlmInstallStatus, LiteLlmManagerSettingsInput, LiteLlmManagerSnapshot, LiteLlmModelEntry, ReleaseInfo, AppWindowBehaviorSettings, ModelExitEvent, ModelOutputEvent, ModelStartedEvent, UsageCostSettings, UsageStatsQuery, UsageStatsSnapshot, UsageUpdatedEvent } from '../../shared/types'
+import type { Template, BackendVersion, BackendBuildFlavor, CommandsSchema, LiteLlmInstallStatus, LiteLlmManagerSettingsInput, LiteLlmManagerSnapshot, LiteLlmModelEntry, ReleaseInfo, AppWindowBehaviorSettings, ModelExitEvent, ModelOutputEvent, ModelStartedEvent, UsageCostSettings, UsageStatsQuery, UsageStatsSnapshot, UsageUpdatedEvent, AgentHarnessId, AgentSkillsSnapshot } from '../../shared/types'
 interface ModelFileInfo {
   name: string
   path: string
@@ -38,6 +38,12 @@ interface BackendSourceUpdateResult {
   activeBackendName: string
 }
 interface LlamaCppApi {
+  getAgentSkills: () => Promise<AgentSkillsSnapshot>
+  importAgentSkill: () => Promise<{ success: true; snapshot: AgentSkillsSnapshot } | { success: false; error?: string } | null>
+  installAgentSkill: (input: { harnessId: AgentHarnessId; sourceId: string }) => Promise<{ success: true; snapshot: AgentSkillsSnapshot } | { success: false; error?: string }>
+  removeAgentSkill: (input: { harnessId: AgentHarnessId; skillName: string }) => Promise<{ success: true; snapshot: AgentSkillsSnapshot } | { success: false; error?: string }>
+  deleteAgentSkillSource: (input: { sourceId: string }) => Promise<{ success: true; snapshot: AgentSkillsSnapshot } | { success: false; error?: string }>
+  openAgentSkillsFolder: (input: { kind: 'library' } | { kind: 'harness'; harnessId: AgentHarnessId }) => Promise<{ success: boolean; error?: string }>
   getLiteLlmManager: () => Promise<LiteLlmManagerSnapshot>
   saveLiteLlmManagerSettings: (settings: LiteLlmManagerSettingsInput) => Promise<{ success: true; snapshot: LiteLlmManagerSnapshot } | { success: false; error?: string }>
   saveLiteLlmConfig: (configText: string) => Promise<{ success: true; snapshot: LiteLlmManagerSnapshot } | { success: false; error?: string }>

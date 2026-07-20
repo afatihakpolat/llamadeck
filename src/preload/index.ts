@@ -1,6 +1,12 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import { electronAPI } from '@electron-toolkit/preload'
 const api = {
+  getAgentSkills: () => ipcRenderer.invoke('get-agent-skills'),
+  importAgentSkill: () => ipcRenderer.invoke('import-agent-skill'),
+  installAgentSkill: (input: object) => ipcRenderer.invoke('install-agent-skill', input),
+  removeAgentSkill: (input: object) => ipcRenderer.invoke('remove-agent-skill', input),
+  deleteAgentSkillSource: (input: object) => ipcRenderer.invoke('delete-agent-skill-source', input),
+  openAgentSkillsFolder: (input: object) => ipcRenderer.invoke('open-agent-skills-folder', input),
   getLiteLlmManager: () => ipcRenderer.invoke('get-litellm-manager'),
   saveLiteLlmManagerSettings: (settings: object) => ipcRenderer.invoke('save-litellm-manager-settings', settings),
   saveLiteLlmConfig: (configText: string) => ipcRenderer.invoke('save-litellm-config', configText),
