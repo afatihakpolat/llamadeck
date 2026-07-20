@@ -1,10 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { useStore } from '../store/useStore'
-import { getBooleanCommandFlag } from '../utils/commandArgs'
+import { buildTemplateLaunchArgs, normalizeCommandArgs } from '../../../shared/commandArgs'
 import { Play, Square, Settings, ChevronDown, MoreVertical, Copy, Trash, Download, Globe, Server } from 'lucide-react'
-import type { CardState, CommandParam } from '../../../shared/types'
+import type { CardState } from '../../../shared/types'
 import CmdParamsEditor from './CmdParamsEditor'
-import { normalizeCommandArgs } from '../utils/commandArgs'
 
 interface Props { card: CardState }
 
@@ -86,43 +85,11 @@ export default function ModelCard({ card }: Props) {
       alert('Model file is required.')
       return
     }
-    const args: string[] = []
-    const tArgs = normalizedTemplateArgs
-    args.push('-m', resolvedModelPath)
-    if (commandsSchema) {
-      const knownArgs = new Set<string>()
-
-      for (const cat of commandsSchema.categories) {
-        for (const cmd of cat.commands) {
-          knownArgs.add(cmd.arg)
-          const val = tArgs[cmd.arg]
-          if (val !== undefined && val !== null && val !== '') {
-            if (cmd.type === 'boolean') {
-              const booleanFlag = getBooleanCommandFlag(cmd, val)
-              if (booleanFlag) args.push(booleanFlag)
-            }
-            else args.push(cmd.arg, String(val))
-          }
-        }
-      }
-
-      for (const [key, value] of Object.entries(tArgs)) {
-        if (knownArgs.has(key)) continue
-        if (value === true) args.push(key)
-        else if (value !== false && value !== null && value !== '') args.push(key, String(value))
-      }
-    } else {
-      for (const [k, v] of Object.entries(tArgs)) {
-        if (v === true) args.push(k)
-        else if (v !== false && v !== null && v !== '') args.push(k, String(v))
-      }
-    }
-    if (!args.includes('--port') && card.template.serverPort) {
-      args.push('--port', String(card.template.serverPort))
-    }
-    if (launchMode === 'api' && !args.includes('--no-webui')) {
-      args.push('--no-webui')
-    }
+    const args = buildTemplateLaunchArgs(
+      { ...card.template, args: normalizedTemplateArgs, launchMode },
+      commandsSchema,
+      resolvedModelPath
+    )
     clearModelOutput(card.template.id)
     const res = await window.api.runModel({
       id: card.template.id,

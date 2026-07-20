@@ -60,16 +60,17 @@ function MainApp() {
   useEffect(() => {
     async function init() {
       try {
-        const [paths, backendsData, modelsData] = await Promise.all([
+        const [paths, backendsData, modelsData, persistedActiveBackendName] = await Promise.all([
           window.api.getPaths(),
           window.api.listBackends(),
-          window.api.listModels()
+          window.api.listModels(),
+          window.api.getActiveBackendName()
         ])
         setPaths(paths)
         setBackends(backendsData)
         setModels(modelsData)
         if (backendsData.length > 0) {
-          const storedActiveBackendName = readStoredActiveBackendName()
+          const storedActiveBackendName = persistedActiveBackendName ?? readStoredActiveBackendName()
           const nextActiveBackend = (storedActiveBackendName
             ? backendsData.find((backend) => backend.name === storedActiveBackendName)
             : undefined) ?? backendsData[0]
@@ -81,11 +82,16 @@ function MainApp() {
           const cmds = await window.api.getCommands('')
           setCommandsSchema(cmds)
         }
-        const templates = await window.api.listTemplates()
+        const [templates, runningModels] = await Promise.all([
+          window.api.listTemplates(),
+          window.api.listRunningModels()
+        ])
+        const runningById = new Map(runningModels.map((runningModel) => [runningModel.id, runningModel]))
         setCards(
           (templates as Template[]).map((t) => ({
             template: t,
-            status: 'idle',
+            status: runningById.has(t.id) ? 'running' : 'idle',
+            pid: runningById.get(t.id)?.pid,
             expanded: false
           }))
         )
@@ -98,6 +104,57 @@ function MainApp() {
     window.api.onModelError((data) => {
       useStore.getState().setCardStatus(data.id, 'error')
       alert(`Model execution error:\n\n${data.error}`)
+    })
+  }, [])
+
+  useEffect(() => {
+    if (!activeBackend) return
+    void window.api.setActiveBackendName(activeBackend.name).then((result) => {
+      if (!result.success) {
+        console.warn('Failed to persist the active backend:', result.error)
+      }
+    })
+  }, [activeBackend])
+
+  useEffect(() => {
+    window.api.onModelStarted((data) => {
+      useStore.getState().setCardStatus(data.id, 'running', data.pid)
+    })
+
+    return () => window.api.removeModelStartedListener()
+  }, [])
+
+  useEffect(() => {
+    return window.api.onTemplatesChanged(async () => {
+      const [templates, runningModels] = await Promise.all([
+        window.api.listTemplates(),
+        window.api.listRunningModels()
+      ])
+      const state = useStore.getState()
+      const existingCards = new Map(state.cards.map((card) => [card.template.id, card]))
+      const runningById = new Map(runningModels.map((runningModel) => [runningModel.id, runningModel]))
+
+      state.setCards(templates.map((template) => {
+        const existing = existingCards.get(template.id)
+        const running = runningById.get(template.id)
+        return {
+          template,
+          status: running ? 'running' : existing?.status === 'error' ? 'error' : 'idle',
+          ...(running?.pid === undefined ? {} : { pid: running.pid }),
+          expanded: existing?.expanded ?? false
+        }
+      }))
+    })
+  }, [])
+
+  useEffect(() => {
+    return window.api.onActiveBackendChanged(async ({ name }) => {
+      const backends = await window.api.listBackends()
+      const backend = backends.find((candidate) => candidate.name === name) ?? null
+      const state = useStore.getState()
+      state.setBackends(backends)
+      state.setActiveBackend(backend)
+      state.setCommandsSchema(backend ? await window.api.getCommands(backend.name) : null)
     })
   }, [])
 

@@ -1,8 +1,13 @@
 import { app, shell, BrowserWindow, nativeTheme, Tray, Menu, nativeImage } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
-import './userData'
-import { broadcastToRenderer, registerIpcHandlers, shutdownManagedProcesses } from './ipc'
+import { USER_DATA_ROOT } from './userData'
+import {
+  broadcastToRenderer,
+  createAppCliCommandHandler,
+  registerIpcHandlers,
+  shutdownManagedProcesses
+} from './ipc'
 import { existsSync } from 'fs'
 import { getAppWindowBehaviorSettings } from './appSettings'
 import {
@@ -10,10 +15,12 @@ import {
   getUpdatePreferences,
   initUpdateManager
 } from './updateManager'
+import { startCliServer, type CliServerHandle } from './cliServer'
 
 let isShuttingDown = false
 let mainWindow: BrowserWindow | null = null
 let tray: Tray | null = null
+let cliServer: CliServerHandle | null = null
 const LIGHT_WINDOW_BACKGROUND = '#f3f6fb'
 const DARK_WINDOW_BACKGROUND = '#0b1220'
 
@@ -159,7 +166,10 @@ app.whenReady().then(async () => {
 
     isShuttingDown = true
     event.preventDefault()
-    void shutdownManagedProcesses().finally(() => {
+    void Promise.all([
+      cliServer?.close() ?? Promise.resolve(),
+      shutdownManagedProcesses()
+    ]).finally(() => {
       app.quit()
     })
   })
@@ -175,6 +185,15 @@ app.whenReady().then(async () => {
   }
   registerIpcHandlers()
   createWindow()
+  if (process.platform === 'win32') {
+    cliServer = await startCliServer({
+      userDataDir: USER_DATA_ROOT,
+      handleRequest: createAppCliCommandHandler(showMainWindow)
+    }).catch((error) => {
+      console.warn('[cli] server failed to start:', error)
+      return null
+    })
+  }
   app.on('activate', function () {
     if (mainWindow) {
       showMainWindow()

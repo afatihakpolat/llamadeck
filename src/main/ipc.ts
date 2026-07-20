@@ -12,8 +12,10 @@ import { app } from 'electron'
 import extract from 'extract-zip'
 import { USER_DATA_ROOT } from './userData'
 import {
+  getActiveBackendName,
   getAppWindowBehaviorSettings,
   getUsageCostSettings,
+  saveActiveBackendName,
   saveAppWindowBehaviorSettings,
   saveUsageCostSettings
 } from './appSettings'
@@ -32,8 +34,10 @@ import {
 } from './usageSessions'
 import type {
   AppWindowBehaviorSettings,
+  BackendVersion,
   BackendBuildFlavor,
   BackendBuildMode,
+  CommandParam,
   LiteLlmInstallStatus,
   LiteLlmLogLevel,
   LiteLlmManagerSettings,
@@ -43,6 +47,7 @@ import type {
   ModelExitEvent,
   ModelOutputEvent,
   ModelOutputStream,
+  ModelStartedEvent,
   Template,
   TemplatePricing,
   UsageCostSettings,
@@ -66,6 +71,24 @@ import {
   quitAndInstall as quitAndInstallImpl,
   setUpdatePreferences as setUpdatePreferencesImpl
 } from './updateManager'
+import {
+  buildTemplateLaunchArgs,
+  isCommaListSelectCommand,
+  normalizeCommandArgs,
+  parseCommaListCommandValue
+} from '../shared/commandArgs'
+import {
+  CliCommandError,
+  createCliCommandHandler,
+  type CliModelOutputEntry,
+  type CliTemplateCreateInput,
+  type CliTemplateLogsResult,
+  type CliTemplateReadyResult,
+  type CliTemplateStartResult,
+  type CliTemplateUpdateInput,
+  type CliTemplateValidationResult
+} from './cliCommands'
+import type { CliRequest, CliResponse } from './cliProtocol'
 
 type ConfigurablePathKind = 'models' | 'backend'
 const LIGHT_WINDOW_BACKGROUND = '#f3f6fb'
@@ -108,6 +131,19 @@ interface SourceUpdateJob {
   process: ChildProcess
   cancelled: boolean
 }
+
+interface RunModelOptions {
+  id: string
+  backendPath: string
+  exe: string
+  args: string[]
+  openBrowser: boolean
+  port: number
+}
+
+type RunModelResult =
+  | { success: true; pid?: number }
+  | { success: false; error: string }
 
 interface LiteLlmStoredSettings {
   baseUrl: string
@@ -1291,7 +1327,12 @@ function normalizeTemplateRecord(
 
 function saveTemplateToDirectory(templatesDir: string, template: Template): void {
   const { _file, ...persisted } = normalizeTemplateRecord(template as unknown as Record<string, unknown>) as Template & { _file?: string }
-  writeFileSync(join(templatesDir, `${template.id}.json`), JSON.stringify(persisted, null, 2))
+  mkdirSync(templatesDir, { recursive: true })
+  const templatePath = join(templatesDir, `${template.id}.json`)
+  if (!isSafePath(templatesDir, templatePath)) throw new Error('Access denied')
+  const temporaryPath = `${templatePath}.tmp`
+  writeFileSync(temporaryPath, JSON.stringify(persisted, null, 2), 'utf-8')
+  renameSync(temporaryPath, templatePath)
 }
 
 function buildBackendUpdateResult(activeBackendName: string): BackendUpdateResult {
@@ -1367,7 +1408,14 @@ interface ModelProxyRuntime {
 }
 
 const runningProcesses = new Map<string, ChildProcess>()
+const startingProcesses = new Set<string>()
 const proxyRuntimes = new Map<string, ModelProxyRuntime>()
+const MODEL_OUTPUT_BUFFER_LIMIT = 2000
+interface ModelOutputBuffer {
+  nextSequence: number
+  events: CliModelOutputEntry[]
+}
+const modelOutputBuffers = new Map<string, ModelOutputBuffer>()
 migrateLegacyUsageLedger(LEGACY_USAGE_LEDGER_PATH, USAGE_SESSIONS_DIR, USAGE_SESSIONS_MIGRATION_MARKER)
 const persistedUsageSessions = new Map<string, UsagePersistedSession>(
   loadUsageSessions(USAGE_SESSIONS_DIR).map((session) => [session.launchId, session])
@@ -1386,11 +1434,37 @@ function broadcastToRenderer(channel: string, payload: unknown): void {
 export { broadcastToRenderer }
 
 function broadcastModelOutput(payload: ModelOutputEvent): void {
+  let buffer = modelOutputBuffers.get(payload.id)
+  if (!buffer) {
+    buffer = { nextSequence: 1, events: [] }
+    modelOutputBuffers.set(payload.id, buffer)
+  }
+  buffer.events.push({
+    ...payload,
+    sequence: buffer.nextSequence
+  })
+  buffer.nextSequence += 1
+  if (buffer.events.length > MODEL_OUTPUT_BUFFER_LIMIT) {
+    buffer.events.splice(0, buffer.events.length - MODEL_OUTPUT_BUFFER_LIMIT)
+  }
   broadcastToRenderer('model-output', payload)
+}
+
+function resetModelOutputBuffer(templateId: string): void {
+  const buffer = modelOutputBuffers.get(templateId)
+  if (buffer) {
+    buffer.events = []
+    return
+  }
+  modelOutputBuffers.set(templateId, { nextSequence: 1, events: [] })
 }
 
 function broadcastModelExit(payload: ModelExitEvent): void {
   broadcastToRenderer('model-exit', payload)
+}
+
+function broadcastModelStarted(payload: ModelStartedEvent): void {
+  broadcastToRenderer('model-started', payload)
 }
 
 function broadcastUsageUpdated(): void {
@@ -1511,6 +1585,175 @@ async function stopProxyRuntime(id: string): Promise<void> {
   await runtime.close()
 }
 
+function openChatWindow(port: number): void {
+  const chatUrl = `http://127.0.0.1:${port}`
+  const icon = resolveAppIconPath()
+
+  const chatWin = new BrowserWindow({
+    width: 1024,
+    height: 768,
+    show: false,
+    autoHideMenuBar: true,
+    title: 'LlamaDeck - Llama-UI',
+    titleBarStyle: 'hiddenInset',
+    backgroundColor: getInitialWindowBackground(),
+    ...(icon ? { icon } : {}),
+    webPreferences: {
+      preload: join(__dirname, '../preload/index.js'),
+      sandbox: false,
+      contextIsolation: true,
+      nodeIntegration: false
+    }
+  })
+  chatWin.on('ready-to-show', () => {
+    chatWin.show()
+  })
+  const rendererUrl = process.env['ELECTRON_RENDERER_URL']
+  if (rendererUrl) {
+    chatWin.loadURL(`${rendererUrl}?chat_url=${encodeURIComponent(chatUrl)}`)
+  } else {
+    chatWin.loadFile(join(__dirname, '../renderer/index.html'), { query: { chat_url: chatUrl } })
+  }
+}
+
+function hasArchitectureMismatch(error: unknown, backendPath: string): boolean {
+  const errorCode = error && typeof error === 'object' && 'code' in error
+    ? (error as { code?: unknown }).code
+    : undefined
+  return errorCode === 'UNKNOWN' && backendPath.toLowerCase().includes('arm64') && process.arch !== 'arm64'
+}
+
+async function startRunningModel(opts: RunModelOptions): Promise<RunModelResult> {
+  if (runningProcesses.has(opts.id) || startingProcesses.has(opts.id)) {
+    return { success: false, error: 'Already running or starting' }
+  }
+  const backendDir = getAppPaths().backend
+  const exePath = join(opts.backendPath, opts.exe)
+  if (!isSafePath(backendDir, exePath)) return { success: false, error: 'Access denied' }
+  if (!existsSync(exePath)) return { success: false, error: `Executable not found: ${exePath}` }
+
+  resetModelOutputBuffer(opts.id)
+  startingProcesses.add(opts.id)
+  const template = getTemplateById(opts.id)
+  const launchId = randomUUID()
+  const publicHost = getPublicBindHost(opts.args)
+
+  try {
+    const upstreamPort = await allocateLoopbackPort()
+    const upstreamArgs = prepareUpstreamArgs(opts.args, upstreamPort)
+    const proxyHandle: LlamaProxyHandle = await startLlamaProxy({
+      launchId,
+      templateId: opts.id,
+      templateNameSnapshot: template?.name ?? opts.id,
+      modelPathSnapshot: template?.modelPath,
+      publicHost,
+      publicPort: opts.port,
+      upstreamHost: '127.0.0.1',
+      upstreamPort,
+      onRequestStarted: (path) => handleUsageRequestStarted(opts.id, path),
+      onRequestFinished: (record) => handleUsageRequestFinished(opts.id, record)
+    })
+    const proc = spawn(exePath, upstreamArgs, {
+      detached: false,
+      stdio: 'pipe',
+      cwd: dirname(exePath),
+      windowsHide: false
+    })
+    const commandPreview = [
+      basename(exePath),
+      ...upstreamArgs.map((arg) => /\s/.test(arg) ? JSON.stringify(arg) : arg)
+    ].join(' ')
+    const emitOutput = (stream: ModelOutputStream, text: string) => {
+      if (!text) return
+
+      broadcastModelOutput({
+        id: opts.id,
+        stream,
+        text,
+        timestamp: new Date().toISOString()
+      })
+    }
+
+    proc.stdout?.setEncoding('utf8')
+    proc.stderr?.setEncoding('utf8')
+    proc.stdout?.on('data', (chunk: string) => emitOutput('stdout', chunk))
+    proc.stderr?.on('data', (chunk: string) => emitOutput('stderr', chunk))
+    proc.on('error', async (error: Error) => {
+      const message = hasArchitectureMismatch(error, opts.backendPath)
+        ? 'Architecture mismatch: You are trying to run an ARM64 backend on an x64 system. Please delete this backend in Settings and download the x64 version.'
+        : String(error)
+      emitOutput('system', `Process failed to start: ${message}\n`)
+      console.error('[llama-server] spawn error:', message)
+      runningProcesses.delete(opts.id)
+      await stopProxyRuntime(opts.id)
+      finalizeUsageSession(opts.id, 'error', message)
+      broadcastToRenderer('model-error', { id: opts.id, error: message })
+    })
+    runningProcesses.set(opts.id, proc)
+    proxyRuntimes.set(opts.id, {
+      close: proxyHandle.close,
+      publicHost,
+      publicPort: opts.port,
+      upstreamPort
+    })
+    registerLiveUsageSession({
+      launchId,
+      templateId: opts.id,
+      templateName: template?.name ?? opts.id,
+      modelPath: template?.modelPath,
+      backendVersion: basename(opts.backendPath),
+      publicPort: opts.port,
+      upstreamPort,
+      startedAt: new Date().toISOString(),
+      status: 'running',
+      requestCount: 0,
+      successCount: 0,
+      errorCount: 0,
+      exactUsageCount: 0,
+      promptTokens: 0,
+      cacheTokens: 0,
+      completionTokens: 0,
+      totalTokens: 0,
+      activeRequests: 0
+    })
+    broadcastModelStarted({
+      id: opts.id,
+      ...(proc.pid === undefined ? {} : { pid: proc.pid })
+    })
+    emitOutput('system', `Proxy listening on http://${publicHost}:${opts.port} and forwarding to http://127.0.0.1:${upstreamPort}.\n`)
+    emitOutput('system', `Launching upstream: ${commandPreview}\n`)
+    emitOutput('system', `Process started${proc.pid ? ` (pid ${proc.pid})` : ''}.\n`)
+    proc.on('exit', async (code, signal) => {
+      runningProcesses.delete(opts.id)
+      await stopProxyRuntime(opts.id)
+      finalizeUsageSession(opts.id, code !== null && code !== 0 ? 'error' : signal ? 'error' : 'stopped')
+      emitOutput('system', `Process exited${code !== null ? ` with code ${code}` : ''}${signal ? ` (${signal})` : ''}.\n`)
+      broadcastModelExit({
+        id: opts.id,
+        code,
+        signal
+      })
+    })
+    if (opts.openBrowser) {
+      setTimeout(() => {
+        openChatWindow(opts.port)
+      }, 2500)
+    }
+    return { success: true, pid: proc.pid }
+  } catch (error: unknown) {
+    await stopProxyRuntime(opts.id)
+    if (hasArchitectureMismatch(error, opts.backendPath)) {
+      return {
+        success: false,
+        error: 'Architecture mismatch: You are trying to run an ARM64 backend on an x64 system. Please delete this backend in Settings and download the x64 version.'
+      }
+    }
+    return { success: false, error: String(error) }
+  } finally {
+    startingProcesses.delete(opts.id)
+  }
+}
+
 async function stopRunningModel(id: string): Promise<void> {
   const proc = runningProcesses.get(id)
   if (!proc) return
@@ -1523,6 +1766,346 @@ async function stopRunningModel(id: string): Promise<void> {
   } else {
     proc.kill()
   }
+}
+
+function normalizeComparablePath(filePath: string): string {
+  return resolve(filePath).replace(/\\/g, '/').toLowerCase()
+}
+
+function resolveTemplateModelPath(template: Template): string {
+  const configuredPath = template.modelPath?.trim()
+  if (!configuredPath) throw new Error('Model file is required.')
+  if (existsSync(configuredPath)) return configuredPath
+
+  const models = listModelsFromDirectory(getAppPaths().models)
+  const exactMatch = models.find((model) => normalizeComparablePath(model.path) === normalizeComparablePath(configuredPath))
+  if (exactMatch) return exactMatch.path
+
+  const configuredName = basename(configuredPath).toLowerCase()
+  const nameMatches = models.filter((model) => basename(model.path).toLowerCase() === configuredName)
+  if (nameMatches.length === 1) return nameMatches[0].path
+
+  throw new Error(`Model file not found: ${configuredPath}`)
+}
+
+function resolveTemplateBackend(template: Template, backends: BackendEntry[]): BackendEntry | null {
+  const activeBackendName = getActiveBackendName()
+  return template.backendVersion
+    ? backends.find((candidate) => candidate.name === template.backendVersion) ?? null
+    : backends.find((candidate) => candidate.name === activeBackendName) ?? backends[0] ?? null
+}
+
+function broadcastTemplatesChanged(): void {
+  broadcastToRenderer('templates-changed', { at: new Date().toISOString() })
+}
+
+function createTemplateFromCli(input: CliTemplateCreateInput): Template {
+  const templates = listTemplatesFromDirectory(getAppPaths().templates)
+  const id = input.id ?? randomUUID()
+  if (templates.some((template) => template.id === id)) {
+    throw new CliCommandError(`Template ID already exists: ${id}`, 5, 'CONFLICT')
+  }
+
+  const timestamp = new Date().toISOString()
+  const normalized = normalizeTemplateRecord({
+    ...input,
+    id,
+    createdAt: timestamp,
+    updatedAt: timestamp
+  })
+  saveTemplateToDirectory(getAppPaths().templates, normalized)
+  broadcastTemplatesChanged()
+  return getTemplateById(id) ?? normalized
+}
+
+function updateTemplateFromCli(template: Template, input: CliTemplateUpdateInput): Template {
+  const normalized = normalizeTemplateRecord({
+    ...template,
+    ...input,
+    id: template.id,
+    createdAt: template.createdAt,
+    updatedAt: new Date().toISOString()
+  })
+  saveTemplateToDirectory(getAppPaths().templates, normalized)
+  broadcastTemplatesChanged()
+  return getTemplateById(template.id) ?? normalized
+}
+
+async function deleteTemplateFromCli(template: Template): Promise<void> {
+  if (runningProcesses.has(template.id) || startingProcesses.has(template.id)) {
+    throw new CliCommandError(`Stop the template before deleting it: ${template.name}`, 5, 'CONFLICT')
+  }
+
+  const templatesDir = getAppPaths().templates
+  const templateFile = join(templatesDir, template._file ?? `${template.id}.json`)
+  if (!isSafePath(templatesDir, templateFile)) {
+    throw new CliCommandError('Access denied', 1, 'ACCESS_DENIED')
+  }
+  if (!existsSync(templateFile)) {
+    throw new CliCommandError(`Template file not found: ${template.id}`, 3, 'NOT_FOUND')
+  }
+  unlinkSync(templateFile)
+  modelOutputBuffers.delete(template.id)
+  broadcastTemplatesChanged()
+}
+
+function getTemplateLogsFromCli(template: Template, afterSequence: number, limit: number): CliTemplateLogsResult {
+  const buffer = modelOutputBuffers.get(template.id)
+  const allEvents = buffer?.events ?? []
+  const pendingEvents = afterSequence === 0
+    ? allEvents.slice(-limit)
+    : allEvents.filter((event) => event.sequence > afterSequence)
+  const matchingEvents = pendingEvents.slice(0, limit)
+  const nextCursor = matchingEvents.at(-1)?.sequence ?? afterSequence
+
+  return {
+    id: template.id,
+    name: template.name,
+    events: matchingEvents,
+    nextCursor,
+    hasMore: pendingEvents.length > matchingEvents.length,
+    running: runningProcesses.has(template.id) || startingProcesses.has(template.id)
+  }
+}
+
+function getHealthStatus(hostname: string, port: number): Promise<number | null> {
+  return new Promise((resolveStatus) => {
+    let settled = false
+    const finish = (status: number | null): void => {
+      if (settled) return
+      settled = true
+      resolveStatus(status)
+    }
+    const request = http.get({
+      hostname,
+      port,
+      path: '/health',
+      timeout: 1000
+    }, (response) => {
+      response.resume()
+      finish(response.statusCode ?? null)
+    })
+    request.on('timeout', () => request.destroy())
+    request.on('error', () => finish(null))
+  })
+}
+
+async function waitForTemplateReadyFromCli(template: Template, timeoutMs: number): Promise<CliTemplateReadyResult> {
+  if (!runningProcesses.has(template.id) && !startingProcesses.has(template.id)) {
+    throw new CliCommandError(`Template is not running: ${template.name}`, 5, 'NOT_RUNNING')
+  }
+
+  const startedAt = Date.now()
+  while (Date.now() - startedAt < timeoutMs) {
+    if (!runningProcesses.has(template.id) && !startingProcesses.has(template.id)) {
+      throw new CliCommandError(`Template stopped before becoming ready: ${template.name}`, 5, 'STOPPED')
+    }
+
+    const runtime = proxyRuntimes.get(template.id)
+    const hostname = runtime?.publicHost.includes(':') ? '::1' : '127.0.0.1'
+    const publicPort = runtime?.publicPort ?? template.serverPort
+    const statusCode = await getHealthStatus(hostname, publicPort)
+    if (statusCode !== null && statusCode >= 200 && statusCode < 300) {
+      return {
+        id: template.id,
+        name: template.name,
+        ready: true,
+        url: `http://${hostname.includes(':') ? `[${hostname}]` : hostname}:${publicPort}`,
+        waitedMs: Date.now() - startedAt,
+        statusCode
+      }
+    }
+
+    await new Promise<void>((resolveDelay) => setTimeout(resolveDelay, 250))
+  }
+
+  throw new CliCommandError(
+    `Timed out after ${timeoutMs}ms waiting for template readiness: ${template.name}`,
+    5,
+    'READINESS_TIMEOUT'
+  )
+}
+
+function validateCommandValue(command: CommandParam, value: Template['args'][string]): string[] {
+  if (value === null || value === '') return []
+  const errors: string[] = []
+
+  if (command.type === 'boolean' && typeof value !== 'boolean') {
+    errors.push(`${command.arg} must be a boolean.`)
+  } else if (command.type === 'number' && typeof value !== 'number') {
+    errors.push(`${command.arg} must be a number.`)
+  } else if (
+    (command.type === 'string' || command.type === 'select' || command.type === 'text')
+    && typeof value !== 'string'
+  ) {
+    errors.push(`${command.arg} must be a string.`)
+  }
+
+  if (typeof value === 'number') {
+    if (command.min !== undefined && value < command.min) {
+      errors.push(`${command.arg} must be at least ${command.min}.`)
+    }
+    if (command.max !== undefined && value > command.max) {
+      errors.push(`${command.arg} must be at most ${command.max}.`)
+    }
+  }
+  if (typeof value === 'string' && command.options) {
+    const values = isCommaListSelectCommand(command)
+      ? parseCommaListCommandValue(value)
+      : [value]
+    const invalidValues = values.filter((candidate) => !command.options?.includes(candidate))
+    if (invalidValues.length > 0) {
+      errors.push(`${command.arg} contains unsupported value(s): ${invalidValues.join(', ')}. Expected: ${command.options.join(', ')}.`)
+    }
+  }
+
+  return errors
+}
+
+async function validateTemplateFromCli(
+  input: Template | CliTemplateCreateInput
+): Promise<CliTemplateValidationResult> {
+  const timestamp = new Date().toISOString()
+  const template = normalizeTemplateRecord({
+    ...input,
+    id: input.id ?? 'validation-preview',
+    createdAt: 'createdAt' in input ? input.createdAt : timestamp,
+    updatedAt: 'updatedAt' in input ? input.updatedAt : timestamp
+  })
+  const errors: string[] = []
+  const warnings: string[] = []
+  const resolved: NonNullable<CliTemplateValidationResult['resolved']> = {}
+
+  if (!Number.isInteger(template.serverPort) || template.serverPort < 1 || template.serverPort > 65535) {
+    errors.push('serverPort must be an integer from 1 through 65535.')
+  }
+  const portConflict = getLiveUsageSessions().find((session) => {
+    return session.templateId !== template.id && session.publicPort === template.serverPort
+  })
+  if (portConflict) {
+    errors.push(`Port ${template.serverPort} is already used by running template ${portConflict.templateName}.`)
+  }
+
+  try {
+    resolved.modelPath = resolveTemplateModelPath(template)
+  } catch (error) {
+    errors.push(error instanceof Error ? error.message : String(error))
+  }
+
+  const backend = resolveTemplateBackend(template, listBackendsFromDirectory(getAppPaths().backend))
+  if (!backend?.exe) {
+    const requestedBackend = template.backendVersion || getActiveBackendName()
+    errors.push(requestedBackend
+      ? `Backend not found or has no executable: ${requestedBackend}`
+      : 'No runnable backend is installed.')
+  } else {
+    resolved.backend = backend.name
+    const commandsSchema = await loadMergedSchema({
+      buildTag: backend.name,
+      backendDir: getAppPaths().backend,
+      bundledDir: BUNDLED_COMMANDS_DIR,
+      overlay: getOverlay()
+    })
+
+    if (!commandsSchema) {
+      warnings.push(`No command schema is available for backend ${backend.name}; argument types were not checked.`)
+    } else {
+      const commands = new Map(
+        commandsSchema.categories.flatMap((category) => category.commands).map((command) => [command.arg, command])
+      )
+      const normalizedArgs = normalizeCommandArgs(template.args, commandsSchema)
+      for (const [arg, value] of Object.entries(normalizedArgs)) {
+        if (!arg.startsWith('-')) {
+          errors.push(`Argument key must start with a hyphen: ${arg}`)
+          continue
+        }
+        const command = commands.get(arg)
+        if (!command) {
+          warnings.push(`Argument is not present in backend ${backend.name}'s command schema: ${arg}`)
+          continue
+        }
+        errors.push(...validateCommandValue(command, value))
+        if (command.deprecated) warnings.push(`Argument is deprecated: ${arg}`)
+      }
+    }
+
+    if (resolved.modelPath) {
+      resolved.launchArgs = buildTemplateLaunchArgs(template, commandsSchema, resolved.modelPath)
+    }
+  }
+
+  return {
+    valid: errors.length === 0,
+    ...('id' in input && input.id ? { templateId: input.id } : {}),
+    errors,
+    warnings,
+    resolved
+  }
+}
+
+async function startTemplateFromCli(template: Template): Promise<CliTemplateStartResult> {
+  const backends = listBackendsFromDirectory(getAppPaths().backend)
+  const activeBackendName = getActiveBackendName()
+  const backend = resolveTemplateBackend(template, backends)
+
+  if (!backend?.exe) {
+    const requestedBackend = template.backendVersion || activeBackendName
+    throw new Error(requestedBackend
+      ? `Backend not found or has no executable: ${requestedBackend}`
+      : 'No runnable backend is installed.')
+  }
+
+  const modelPath = resolveTemplateModelPath(template)
+  const commandsSchema = await loadMergedSchema({
+    buildTag: backend.name,
+    backendDir: getAppPaths().backend,
+    bundledDir: BUNDLED_COMMANDS_DIR,
+    overlay: getOverlay()
+  })
+  const args = buildTemplateLaunchArgs(template, commandsSchema, modelPath)
+  const result = await startRunningModel({
+    id: template.id,
+    backendPath: backend.path,
+    exe: backend.exe,
+    args,
+    openBrowser: false,
+    port: template.serverPort || 8080
+  })
+  if (!result.success) throw new Error(result.error)
+
+  return {
+    id: template.id,
+    name: template.name,
+    ...(result.pid === undefined ? {} : { pid: result.pid }),
+    port: template.serverPort || 8080,
+    backend: backend.name
+  }
+}
+
+export function createAppCliCommandHandler(showApp: () => void): (request: CliRequest) => Promise<CliResponse> {
+  return createCliCommandHandler({
+    getVersion: () => app.getVersion(),
+    listTemplates: () => listTemplatesFromDirectory(getAppPaths().templates),
+    listRunningSessions: getLiveUsageSessions,
+    listBackends: () => listBackendsFromDirectory(getAppPaths().backend) satisfies BackendVersion[],
+    getActiveBackendName,
+    showApp,
+    createTemplate: async (input) => createTemplateFromCli(input),
+    updateTemplate: async (template, input) => updateTemplateFromCli(template, input),
+    deleteTemplate: deleteTemplateFromCli,
+    validateTemplate: validateTemplateFromCli,
+    getTemplateLogs: getTemplateLogsFromCli,
+    waitForTemplateReady: waitForTemplateReadyFromCli,
+    startTemplate: startTemplateFromCli,
+    stopTemplate: async (template) => {
+      if (!runningProcesses.has(template.id)) throw new Error(`Template is not running: ${template.name}`)
+      await stopRunningModel(template.id)
+    },
+    useBackend: async (backend) => {
+      saveActiveBackendName(backend.name)
+      broadcastToRenderer('active-backend-changed', { name: backend.name })
+    }
+  })
 }
 interface DownloadTask {
   id: string
@@ -1938,6 +2521,16 @@ export function registerIpcHandlers(): void {
   ipcMain.handle('list-backends', () => {
     return listBackendsFromDirectory(getAppPaths().backend)
   })
+  ipcMain.handle('get-active-backend-name', () => {
+    return getActiveBackendName()
+  })
+  ipcMain.handle('set-active-backend-name', (_e, backendName: string) => {
+    const backend = listBackendsFromDirectory(getAppPaths().backend)
+      .find((candidate) => candidate.name === backendName)
+    if (!backend) return { success: false, error: `Backend not found: ${backendName}` }
+    saveActiveBackendName(backend.name)
+    return { success: true, name: backend.name }
+  })
   ipcMain.handle('delete-backend', (_e, backendName: string) => {
     try {
       const backendDir = getAppPaths().backend
@@ -2045,144 +2638,15 @@ export function registerIpcHandlers(): void {
     if (r.canceled || !r.filePaths.length) return null
     return { name: basename(r.filePaths[0]), path: r.filePaths[0] }
   })
-  ipcMain.handle('run-model', async (_e, opts: { id: string; backendPath: string; exe: string; args: string[]; openBrowser: boolean; port: number }) => {
-    if (runningProcesses.has(opts.id)) return { success: false, error: 'Already running' }
-    const backendDir = getAppPaths().backend
-    const exePath = join(opts.backendPath, opts.exe)
-    if (!isSafePath(backendDir, exePath)) return { success: false, error: 'Access denied' }
-    if (!existsSync(exePath)) return { success: false, error: `Executable not found: ${exePath}` }
-
-    const template = getTemplateById(opts.id)
-    const launchId = randomUUID()
-    const publicHost = getPublicBindHost(opts.args)
-
-    try {
-      const upstreamPort = await allocateLoopbackPort()
-      const upstreamArgs = prepareUpstreamArgs(opts.args, upstreamPort)
-      const proxyHandle: LlamaProxyHandle = await startLlamaProxy({
-        launchId,
-        templateId: opts.id,
-        templateNameSnapshot: template?.name ?? opts.id,
-        modelPathSnapshot: template?.modelPath,
-        publicHost,
-        publicPort: opts.port,
-        upstreamHost: '127.0.0.1',
-        upstreamPort,
-        onRequestStarted: (path) => handleUsageRequestStarted(opts.id, path),
-        onRequestFinished: (record) => handleUsageRequestFinished(opts.id, record)
-      })
-      const proc = spawn(exePath, upstreamArgs, { detached: false, stdio: 'pipe', cwd: dirname(exePath), windowsHide: false })
-      const commandPreview = [basename(exePath), ...upstreamArgs.map((arg) => /\s/.test(arg) ? JSON.stringify(arg) : arg)].join(' ')
-      const emitOutput = (stream: ModelOutputStream, text: string) => {
-        if (!text) return
-
-        broadcastModelOutput({
-          id: opts.id,
-          stream,
-          text,
-          timestamp: new Date().toISOString()
-        })
-      }
-
-      proc.stdout?.setEncoding('utf8')
-      proc.stderr?.setEncoding('utf8')
-      proc.stdout?.on('data', (chunk: string) => emitOutput('stdout', chunk))
-      proc.stderr?.on('data', (chunk: string) => emitOutput('stderr', chunk))
-      proc.on('error', async (err: any) => {
-        let msg = String(err)
-        if (err.code === 'UNKNOWN' && opts.backendPath.toLowerCase().includes('arm64') && process.arch !== 'arm64') {
-          msg = 'Architecture mismatch: You are trying to run an ARM64 backend on an x64 system. Please delete this backend in Settings and download the x64 version.'
-        }
-        emitOutput('system', `Process failed to start: ${msg}\n`)
-        console.error('[llama-server] spawn error:', msg)
-        runningProcesses.delete(opts.id)
-        await stopProxyRuntime(opts.id)
-        finalizeUsageSession(opts.id, 'error', msg)
-        _e.sender.send('model-error', { id: opts.id, error: msg })
-      })
-      runningProcesses.set(opts.id, proc)
-      proxyRuntimes.set(opts.id, {
-        close: proxyHandle.close,
-        publicHost,
-        publicPort: opts.port,
-        upstreamPort
-      })
-      registerLiveUsageSession({
-        launchId,
-        templateId: opts.id,
-        templateName: template?.name ?? opts.id,
-        modelPath: template?.modelPath,
-        backendVersion: basename(opts.backendPath),
-        publicPort: opts.port,
-        upstreamPort,
-        startedAt: new Date().toISOString(),
-        status: 'running',
-        requestCount: 0,
-        successCount: 0,
-        errorCount: 0,
-        exactUsageCount: 0,
-        promptTokens: 0,
-        cacheTokens: 0,
-        completionTokens: 0,
-        totalTokens: 0,
-        activeRequests: 0
-      })
-      emitOutput('system', `Proxy listening on http://${publicHost}:${opts.port} and forwarding to http://127.0.0.1:${upstreamPort}.\n`)
-      emitOutput('system', `Launching upstream: ${commandPreview}\n`)
-      emitOutput('system', `Process started${proc.pid ? ` (pid ${proc.pid})` : ''}.\n`)
-      proc.on('exit', async (code, signal) => {
-        runningProcesses.delete(opts.id)
-        await stopProxyRuntime(opts.id)
-        finalizeUsageSession(opts.id, code !== null && code !== 0 ? 'error' : signal ? 'error' : 'stopped')
-        emitOutput('system', `Process exited${code !== null ? ` with code ${code}` : ''}${signal ? ` (${signal})` : ''}.\n`)
-        broadcastModelExit({
-          id: opts.id,
-          code,
-          signal
-        })
-      })
-      if (opts.openBrowser) {
-        setTimeout(() => {
-          openChatWindow(opts.port)
-        }, 2500)
-      }
-      return { success: true, pid: proc.pid }
-    } catch (err: any) {
-      await stopProxyRuntime(opts.id)
-      if (err.code === 'UNKNOWN' && opts.backendPath.toLowerCase().includes('arm64') && process.arch !== 'arm64') {
-        return { success: false, error: 'Architecture mismatch: You are trying to run an ARM64 backend on an x64 system. Please delete this backend in Settings and download the x64 version.' }
-      }
-      return { success: false, error: String(err) }
-    }
+  ipcMain.handle('run-model', (_e, opts: RunModelOptions) => {
+    return startRunningModel(opts)
   })
-  
-  function openChatWindow(port: number) {
-    const chatUrl = `http://127.0.0.1:${port}`
-    const icon = resolveAppIconPath()
-    
-    const chatWin = new BrowserWindow({
-      width: 1024, height: 768, show: false, autoHideMenuBar: true,
-      title: 'LlamaDeck - Llama-UI',
-      titleBarStyle: 'hiddenInset',
-      backgroundColor: getInitialWindowBackground(),
-      ...(icon ? { icon } : {}),
-      webPreferences: {
-        preload: join(__dirname, '../preload/index.js'),
-        sandbox: false,
-        contextIsolation: true,
-        nodeIntegration: false
-      }
-    })
-    chatWin.on('ready-to-show', () => {
-      chatWin.show()
-    })
-    const rendererUrl = process.env['ELECTRON_RENDERER_URL']
-    if (rendererUrl) {
-      chatWin.loadURL(`${rendererUrl}?chat_url=${encodeURIComponent(chatUrl)}`)
-    } else {
-      chatWin.loadFile(join(__dirname, '../renderer/index.html'), { query: { chat_url: chatUrl } })
-    }
-  }
+  ipcMain.handle('list-running-models', () => {
+    return Array.from(runningProcesses.entries()).map(([id, process]) => ({
+      id,
+      ...(process.pid === undefined ? {} : { pid: process.pid })
+    }))
+  })
 
   ipcMain.handle('open-chat-window', (_e, port: number) => {
     openChatWindow(port)

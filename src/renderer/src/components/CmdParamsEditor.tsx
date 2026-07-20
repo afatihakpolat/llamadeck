@@ -8,7 +8,7 @@ import {
   isDefaultTrueBooleanCommand,
   parseCommaListCommandValue,
   toggleCommaListCommandValue
-} from '../utils/commandArgs'
+} from '../../../shared/commandArgs'
 
 interface DisplayCategory {
   name: string

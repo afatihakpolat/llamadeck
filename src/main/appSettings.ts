@@ -1,10 +1,15 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs'
+import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'fs'
 import { dirname, join } from 'path'
+import { z } from 'zod'
 import type { AppWindowBehaviorSettings, UsageCostSettings } from '../shared/types'
 import { USER_DATA_ROOT } from './userData'
 
 const APP_WINDOW_SETTINGS_FILE = join(USER_DATA_ROOT, 'app-window-settings.json')
 const USAGE_COST_SETTINGS_FILE = join(USER_DATA_ROOT, 'usage-cost-settings.json')
+const ACTIVE_BACKEND_SETTINGS_FILE = join(USER_DATA_ROOT, 'active-backend.json')
+const ActiveBackendSettingsSchema = z.object({
+  name: z.string().trim().min(1)
+})
 
 const DEFAULT_APP_WINDOW_BEHAVIOR_SETTINGS: AppWindowBehaviorSettings = {
   minimizeToTray: false
@@ -103,4 +108,25 @@ export function saveUsageCostSettings(nextSettings: Partial<UsageCostSettings>):
   writeFileSync(USAGE_COST_SETTINGS_FILE, JSON.stringify(mergedSettings, null, 2), 'utf-8')
 
   return mergedSettings
+}
+
+export function getActiveBackendName(): string | null {
+  try {
+    if (!existsSync(ACTIVE_BACKEND_SETTINGS_FILE)) return null
+    const parsed = ActiveBackendSettingsSchema.safeParse(
+      JSON.parse(readFileSync(ACTIVE_BACKEND_SETTINGS_FILE, 'utf-8'))
+    )
+    return parsed.success ? parsed.data.name : null
+  } catch {
+    return null
+  }
+}
+
+export function saveActiveBackendName(name: string): string {
+  const parsed = ActiveBackendSettingsSchema.parse({ name })
+  ensureSettingsDirectory(ACTIVE_BACKEND_SETTINGS_FILE)
+  const temporaryFile = `${ACTIVE_BACKEND_SETTINGS_FILE}.tmp`
+  writeFileSync(temporaryFile, JSON.stringify(parsed, null, 2), 'utf-8')
+  renameSync(temporaryFile, ACTIVE_BACKEND_SETTINGS_FILE)
+  return parsed.name
 }

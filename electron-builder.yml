@@ -10,6 +10,9 @@ files:
   - assets/icon_256.png
   - resources/commands/overlay.json
   - resources/commands/b9202.json
+extraResources:
+  - from: resources/cli
+    to: cli
 win:
   target:
     - target: nsis
@@ -23,6 +26,7 @@ win:
   icon: assets/icon_256.png
 nsis:
   artifactName: LlamaDeck-Setup-${version}.${ext}
+  include: resources/installer.nsh
   oneClick: false
   perMachine: false
   allowToChangeInstallationDirectory: false

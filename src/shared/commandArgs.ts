@@ -1,4 +1,4 @@
-import type { CommandParam, CommandsSchema, Template } from '../../../shared/types'
+import type { CommandParam, CommandsSchema, Template } from './types'
 
 type CommandArgs = Template['args']
 
@@ -146,4 +146,52 @@ export function normalizeCommandArgs(args: CommandArgs, commandsSchema: Commands
   }
 
   return normalizedArgs
+}
+
+export function buildTemplateLaunchArgs(
+  template: Template,
+  commandsSchema: CommandsSchema | null,
+  modelPath: string
+): string[] {
+  const args: string[] = ['-m', modelPath]
+  const normalizedArgs = normalizeCommandArgs(template.args || {}, commandsSchema)
+
+  if (commandsSchema) {
+    const knownArgs = new Set<string>()
+
+    for (const category of commandsSchema.categories) {
+      for (const command of category.commands) {
+        knownArgs.add(command.arg)
+        const value = normalizedArgs[command.arg]
+        if (value === undefined || value === null || value === '') continue
+
+        if (command.type === 'boolean') {
+          const booleanFlag = getBooleanCommandFlag(command, value)
+          if (booleanFlag) args.push(booleanFlag)
+        } else {
+          args.push(command.arg, String(value))
+        }
+      }
+    }
+
+    for (const [key, value] of Object.entries(normalizedArgs)) {
+      if (knownArgs.has(key)) continue
+      if (value === true) args.push(key)
+      else if (value !== false && value !== null && value !== '') args.push(key, String(value))
+    }
+  } else {
+    for (const [key, value] of Object.entries(normalizedArgs)) {
+      if (value === true) args.push(key)
+      else if (value !== false && value !== null && value !== '') args.push(key, String(value))
+    }
+  }
+
+  if (!args.includes('--port') && template.serverPort) {
+    args.push('--port', String(template.serverPort))
+  }
+  if ((template.launchMode || 'chat') === 'api' && !args.includes('--no-webui')) {
+    args.push('--no-webui')
+  }
+
+  return args
 }

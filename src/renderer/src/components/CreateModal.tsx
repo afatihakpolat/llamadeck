@@ -4,7 +4,7 @@ import { FolderOpen, ChevronDown, Terminal, Globe, Server } from 'lucide-react'
 import type { Template } from '../../../shared/types'
 import CmdParamsEditor from './CmdParamsEditor'
 import { DEFAULT_TEMPLATE_SERVER_PORT } from '../utils/defaultTemplate'
-import { normalizeCommandArgs } from '../utils/commandArgs'
+import { normalizeCommandArgs } from '../../../shared/commandArgs'
 
 function parseCommand(cmd: string): {
   modelPath: string

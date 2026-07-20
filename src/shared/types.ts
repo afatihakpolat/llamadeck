@@ -17,7 +17,7 @@ export interface BackendVersion {
 }
 export interface CommandParam {
   arg: string
-  short?: string
+  short?: string | null
   label: string
   description: string
   type: 'boolean' | 'number' | 'string' | 'select' | 'text'
@@ -50,6 +50,10 @@ export interface ModelExitEvent {
   id: string
   code: number | null
   signal: string | null
+}
+export interface ModelStartedEvent {
+  id: string
+  pid?: number
 }
 export type UsageSessionStatus = 'running' | 'stopped' | 'error'
 export interface UsageTimingSnapshot {

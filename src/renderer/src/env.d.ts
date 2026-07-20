@@ -1,4 +1,4 @@
-import type { Template, BackendVersion, BackendBuildFlavor, CommandsSchema, LiteLlmInstallStatus, LiteLlmManagerSettingsInput, LiteLlmManagerSnapshot, LiteLlmModelEntry, ReleaseInfo, AppWindowBehaviorSettings, ModelExitEvent, ModelOutputEvent, UsageCostSettings, UsageStatsQuery, UsageStatsSnapshot, UsageUpdatedEvent } from '../../shared/types'
+import type { Template, BackendVersion, BackendBuildFlavor, CommandsSchema, LiteLlmInstallStatus, LiteLlmManagerSettingsInput, LiteLlmManagerSnapshot, LiteLlmModelEntry, ReleaseInfo, AppWindowBehaviorSettings, ModelExitEvent, ModelOutputEvent, ModelStartedEvent, UsageCostSettings, UsageStatsQuery, UsageStatsSnapshot, UsageUpdatedEvent } from '../../shared/types'
 interface ModelFileInfo {
   name: string
   path: string
@@ -58,10 +58,15 @@ interface LlamaCppApi {
   onModelDownloadProgress: (cb: (data: ModelDownloadInfo) => void) => void
   removeModelDownloadListener: () => void
   listBackends: () => Promise<BackendVersion[]>
+  getActiveBackendName: () => Promise<string | null>
+  setActiveBackendName: (name: string) => Promise<{ success: boolean; name?: string; error?: string }>
   deleteBackend: (name: string) => Promise<{ success: boolean; error?: string }>
   getCommands: (backendName: string) => Promise<CommandsSchema | null>
   saveBackendCommands: (backendName: string, schema: object) => Promise<{ success: boolean; error?: string }>
   listTemplates: () => Promise<Template[]>
+  listRunningModels: () => Promise<ModelStartedEvent[]>
+  onTemplatesChanged: (cb: (data: { at: string }) => void) => () => void
+  onActiveBackendChanged: (cb: (data: { name: string }) => void) => () => void
   getTemplate: (id: string) => Promise<Template | null>
   getUsageStats: (query?: Partial<UsageStatsQuery>) => Promise<UsageStatsSnapshot>
   getUsageCostSettings: () => Promise<UsageCostSettings>
@@ -72,6 +77,8 @@ interface LlamaCppApi {
   pickModelFile: () => Promise<{ name: string; path: string } | null>
   runModel: (opts: { id: string; backendPath: string; exe: string; args: string[]; openBrowser: boolean; port: number }) => Promise<{ success: boolean; pid?: number; error?: string }>
   stopModel: (id: string) => Promise<{ success: boolean; error?: string }>
+  onModelStarted: (cb: (data: ModelStartedEvent) => void) => void
+  removeModelStartedListener: () => void
   onModelOutput: (cb: (data: ModelOutputEvent) => void) => void
   removeModelOutputListener: () => void
   onModelExit: (cb: (data: ModelExitEvent) => void) => void

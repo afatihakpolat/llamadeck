@@ -21,7 +21,8 @@ function hasExistingUserData(dir: string): boolean {
     'backend',
     'Local Storage',
     'Session Storage',
-    'Preferences'
+    'Preferences',
+    'active-backend.json'
   ]
 
   return migrationMarkers.some((marker) => existsSync(join(dir, marker)))

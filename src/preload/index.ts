@@ -24,10 +24,23 @@ const api = {
   },
   removeModelDownloadListener: () => ipcRenderer.removeAllListeners('model-download-progress'),
   listBackends: () => ipcRenderer.invoke('list-backends'),
+  getActiveBackendName: () => ipcRenderer.invoke('get-active-backend-name'),
+  setActiveBackendName: (name: string) => ipcRenderer.invoke('set-active-backend-name', name),
   deleteBackend: (name: string) => ipcRenderer.invoke('delete-backend', name),
   getCommands: (backendName: string) => ipcRenderer.invoke('get-commands', backendName),
   saveBackendCommands: (backendName: string, schema: object) => ipcRenderer.invoke('save-backend-commands', backendName, schema),
   listTemplates: () => ipcRenderer.invoke('list-templates'),
+  listRunningModels: () => ipcRenderer.invoke('list-running-models'),
+  onTemplatesChanged: (cb: (data: { at: string }) => void) => {
+    const listener = (_e: Electron.IpcRendererEvent, data: { at: string }) => cb(data)
+    ipcRenderer.on('templates-changed', listener)
+    return () => ipcRenderer.removeListener('templates-changed', listener)
+  },
+  onActiveBackendChanged: (cb: (data: { name: string }) => void) => {
+    const listener = (_e: Electron.IpcRendererEvent, data: { name: string }) => cb(data)
+    ipcRenderer.on('active-backend-changed', listener)
+    return () => ipcRenderer.removeListener('active-backend-changed', listener)
+  },
   getTemplate: (id: string) => ipcRenderer.invoke('get-template', id),
   getUsageStats: (query?: object) => ipcRenderer.invoke('get-usage-stats', query),
   getUsageCostSettings: () => ipcRenderer.invoke('get-usage-cost-settings'),
@@ -38,6 +51,11 @@ const api = {
   pickModelFile: () => ipcRenderer.invoke('pick-model-file'),
   runModel: (opts: object) => ipcRenderer.invoke('run-model', opts),
   stopModel: (id: string) => ipcRenderer.invoke('stop-model', id),
+  onModelStarted: (cb: (data: { id: string; pid?: number }) => void) => {
+    ipcRenderer.removeAllListeners('model-started')
+    ipcRenderer.on('model-started', (_e, data) => cb(data))
+  },
+  removeModelStartedListener: () => ipcRenderer.removeAllListeners('model-started'),
   onModelOutput: (cb: (data: { id: string; stream: 'stdout' | 'stderr' | 'system'; text: string; timestamp: string }) => void) => {
     ipcRenderer.removeAllListeners('model-output')
     ipcRenderer.on('model-output', (_e, data) => cb(data))
