@@ -5,7 +5,7 @@
 <h1 align="center">LlamaDeck</h1>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-1.0.0-black?style=flat-square" alt="Version 1.0.0" />
+  <img src="https://img.shields.io/badge/version-1.3.0-black?style=flat-square" alt="Version 1.3.0" />
   <img src="https://img.shields.io/badge/Electron-191970?style=flat-square&logo=Electron&logoColor=white" alt="Electron" />
   <img src="https://img.shields.io/badge/React-20232A?style=flat-square&logo=react&logoColor=61DAFB" alt="React" />
   <img src="https://img.shields.io/badge/TypeScript-007ACC?style=flat-square&logo=typescript&logoColor=white" alt="TypeScript" />
@@ -44,6 +44,42 @@ Running cutting-edge models sometimes requires different builds of llama.cpp. Ll
 Stop memorizing execution flags. Edit backend-specific commands through a structured user interface. Toggle booleans, set limits on numerical inputs, and define default parameter values for the llama.cpp server.
 
 ![Settings](assets/screenshots/settings.png)
+
+**PowerShell CLI**
+Control the installed app from PowerShell. The GUI and CLI operate on the same templates, active backend, and running model sessions. Standard commands return one JSON value for reliable scripting:
+
+```powershell
+# Discover the installed command contract and exit codes.
+llamadeck capabilities | ConvertFrom-Json
+
+# Use IDs in automation.
+$template = llamadeck template get "My Model" | ConvertFrom-Json
+llamadeck template validate $template.id | ConvertFrom-Json
+llamadeck template start $template.id | ConvertFrom-Json
+llamadeck template wait $template.id --ready --timeout 180 | ConvertFrom-Json
+
+# Inspect sessions and follow newline-delimited JSON logs.
+llamadeck status | ConvertFrom-Json
+llamadeck template logs $template.id --tail 100 --follow
+
+# Switch the global backend used by unpinned templates.
+llamadeck backend list | ConvertFrom-Json
+llamadeck backend use b1234 | ConvertFrom-Json
+
+# Create, update, or validate a strict JSON template document.
+llamadeck template create --file .\template.json | ConvertFrom-Json
+llamadeck template update $template.id --file .\changes.json | ConvertFrom-Json
+llamadeck template validate --file .\template.json | ConvertFrom-Json
+
+# Destructive operations require explicit confirmation.
+llamadeck template delete $template.id --yes | ConvertFrom-Json
+```
+
+`template logs --follow` emits newline-delimited JSON rather than one JSON array. Template validation exits with code 2 when the returned result has `valid: false`. Pass `--file -` to read a template document from stdin.
+
+The Windows installer adds the CLI shim to your user `PATH`; open a new PowerShell window after installing or updating. CLI commands start LlamaDeck when needed and communicate with the app over an authenticated per-user named pipe. Portable zip users can run `.\resources\cli\llamadeck.cmd` directly or add that folder to `PATH`.
+
+Run `llamadeck --help` for human-readable usage or `llamadeck --help --json` for the machine-readable contract.
 
 ## Installation
 

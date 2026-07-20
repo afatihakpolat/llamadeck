@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-07-20
+
+### Added
+- LlamaDeck can now be controlled from PowerShell with `llamadeck` commands for creating, updating, deleting, validating, listing, inspecting, starting, stopping, and waiting for templates; following live model logs; selecting the active backend; checking running status; and showing the app. Commands expose machine-readable capabilities and return JSON for agent automation, while the Windows installer adds the CLI to the user `PATH`.
+- The GUI now refreshes when CLI commands change templates or select the active backend, so both interfaces can be used together against the same running app.
+
 ## [1.2.5] - 2026-07-18
 
 ### Added
