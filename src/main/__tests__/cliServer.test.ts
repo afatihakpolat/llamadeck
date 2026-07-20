@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'fs'
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'fs'
 import { spawn } from 'child_process'
 import { connect } from 'net'
 import { tmpdir } from 'os'
@@ -31,7 +31,11 @@ function sendRequest(pipeId: string, request: object): Promise<CliResponse> {
   })
 }
 
-function runPowerShellCli(endpointFile: string, args: string[]): Promise<{ stdout: string; stderr: string; exitCode: number | null }> {
+function runPowerShellCli(
+  endpointFile: string | null,
+  args: string[],
+  additionalEnv: NodeJS.ProcessEnv = {}
+): Promise<{ stdout: string; stderr: string; exitCode: number | null }> {
   return new Promise((resolveProcess, rejectProcess) => {
     const scriptPath = join(process.cwd(), 'resources', 'cli', 'llamadeck.ps1')
     const child = spawn(
@@ -41,7 +45,8 @@ function runPowerShellCli(endpointFile: string, args: string[]): Promise<{ stdou
         windowsHide: true,
         env: {
           ...process.env,
-          LLAMADECK_CLI_ENDPOINT: endpointFile
+          ...additionalEnv,
+          LLAMADECK_CLI_ENDPOINT: endpointFile ?? ''
         }
       }
     )
@@ -110,6 +115,55 @@ describe.runIf(process.platform === 'win32')('startCliServer', () => {
     expect(result.exitCode).toBe(0)
     expect(result.stderr).toBe('')
     expect(JSON.parse(result.stdout)).toEqual({ version: '1.2.5', templateCount: 2, running: [] })
+  })
+
+  it('discovers the live endpoint only from the LlamaDeck profile', async () => {
+    const workDir = mkdtempSync(join(tmpdir(), 'llamadeck-cli-discovery-'))
+    tempDirs.push(workDir)
+    const appDataDir = join(workDir, 'appdata')
+    const userDataDir = join(appDataDir, 'llamadeck')
+    const server = await startCliServer({
+      userDataDir,
+      handleRequest: async () => ({
+        ok: true,
+        result: { version: '1.5.1', templateCount: 1, running: [] }
+      })
+    })
+    servers.push(server)
+
+    const result = await runPowerShellCli(null, ['status'], {
+      APPDATA: appDataDir
+    })
+
+    expect(result.exitCode).toBe(0)
+    expect(result.stderr).toBe('')
+    expect(JSON.parse(result.stdout)).toEqual({
+      version: '1.5.1',
+      templateCount: 1,
+      running: []
+    })
+  })
+
+  it('ignores a stale descriptor whose process is no longer running', async () => {
+    const workDir = mkdtempSync(join(tmpdir(), 'llamadeck-cli-stale-'))
+    tempDirs.push(workDir)
+    const appDataDir = join(workDir, 'appdata')
+    const userDataDir = join(appDataDir, 'llamadeck')
+    mkdirSync(userDataDir, { recursive: true })
+    writeFileSync(join(userDataDir, 'cli-endpoint.json'), JSON.stringify({
+      protocol: 1,
+      pipeId: 'llamadeck-cli-stale',
+      token: 'stale-token',
+      pid: 2_147_483_647
+    }), 'utf-8')
+
+    const result = await runPowerShellCli(null, ['status'], {
+      APPDATA: appDataDir
+    })
+
+    expect(result.exitCode).toBe(1)
+    expect(result.stderr).toContain('LlamaDeck is not running.')
+    expect(result.stderr).not.toContain('Timed out waiting')
   })
 
   it('passes a template file to an agent-focused command', async () => {

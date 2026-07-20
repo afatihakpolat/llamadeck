@@ -16,9 +16,11 @@ import CreateModal from './components/CreateModal'
 import UpdateBanner from './components/UpdateBanner'
 import ChatWindow from './components/ChatWindow'
 import { buildDefaultTemplate } from './utils/defaultTemplate'
+import {
+  LLAMADECK_STORAGE_KEYS,
+  readLlamaDeckStorage
+} from './utils/storageMigration'
 import type { Template } from '../../shared/types'
-
-const THEME_STORAGE_KEY = 'hexllama_theme'
 
 function resolveThemeMode(themeMode: ThemeMode, prefersDark: boolean): 'light' | 'dark' {
   if (themeMode === 'system') {
@@ -29,7 +31,7 @@ function resolveThemeMode(themeMode: ThemeMode, prefersDark: boolean): 'light' |
 }
 
 function readStoredThemeMode(): ThemeMode {
-  const storedValue = window.localStorage.getItem(THEME_STORAGE_KEY)
+  const storedValue = readLlamaDeckStorage(LLAMADECK_STORAGE_KEYS.theme)
   return storedValue === 'light' || storedValue === 'dark' || storedValue === 'system'
     ? storedValue
     : 'system'
@@ -349,7 +351,7 @@ export default function App() {
     }
 
     const handleStorage = (event: StorageEvent) => {
-      if (event.key === THEME_STORAGE_KEY) {
+      if (event.key === LLAMADECK_STORAGE_KEYS.theme) {
         const nextThemeMode = readStoredThemeMode()
         useStore.setState({ themeMode: nextThemeMode })
         syncTheme(nextThemeMode)

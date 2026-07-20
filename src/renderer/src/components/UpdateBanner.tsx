@@ -1,5 +1,9 @@
 import React, { useState, useEffect } from 'react'
 import { useStore } from '../store/useStore'
+import {
+  LLAMADECK_STORAGE_KEYS,
+  readLlamaDeckStorage
+} from '../utils/storageMigration'
 import { X, Download, Loader2 } from 'lucide-react'
 import type { BackendBuildFlavor, BackendVersion, Template } from '../../../shared/types'
 
@@ -45,7 +49,7 @@ export default function UpdateBanner() {
     setActiveBackend, setCommandsSchema, setCards, setModels, setPaths, setReleaseInfo
   } = useStore()
   const [updatingSource, setUpdatingSource] = useState(false)
-  const notifPref = localStorage.getItem('hexllama_update_notify') || 'banner'
+  const notifPref = readLlamaDeckStorage(LLAMADECK_STORAGE_KEYS.updateNotification) || 'banner'
   const latestTagName = releaseInfo?.tagName?.trim() || ''
   const canBuildCpu = Boolean(latestTagName) && !hasInstalledBuild(backends, latestTagName, 'cpu')
   const canBuildCuda = Boolean(latestTagName) && !hasInstalledBuild(backends, latestTagName, 'cuda')

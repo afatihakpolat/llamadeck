@@ -5,8 +5,11 @@ import CommandsEditor from './CommandsEditor'
 import UpdateSettings from './UpdateSettings'
 import type { AppWindowBehaviorSettings, BackendBuildFlavor, BackendVersion, Template } from '../../../shared/types'
 import type { ModelFileInfo, ThemeMode } from '../store/useStore'
-
-const NOTIF_KEY = 'hexllama_update_notify'
+import {
+  LLAMADECK_STORAGE_KEYS,
+  readLlamaDeckStorage,
+  writeLlamaDeckStorage
+} from '../utils/storageMigration'
 
 type FolderKind = 'models' | 'backend'
 
@@ -48,7 +51,7 @@ function formatUpdateProgress(progress: { percent: number; phase: string } | nul
 }
 
 function getNotifPref(): 'banner' | 'manual' {
-  return (localStorage.getItem(NOTIF_KEY) as 'banner' | 'manual') || 'banner'
+  return (readLlamaDeckStorage(LLAMADECK_STORAGE_KEYS.updateNotification) as 'banner' | 'manual') || 'banner'
 }
 
 export default function SettingsView() {
@@ -87,7 +90,7 @@ export default function SettingsView() {
 
   function handleNotifPref(pref: 'banner' | 'manual') {
     setNotifPref(pref)
-    localStorage.setItem(NOTIF_KEY, pref)
+    writeLlamaDeckStorage(LLAMADECK_STORAGE_KEYS.updateNotification, pref)
   }
 
   function handleThemeMode(mode: ThemeMode) {

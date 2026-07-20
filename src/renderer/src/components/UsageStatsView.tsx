@@ -13,11 +13,14 @@ import type {
   UsageSummaryRollup
 } from '../../../shared/types'
 import { resolveTemplatePricing } from '../utils/templatePricing'
+import {
+  LLAMADECK_STORAGE_KEYS,
+  readLlamaDeckStorage,
+  writeLlamaDeckStorage
+} from '../utils/storageMigration'
 import { PricingTab } from './PricingTab'
 
 type UsageStatsWindow = 'today' | '7d' | '30d' | 'month' | 'all' | 'custom'
-
-const STORAGE_KEY = 'hexllama_usage_stats_query_v1'
 
 function presetToRange(preset: Exclude<UsageStatsWindow, 'custom'>): { fromTimestamp: number; toTimestamp: number } {
   const now = new Date()
@@ -423,7 +426,7 @@ export default function UsageStatsView() {
   const cards = useStore((state) => state.cards)
   const [query, setQuery] = useState<UsageStatsQuery>(() => {
     try {
-      const raw = window.localStorage.getItem(STORAGE_KEY)
+      const raw = readLlamaDeckStorage(LLAMADECK_STORAGE_KEYS.usageStatsQuery)
       if (!raw) return DEFAULT_QUERY
       const parsed = JSON.parse(raw) as Partial<UsageStatsQuery>
       return {
@@ -571,7 +574,7 @@ export default function UsageStatsView() {
 
   useEffect(() => {
     try {
-      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(query))
+      writeLlamaDeckStorage(LLAMADECK_STORAGE_KEYS.usageStatsQuery, JSON.stringify(query))
     } catch (storageError) {
       console.warn('Failed to persist usage stats query:', storageError)
     }

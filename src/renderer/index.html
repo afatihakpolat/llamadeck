@@ -10,8 +10,14 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
     <script>
       (() => {
-        const storageKey = 'hexllama_theme'
-        const storedValue = window.localStorage.getItem(storageKey)
+        const storageKey = 'llamadeck_theme'
+        const legacyStorageKey = 'hexllama_theme'
+        const storedValue = window.localStorage.getItem(storageKey) ??
+          window.localStorage.getItem(legacyStorageKey)
+        if (storedValue !== null) {
+          window.localStorage.setItem(storageKey, storedValue)
+          window.localStorage.removeItem(legacyStorageKey)
+        }
         const themeMode = storedValue === 'light' || storedValue === 'dark' || storedValue === 'system'
           ? storedValue
           : 'system'

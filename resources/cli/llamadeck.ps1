@@ -65,11 +65,19 @@ function Get-EndpointCandidates {
     return @($env:LLAMADECK_CLI_ENDPOINT)
   }
 
-  return @(
-    (Join-Path $env:APPDATA "llamadeck\$EndpointFileName"),
-    (Join-Path $env:APPDATA "hexllama\$EndpointFileName"),
-    (Join-Path $env:APPDATA "Hexllama\$EndpointFileName")
-  )
+  return @((Join-Path $env:APPDATA "llamadeck\$EndpointFileName"))
+}
+
+function Test-EndpointProcess($Descriptor) {
+  $processId = 0
+  if (
+    -not [int]::TryParse([string]$Descriptor.pid, [ref]$processId) -or
+    $processId -le 0
+  ) {
+    return $false
+  }
+
+  return $null -ne (Get-Process -Id $processId -ErrorAction SilentlyContinue)
 }
 
 function Get-EndpointDescriptor {
@@ -83,7 +91,8 @@ function Get-EndpointDescriptor {
       if (
         $descriptor.protocol -eq $ProtocolVersion -and
         $descriptor.pipeId -is [string] -and
-        $descriptor.token -is [string]
+        $descriptor.token -is [string] -and
+        (Test-EndpointProcess $descriptor)
       ) {
         return [pscustomobject]@{
           Path = $candidate

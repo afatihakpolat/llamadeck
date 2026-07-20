@@ -1,16 +1,19 @@
 import { create } from 'zustand'
 import type { AppView, Template, BackendVersion, CommandsSchema, ReleaseInfo, RunningStatus, ModelOutputEvent } from '../../../shared/types'
 import type { UpdatePreferences, UpdateState } from '../../../shared/update'
+import {
+  LLAMADECK_STORAGE_KEYS,
+  readLlamaDeckStorage,
+  removeLlamaDeckStorage,
+  writeLlamaDeckStorage
+} from '../utils/storageMigration'
 
 export type ThemeMode = 'system' | 'light' | 'dark'
-
-const THEME_STORAGE_KEY = 'hexllama_theme'
-const ACTIVE_BACKEND_STORAGE_KEY = 'hexllama_active_backend'
 
 function getInitialThemeMode(): ThemeMode {
   if (typeof window === 'undefined') return 'system'
 
-  const storedValue = window.localStorage.getItem(THEME_STORAGE_KEY)
+  const storedValue = readLlamaDeckStorage(LLAMADECK_STORAGE_KEYS.theme)
   return storedValue === 'light' || storedValue === 'dark' || storedValue === 'system'
     ? storedValue
     : 'system'
@@ -19,7 +22,7 @@ function getInitialThemeMode(): ThemeMode {
 export function readStoredActiveBackendName(): string | null {
   if (typeof window === 'undefined') return null
 
-  const storedValue = window.localStorage.getItem(ACTIVE_BACKEND_STORAGE_KEY)
+  const storedValue = readLlamaDeckStorage(LLAMADECK_STORAGE_KEYS.activeBackend)
   return storedValue?.trim() || null
 }
 
@@ -108,7 +111,7 @@ export const useStore = create<AppStore>((set) => ({
   setView: (v) => set({ view: v }),
   setThemeMode: (themeMode) => {
     if (typeof window !== 'undefined') {
-      window.localStorage.setItem(THEME_STORAGE_KEY, themeMode)
+      writeLlamaDeckStorage(LLAMADECK_STORAGE_KEYS.theme, themeMode)
     }
 
     set({ themeMode })
@@ -117,9 +120,9 @@ export const useStore = create<AppStore>((set) => ({
   setActiveBackend: (b) => {
     if (typeof window !== 'undefined') {
       if (b?.name) {
-        window.localStorage.setItem(ACTIVE_BACKEND_STORAGE_KEY, b.name)
+        writeLlamaDeckStorage(LLAMADECK_STORAGE_KEYS.activeBackend, b.name)
       } else {
-        window.localStorage.removeItem(ACTIVE_BACKEND_STORAGE_KEY)
+        removeLlamaDeckStorage(LLAMADECK_STORAGE_KEYS.activeBackend)
       }
     }
 
