@@ -62,6 +62,12 @@ import { generateCommandsSchema } from './commandsSchemaGenerator'
 import { readBackendBuildMode, writeBackendBuildMetadata } from './backendBuildMetadata'
 import { hasActiveWork } from './activeWork'
 import { saveLiteLlmConfigFile } from './liteLlmConfigFile'
+import { validateLiteLlmConfig, type LiteLlmConfigValidation } from '../shared/liteLlmConfig'
+import {
+  LiteLlmCliLogBuffer,
+  redactLiteLlmConfigText,
+  redactLiteLlmSecrets
+} from './liteLlmCli'
 import { UpdatePreferencesSchema, type UpdatePreferences } from '../shared/update'
 import {
   checkForUpdates as checkForUpdatesImpl,
@@ -80,6 +86,8 @@ import {
 import {
   CliCommandError,
   createCliCommandHandler,
+  type CliLiteLlmConfigResult,
+  type CliLiteLlmStatus,
   type CliModelOutputEntry,
   type CliTemplateCreateInput,
   type CliTemplateLogsResult,
@@ -541,7 +549,7 @@ let appPaths = ensureAppPaths(buildPaths(loadPathOverrides()))
 let liteLlmSettings = loadLiteLlmStoredSettings()
 let liteLlmManagerSettings = loadLiteLlmManagerStoredSettings()
 let liteLlmProxyProcess: ChildProcess | null = null
-const liteLlmLogBuffer: string[] = []
+const liteLlmLogBuffer = new LiteLlmCliLogBuffer(2000)
 let latestLiteLlmVersionCache: { version: string | null; checkedAt: number } | null = null
 
 function syncLiteLlmSettingsToManagedProxy(): void {
@@ -594,18 +602,7 @@ function shouldDisableLiteLlmAuth(configText: string): boolean {
 }
 
 function appendLiteLlmLog(chunk: string): void {
-  const lines = chunk
-    .split(/\r?\n/)
-    .map((line) => line.trimEnd())
-    .filter(Boolean)
-
-  for (const line of lines) {
-    liteLlmLogBuffer.push(line)
-  }
-
-  if (liteLlmLogBuffer.length > 200) {
-    liteLlmLogBuffer.splice(0, liteLlmLogBuffer.length - 200)
-  }
+  liteLlmLogBuffer.append(chunk, [liteLlmSettings.apiKey])
 }
 
 function isLiteLlmProxyRunning(): boolean {
@@ -801,7 +798,7 @@ async function buildLiteLlmManagerSnapshot(): Promise<LiteLlmManagerSnapshot> {
     install: await resolveLiteLlmInstallStatus(),
     running: isLiteLlmProxyRunning(),
     pid: liteLlmProxyProcess?.pid ?? null,
-    recentLogs: [...liteLlmLogBuffer],
+    recentLogs: liteLlmLogBuffer.recentText(200),
     configText: readLiteLlmConfigText()
   }
 }
@@ -2082,6 +2079,111 @@ async function startTemplateFromCli(template: Template): Promise<CliTemplateStar
   }
 }
 
+function redactCliLiteLlmValidation(validation: LiteLlmConfigValidation): LiteLlmConfigValidation {
+  return {
+    valid: validation.valid,
+    diagnostics: validation.diagnostics.map((diagnostic) => ({
+      ...diagnostic,
+      message: redactLiteLlmSecrets(diagnostic.message, [liteLlmSettings.apiKey])
+    }))
+  }
+}
+
+function buildCliLiteLlmStatus(snapshot: LiteLlmManagerSnapshot): CliLiteLlmStatus {
+  const validation = redactCliLiteLlmValidation(validateLiteLlmConfig(snapshot.configText))
+  return {
+    running: snapshot.running,
+    pid: snapshot.pid,
+    endpoint: getManagedLiteLlmBaseUrl(),
+    settings: {
+      host: snapshot.settings.host,
+      port: snapshot.settings.port,
+      configPath: snapshot.settings.configPath,
+      logLevel: snapshot.settings.logLevel,
+      apiKeyConfigured: Boolean(snapshot.settings.apiKey)
+    },
+    install: {
+      ...snapshot.install,
+      ...(snapshot.install.error
+        ? { error: redactLiteLlmSecrets(snapshot.install.error, [liteLlmSettings.apiKey]) }
+        : {})
+    },
+    config: {
+      path: snapshot.settings.configPath,
+      ...validation
+    },
+    recentLogCount: snapshot.recentLogs.length
+  }
+}
+
+async function getCliLiteLlmStatus(): Promise<CliLiteLlmStatus> {
+  return buildCliLiteLlmStatus(await buildLiteLlmManagerSnapshot())
+}
+
+function getCliLiteLlmConfig(): CliLiteLlmConfigResult {
+  const configText = readLiteLlmConfigText()
+  return {
+    path: liteLlmManagerSettings.configPath,
+    text: redactLiteLlmConfigText(configText),
+    redacted: true,
+    ...redactCliLiteLlmValidation(validateLiteLlmConfig(configText))
+  }
+}
+
+function throwCliLiteLlmError(message: string, conflict = false): never {
+  throw new CliCommandError(
+    redactLiteLlmSecrets(message, [liteLlmSettings.apiKey]),
+    conflict ? 5 : 1,
+    conflict ? 'CONFLICT' : 'OPERATION_FAILED'
+  )
+}
+
+async function startLiteLlmFromCli(): Promise<CliLiteLlmStatus> {
+  const result = await startLiteLlmProxyProcess()
+  if (!result.success) {
+    throwCliLiteLlmError(result.error, result.error.includes('already running'))
+  }
+  broadcastToRenderer('litellm-manager-changed', { at: new Date().toISOString() })
+  return buildCliLiteLlmStatus(result.snapshot)
+}
+
+async function stopLiteLlmFromCli(): Promise<CliLiteLlmStatus> {
+  const result = await stopLiteLlmProxyProcess()
+  if (!result.success) {
+    throwCliLiteLlmError(result.error, result.error.includes('not running'))
+  }
+  broadcastToRenderer('litellm-manager-changed', { at: new Date().toISOString() })
+  return buildCliLiteLlmStatus(result.snapshot)
+}
+
+async function installLiteLlmFromCli(upgrade: boolean): Promise<{ status: CliLiteLlmStatus; output: string }> {
+  const result = await installOrUpdateLiteLlm(upgrade)
+  if (!result.success) {
+    const details = result.output ? `\n${redactLiteLlmSecrets(result.output, [liteLlmSettings.apiKey])}` : ''
+    throwCliLiteLlmError(`${result.error}${details}`)
+  }
+  broadcastToRenderer('litellm-manager-changed', { at: new Date().toISOString() })
+  return {
+    status: buildCliLiteLlmStatus(result.snapshot),
+    output: redactLiteLlmSecrets(result.output, [liteLlmSettings.apiKey])
+  }
+}
+
+async function setLiteLlmConfigFromCli(
+  configText: string
+): Promise<{ status: CliLiteLlmStatus; restartRequired: boolean }> {
+  const parsedConfigText = LiteLlmConfigTextSchema.parse(configText)
+  const restartRequired = isLiteLlmProxyRunning()
+  saveLiteLlmConfigText(parsedConfigText)
+  appendLiteLlmLog(`Saved LiteLLM config to ${liteLlmManagerSettings.configPath}`)
+  const snapshot = await buildLiteLlmManagerSnapshot()
+  broadcastToRenderer('litellm-manager-changed', { at: new Date().toISOString() })
+  return {
+    status: buildCliLiteLlmStatus(snapshot),
+    restartRequired
+  }
+}
+
 export function createAppCliCommandHandler(showApp: () => void): (request: CliRequest) => Promise<CliResponse> {
   return createCliCommandHandler({
     getVersion: () => app.getVersion(),
@@ -2104,7 +2206,40 @@ export function createAppCliCommandHandler(showApp: () => void): (request: CliRe
     useBackend: async (backend) => {
       saveActiveBackendName(backend.name)
       broadcastToRenderer('active-backend-changed', { name: backend.name })
-    }
+    },
+    getLiteLlmStatus: getCliLiteLlmStatus,
+    startLiteLlm: startLiteLlmFromCli,
+    stopLiteLlm: stopLiteLlmFromCli,
+    installLiteLlm: installLiteLlmFromCli,
+    testLiteLlm: async () => {
+      try {
+        const models = await listLiteLlmModelsFromSettings()
+        return {
+          connected: true,
+          modelCount: models.length,
+          endpoint: getManagedLiteLlmBaseUrl()
+        }
+      } catch (error) {
+        throwCliLiteLlmError(error instanceof Error ? error.message : String(error))
+      }
+    },
+    listLiteLlmModels: async () => {
+      try {
+        return await listLiteLlmModelsFromSettings()
+      } catch (error) {
+        throwCliLiteLlmError(error instanceof Error ? error.message : String(error))
+      }
+    },
+    getLiteLlmLogs: (afterSequence, limit) => {
+      return liteLlmLogBuffer.list(afterSequence, limit, isLiteLlmProxyRunning())
+    },
+    getLiteLlmConfig: getCliLiteLlmConfig,
+    validateLiteLlmConfig: (configText) => {
+      return redactCliLiteLlmValidation(
+        validateLiteLlmConfig(LiteLlmConfigTextSchema.parse(configText))
+      )
+    },
+    setLiteLlmConfig: setLiteLlmConfigFromCli
   })
 }
 interface DownloadTask {

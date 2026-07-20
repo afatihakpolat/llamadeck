@@ -28,6 +28,18 @@ Usage:
   llamadeck template wait <id-or-name> --ready [--timeout <seconds>]
   llamadeck backend list
   llamadeck backend use <name-or-display-name>
+  llamadeck litellm status
+  llamadeck litellm start
+  llamadeck litellm stop
+  llamadeck litellm restart
+  llamadeck litellm install
+  llamadeck litellm update
+  llamadeck litellm test
+  llamadeck litellm models
+  llamadeck litellm logs [--tail <count>] [--follow]
+  llamadeck litellm config get
+  llamadeck litellm config validate --file <path>
+  llamadeck litellm config set --file <path>
   llamadeck status
   llamadeck app show
   llamadeck --version
@@ -37,7 +49,8 @@ Commands return JSON so they compose with ConvertFrom-Json:
   llamadeck template get "My Model" | ConvertFrom-Json
 
 Use IDs instead of names in automation. Pass --file - to read a template
-document from stdin. `template logs --follow` emits newline-delimited JSON.
+document from stdin. Log commands with `--follow` emit newline-delimited JSON.
+LiteLLM API keys and config secrets are always redacted from CLI output.
 Run `llamadeck --help --json` for machine-readable command metadata.
 '@ | Write-Output
 }
@@ -143,7 +156,7 @@ function Invoke-LlamaDeckRequest($Endpoint, [string]$Command, [string[]]$Argumen
   }
 }
 
-function Get-TemplateDocument([string]$InputKind, [string]$InputValue) {
+function Get-InputDocument([string]$InputKind, [string]$InputValue) {
   switch ($InputKind.ToLowerInvariant()) {
     '--json' {
       return $InputValue
@@ -155,7 +168,7 @@ function Get-TemplateDocument([string]$InputKind, [string]$InputValue) {
       try {
         return Get-Content -LiteralPath $InputValue -Raw
       } catch {
-        Stop-WithError "Could not read template document '$InputValue': $($_.Exception.Message)" 2
+        Stop-WithError "Could not read input document '$InputValue': $($_.Exception.Message)" 2
       }
     }
     default {
@@ -229,6 +242,79 @@ switch ($CliArgs[0].ToLowerInvariant()) {
       }
     }
   }
+  'litellm' {
+    if ($CliArgs.Count -lt 2) {
+      Stop-WithError "Usage: llamadeck litellm <status|start|stop|restart|install|update|test|models|logs|config>" 64
+    }
+
+    $liteLlmCommand = $CliArgs[1].ToLowerInvariant()
+    switch ($liteLlmCommand) {
+      { $_ -in @('status', 'start', 'stop', 'restart', 'install', 'update', 'test', 'models') } {
+        if ($CliArgs.Count -ne 2) {
+          Stop-WithError "'litellm $liteLlmCommand' does not accept arguments." 64
+        }
+        $command = "litellm.$liteLlmCommand"
+      }
+      'logs' {
+        $index = 2
+        while ($index -lt $CliArgs.Count) {
+          switch ($CliArgs[$index].ToLowerInvariant()) {
+            '--follow' {
+              $followLogs = $true
+              $index += 1
+            }
+            '--tail' {
+              if ($index + 1 -ge $CliArgs.Count -or -not [int]::TryParse($CliArgs[$index + 1], [ref]$logLimit)) {
+                Stop-WithError "--tail requires an integer from 1 through 2000." 64
+              }
+              if ($logLimit -lt 1 -or $logLimit -gt 2000) {
+                Stop-WithError "--tail requires an integer from 1 through 2000." 64
+              }
+              $index += 2
+            }
+            default {
+              Stop-WithError "Unknown LiteLLM logs option: $($CliArgs[$index])" 64
+            }
+          }
+        }
+        $command = 'litellm.logs'
+        $commandArgs = @('0', [string]$logLimit)
+      }
+      'config' {
+        if ($CliArgs.Count -lt 3) {
+          Stop-WithError "Usage: llamadeck litellm config <get|validate|set> [--file <path>]" 64
+        }
+        switch ($CliArgs[2].ToLowerInvariant()) {
+          'get' {
+            if ($CliArgs.Count -ne 3) {
+              Stop-WithError "'litellm config get' does not accept arguments." 64
+            }
+            $command = 'litellm.configGet'
+          }
+          'validate' {
+            if ($CliArgs.Count -ne 5 -or $CliArgs[3].ToLowerInvariant() -ne '--file') {
+              Stop-WithError "Usage: llamadeck litellm config validate --file <path>" 64
+            }
+            $command = 'litellm.configValidate'
+            $commandArgs = @(Get-InputDocument $CliArgs[3] $CliArgs[4])
+          }
+          'set' {
+            if ($CliArgs.Count -ne 5 -or $CliArgs[3].ToLowerInvariant() -ne '--file') {
+              Stop-WithError "Usage: llamadeck litellm config set --file <path>" 64
+            }
+            $command = 'litellm.configSet'
+            $commandArgs = @(Get-InputDocument $CliArgs[3] $CliArgs[4])
+          }
+          default {
+            Stop-WithError "Unknown LiteLLM config command: $($CliArgs[2])" 64
+          }
+        }
+      }
+      default {
+        Stop-WithError "Unknown LiteLLM command: $liteLlmCommand" 64
+      }
+    }
+  }
   'template' {
     if ($CliArgs.Count -lt 2) {
       Stop-WithError "Usage: llamadeck template <get|list|create|update|delete|validate|start|stop|logs|wait>" 64
@@ -255,14 +341,14 @@ switch ($CliArgs[0].ToLowerInvariant()) {
           Stop-WithError "Usage: llamadeck template create <--file <path>|--json <json>>" 64
         }
         $command = 'template.create'
-        $commandArgs = @(Get-TemplateDocument $CliArgs[2] $CliArgs[3])
+        $commandArgs = @(Get-InputDocument $CliArgs[2] $CliArgs[3])
       }
       'update' {
         if ($CliArgs.Count -ne 5) {
           Stop-WithError "Usage: llamadeck template update <id-or-name> <--file <path>|--json <json>>" 64
         }
         $command = 'template.update'
-        $commandArgs = @($CliArgs[2], (Get-TemplateDocument $CliArgs[3] $CliArgs[4]))
+        $commandArgs = @($CliArgs[2], (Get-InputDocument $CliArgs[3] $CliArgs[4]))
       }
       'delete' {
         if ($CliArgs.Count -ne 4 -or $CliArgs[3].ToLowerInvariant() -ne '--yes') {
@@ -276,7 +362,7 @@ switch ($CliArgs[0].ToLowerInvariant()) {
         if ($CliArgs.Count -eq 3 -and $CliArgs[2] -notin @('--file', '--json')) {
           $commandArgs = @($CliArgs[2])
         } elseif ($CliArgs.Count -eq 4) {
-          $commandArgs = @('document', (Get-TemplateDocument $CliArgs[2] $CliArgs[3]))
+          $commandArgs = @('document', (Get-InputDocument $CliArgs[2] $CliArgs[3]))
         } else {
           Stop-WithError "Usage: llamadeck template validate <id-or-name>|<--file <path>|--json <json>>" 64
         }
@@ -392,7 +478,11 @@ if ($followLogs) {
     $cursor = [string]$response.result.nextCursor
     Start-Sleep -Milliseconds 250
     try {
-      $response = Invoke-LlamaDeckRequest $endpoint 'template.logs' @($logSelector, $cursor, [string]$logLimit)
+      if ($command -eq 'template.logs') {
+        $response = Invoke-LlamaDeckRequest $endpoint $command @($logSelector, $cursor, [string]$logLimit)
+      } else {
+        $response = Invoke-LlamaDeckRequest $endpoint $command @($cursor, [string]$logLimit)
+      }
     } catch {
       Stop-WithError $_.Exception.Message
     }
@@ -413,6 +503,6 @@ if ($null -eq $response.result) {
   ConvertTo-Json -InputObject $response.result -Depth 100 -Compress | Write-Output
 }
 
-if ($command -eq 'template.validate' -and -not [bool]$response.result.valid) {
+if ($command -in @('template.validate', 'litellm.configValidate', 'litellm.configSet') -and -not [bool]$response.result.valid) {
   exit 2
 }

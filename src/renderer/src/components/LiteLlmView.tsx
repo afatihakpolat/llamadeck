@@ -54,12 +54,18 @@ export default function LiteLlmView() {
 
   useEffect(() => {
     void loadManager(true)
+    const unsubscribe = window.api.onLiteLlmManagerChanged(() => {
+      void loadManager(false)
+    })
 
     const interval = window.setInterval(() => {
       void loadManager(false)
     }, 3000)
 
-    return () => window.clearInterval(interval)
+    return () => {
+      unsubscribe()
+      window.clearInterval(interval)
+    }
   }, [])
 
   async function handleRefreshManager() {

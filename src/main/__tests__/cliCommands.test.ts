@@ -1,6 +1,10 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { BackendVersion, Template } from '../../shared/types'
-import { createCliCommandHandler, type CliCommandDependencies } from '../cliCommands'
+import {
+  createCliCommandHandler,
+  type CliCommandDependencies,
+  type CliLiteLlmStatus
+} from '../cliCommands'
 import type { CliRequest } from '../cliProtocol'
 
 const templates: Template[] = [
@@ -35,6 +39,33 @@ const backends: BackendVersion[] = [
     exe: 'bin\\llama-server.exe'
   }
 ]
+
+const liteLlmStatus: CliLiteLlmStatus = {
+  running: false,
+  pid: null,
+  endpoint: 'http://127.0.0.1:4000',
+  settings: {
+    host: '127.0.0.1',
+    port: 4000,
+    configPath: 'C:\\data\\litellm-config.yaml',
+    logLevel: 'info',
+    apiKeyConfigured: true
+  },
+  install: {
+    pythonCommand: 'py -3',
+    pythonVersion: '3.12.0',
+    installed: true,
+    currentVersion: '1.75.0',
+    latestVersion: '1.75.0',
+    hasUpdate: false
+  },
+  config: {
+    path: 'C:\\data\\litellm-config.yaml',
+    valid: true,
+    diagnostics: []
+  },
+  recentLogCount: 1
+}
 
 function request(command: CliRequest['command'], args: string[] = []): CliRequest {
   return { protocol: 1, token: 'test-token', command, args }
@@ -99,7 +130,52 @@ function createDependencies(): CliCommandDependencies {
       backend: 'b1234'
     })),
     stopTemplate: vi.fn(async () => undefined),
-    useBackend: vi.fn(async () => undefined)
+    useBackend: vi.fn(async () => undefined),
+    getLiteLlmStatus: vi.fn(async () => liteLlmStatus),
+    startLiteLlm: vi.fn(async () => ({ ...liteLlmStatus, running: true, pid: 456 })),
+    stopLiteLlm: vi.fn(async () => liteLlmStatus),
+    installLiteLlm: vi.fn(async () => ({ status: liteLlmStatus, output: 'installed' })),
+    testLiteLlm: vi.fn(async () => ({
+      connected: true,
+      modelCount: 2,
+      endpoint: liteLlmStatus.endpoint
+    })),
+    listLiteLlmModels: vi.fn(async () => [
+      { id: 'local/alpha', label: 'local/alpha' },
+      { id: 'local/beta', label: 'local/beta' }
+    ]),
+    getLiteLlmLogs: vi.fn((afterSequence) => ({
+      events: afterSequence === 0
+        ? [{ sequence: 1, timestamp: '2026-07-20T00:00:00.000Z', text: 'proxy ready' }]
+        : [],
+      nextCursor: 1,
+      hasMore: false,
+      running: true
+    })),
+    getLiteLlmConfig: vi.fn(() => ({
+      path: 'C:\\data\\litellm-config.yaml',
+      text: 'general_settings:\\n  master_key: <redacted>\\n',
+      redacted: true,
+      valid: true,
+      diagnostics: []
+    })),
+    validateLiteLlmConfig: vi.fn((configText) => ({
+      valid: !configText.includes('invalid'),
+      diagnostics: configText.includes('invalid')
+        ? [{
+            severity: 'error',
+            message: 'Invalid YAML',
+            line: 1,
+            column: 1,
+            from: 0,
+            to: 1
+          }]
+        : []
+    })),
+    setLiteLlmConfig: vi.fn(async () => ({
+      status: liteLlmStatus,
+      restartRequired: false
+    }))
   }
 }
 
@@ -241,6 +317,92 @@ describe('createCliCommandHandler', () => {
         statusCode: 200
       }
     })
+  })
+
+  it('controls LiteLLM and restarts a running proxy through shared operations', async () => {
+    const dependencies = createDependencies()
+    vi.mocked(dependencies.getLiteLlmStatus).mockResolvedValue({
+      ...liteLlmStatus,
+      running: true,
+      pid: 456
+    })
+    const handler = createCliCommandHandler(dependencies)
+
+    await expect(handler(request('litellm.status'))).resolves.toEqual({
+      ok: true,
+      result: { ...liteLlmStatus, running: true, pid: 456 }
+    })
+    await expect(handler(request('litellm.start'))).resolves.toMatchObject({
+      ok: true,
+      result: { running: true, pid: 456 }
+    })
+    await expect(handler(request('litellm.stop'))).resolves.toEqual({
+      ok: true,
+      result: liteLlmStatus
+    })
+    await expect(handler(request('litellm.restart'))).resolves.toMatchObject({
+      ok: true,
+      result: { running: true, pid: 456 }
+    })
+
+    expect(dependencies.stopLiteLlm).toHaveBeenCalledTimes(2)
+    expect(dependencies.startLiteLlm).toHaveBeenCalledTimes(2)
+  })
+
+  it('installs, tests, lists models, and reads LiteLLM logs', async () => {
+    const dependencies = createDependencies()
+    const handler = createCliCommandHandler(dependencies)
+
+    await expect(handler(request('litellm.install'))).resolves.toMatchObject({
+      ok: true,
+      result: { output: 'installed' }
+    })
+    await expect(handler(request('litellm.update'))).resolves.toMatchObject({
+      ok: true,
+      result: { output: 'installed' }
+    })
+    await expect(handler(request('litellm.test'))).resolves.toEqual({
+      ok: true,
+      result: { connected: true, modelCount: 2, endpoint: 'http://127.0.0.1:4000' }
+    })
+    await expect(handler(request('litellm.models'))).resolves.toMatchObject({
+      ok: true,
+      result: [{ id: 'local/alpha' }, { id: 'local/beta' }]
+    })
+    await expect(handler(request('litellm.logs', ['0', '20']))).resolves.toMatchObject({
+      ok: true,
+      result: {
+        nextCursor: 1,
+        events: [{ sequence: 1, text: 'proxy ready' }]
+      }
+    })
+
+    expect(dependencies.installLiteLlm).toHaveBeenNthCalledWith(1, false)
+    expect(dependencies.installLiteLlm).toHaveBeenNthCalledWith(2, true)
+  })
+
+  it('gets, validates, and safely sets LiteLLM config documents', async () => {
+    const dependencies = createDependencies()
+    const handler = createCliCommandHandler(dependencies)
+
+    await expect(handler(request('litellm.configGet'))).resolves.toMatchObject({
+      ok: true,
+      result: { redacted: true, text: expect.stringContaining('<redacted>') }
+    })
+    await expect(handler(request('litellm.configValidate', ['invalid yaml']))).resolves.toMatchObject({
+      ok: true,
+      result: { valid: false, diagnostics: [{ message: 'Invalid YAML' }] }
+    })
+    await expect(handler(request('litellm.configSet', ['model_list: []']))).resolves.toMatchObject({
+      ok: true,
+      result: {
+        valid: true,
+        saved: true,
+        restartRequired: false,
+        status: liteLlmStatus
+      }
+    })
+    expect(dependencies.setLiteLlmConfig).toHaveBeenCalledWith('model_list: []')
   })
 
   it('returns a distinct not-found error', async () => {

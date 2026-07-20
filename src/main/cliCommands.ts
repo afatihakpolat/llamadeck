@@ -1,5 +1,14 @@
 import { z } from 'zod'
-import type { BackendVersion, ModelOutputEvent, Template, UsageLiveSession } from '../shared/types'
+import type {
+  BackendVersion,
+  LiteLlmInstallStatus,
+  LiteLlmModelEntry,
+  ModelOutputEvent,
+  Template,
+  UsageLiveSession
+} from '../shared/types'
+import type { LiteLlmConfigValidation } from '../shared/liteLlmConfig'
+import type { CliLiteLlmLogsResult } from './liteLlmCli'
 import { CLI_PROTOCOL_VERSION } from './cliProtocol'
 import type { CliRequest, CliResponse } from './cliProtocol'
 
@@ -86,6 +95,30 @@ export interface CliTemplateReadyResult {
   statusCode: number
 }
 
+export interface CliLiteLlmStatus {
+  running: boolean
+  pid: number | null
+  endpoint: string
+  settings: {
+    host: string
+    port: number
+    configPath: string
+    logLevel: string
+    apiKeyConfigured: boolean
+  }
+  install: LiteLlmInstallStatus
+  config: LiteLlmConfigValidation & {
+    path: string
+  }
+  recentLogCount: number
+}
+
+export interface CliLiteLlmConfigResult extends LiteLlmConfigValidation {
+  path: string
+  text: string
+  redacted: true
+}
+
 export interface CliCommandDependencies {
   getVersion: () => string
   listTemplates: () => Template[]
@@ -102,6 +135,16 @@ export interface CliCommandDependencies {
   startTemplate: (template: Template) => Promise<CliTemplateStartResult>
   stopTemplate: (template: Template) => Promise<void>
   useBackend: (backend: BackendVersion) => Promise<void>
+  getLiteLlmStatus: () => Promise<CliLiteLlmStatus>
+  startLiteLlm: () => Promise<CliLiteLlmStatus>
+  stopLiteLlm: () => Promise<CliLiteLlmStatus>
+  installLiteLlm: (upgrade: boolean) => Promise<{ status: CliLiteLlmStatus; output: string }>
+  testLiteLlm: () => Promise<{ connected: true; modelCount: number; endpoint: string }>
+  listLiteLlmModels: () => Promise<LiteLlmModelEntry[]>
+  getLiteLlmLogs: (afterSequence: number, limit: number) => CliLiteLlmLogsResult
+  getLiteLlmConfig: () => CliLiteLlmConfigResult
+  validateLiteLlmConfig: (configText: string) => LiteLlmConfigValidation
+  setLiteLlmConfig: (configText: string) => Promise<{ status: CliLiteLlmStatus; restartRequired: boolean }>
 }
 
 const EXIT_FAILURE = 1
@@ -248,7 +291,7 @@ function getCapabilities(version: string): object {
     protocol: CLI_PROTOCOL_VERSION,
     output: {
       standard: 'One JSON value on stdout.',
-      followLogs: 'Newline-delimited JSON ModelOutputEvent objects on stdout.',
+      followLogs: 'Newline-delimited JSON log event objects on stdout.',
       errors: 'Human-readable text on stderr with a non-zero exit code.'
     },
     exitCodes: {
@@ -275,6 +318,18 @@ function getCapabilities(version: string): object {
       { name: 'template.waitReady', usage: 'llamadeck template wait <id-or-name> --ready [--timeout seconds]', mutating: false },
       { name: 'backend.list', usage: 'llamadeck backend list', mutating: false },
       { name: 'backend.use', usage: 'llamadeck backend use <name-or-display-name>', mutating: true },
+      { name: 'litellm.status', usage: 'llamadeck litellm status', mutating: false },
+      { name: 'litellm.start', usage: 'llamadeck litellm start', mutating: true },
+      { name: 'litellm.stop', usage: 'llamadeck litellm stop', mutating: true },
+      { name: 'litellm.restart', usage: 'llamadeck litellm restart', mutating: true },
+      { name: 'litellm.install', usage: 'llamadeck litellm install', mutating: true },
+      { name: 'litellm.update', usage: 'llamadeck litellm update', mutating: true },
+      { name: 'litellm.test', usage: 'llamadeck litellm test', mutating: false },
+      { name: 'litellm.models', usage: 'llamadeck litellm models', mutating: false },
+      { name: 'litellm.logs', usage: 'llamadeck litellm logs [--tail count] [--follow]', mutating: false, streaming: true },
+      { name: 'litellm.configGet', usage: 'llamadeck litellm config get', mutating: false, redacted: true },
+      { name: 'litellm.configValidate', usage: 'llamadeck litellm config validate --file <path>', mutating: false },
+      { name: 'litellm.configSet', usage: 'llamadeck litellm config set --file <path>', mutating: true },
       { name: 'app.show', usage: 'llamadeck app show', mutating: false },
       { name: 'version', usage: 'llamadeck --version', mutating: false }
     ],
@@ -327,6 +382,76 @@ export function createCliCommandHandler(dependencies: CliCommandDependencies): (
             name: resolvedBackend.name,
             displayName: resolvedBackend.displayName,
             active: true
+          }
+        }
+      }
+
+      if (request.command === 'litellm.status') {
+        return { ok: true, result: await dependencies.getLiteLlmStatus() }
+      }
+
+      if (request.command === 'litellm.start') {
+        return { ok: true, result: await dependencies.startLiteLlm() }
+      }
+
+      if (request.command === 'litellm.stop') {
+        return { ok: true, result: await dependencies.stopLiteLlm() }
+      }
+
+      if (request.command === 'litellm.restart') {
+        const status = await dependencies.getLiteLlmStatus()
+        if (status.running) {
+          await dependencies.stopLiteLlm()
+        }
+        return { ok: true, result: await dependencies.startLiteLlm() }
+      }
+
+      if (request.command === 'litellm.install' || request.command === 'litellm.update') {
+        return {
+          ok: true,
+          result: await dependencies.installLiteLlm(request.command === 'litellm.update')
+        }
+      }
+
+      if (request.command === 'litellm.test') {
+        return { ok: true, result: await dependencies.testLiteLlm() }
+      }
+
+      if (request.command === 'litellm.models') {
+        return { ok: true, result: await dependencies.listLiteLlmModels() }
+      }
+
+      if (request.command === 'litellm.logs') {
+        const afterSequence = parseBoundedInteger(request.args[0], 0, 'Log cursor', 0, Number.MAX_SAFE_INTEGER)
+        const limit = parseBoundedInteger(request.args[1], DEFAULT_LOG_LIMIT, 'Log limit', 1, MAX_LOG_LIMIT)
+        return { ok: true, result: dependencies.getLiteLlmLogs(afterSequence, limit) }
+      }
+
+      if (request.command === 'litellm.configGet') {
+        return { ok: true, result: dependencies.getLiteLlmConfig() }
+      }
+
+      if (request.command === 'litellm.configValidate' || request.command === 'litellm.configSet') {
+        const configText = request.args[0] ?? ''
+        const validation = dependencies.validateLiteLlmConfig(configText)
+        if (!validation.valid) {
+          return {
+            ok: true,
+            result: {
+              ...validation,
+              ...(request.command === 'litellm.configSet' ? { saved: false } : {})
+            }
+          }
+        }
+        if (request.command === 'litellm.configValidate') {
+          return { ok: true, result: validation }
+        }
+        return {
+          ok: true,
+          result: {
+            ...validation,
+            saved: true,
+            ...await dependencies.setLiteLlmConfig(configText)
           }
         }
       }

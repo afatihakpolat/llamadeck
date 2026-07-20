@@ -66,6 +66,18 @@ llamadeck template logs $template.id --tail 100 --follow
 llamadeck backend list | ConvertFrom-Json
 llamadeck backend use b1234 | ConvertFrom-Json
 
+# Inspect and control the app-managed LiteLLM proxy.
+llamadeck litellm status | ConvertFrom-Json
+llamadeck litellm start | ConvertFrom-Json
+llamadeck litellm test | ConvertFrom-Json
+llamadeck litellm models | ConvertFrom-Json
+llamadeck litellm logs --tail 100 --follow
+
+# Validate and apply LiteLLM YAML. Config reads always redact secrets.
+llamadeck litellm config get | ConvertFrom-Json
+llamadeck litellm config validate --file .\litellm.yaml | ConvertFrom-Json
+llamadeck litellm config set --file .\litellm.yaml | ConvertFrom-Json
+
 # Create, update, or validate a strict JSON template document.
 llamadeck template create --file .\template.json | ConvertFrom-Json
 llamadeck template update $template.id --file .\changes.json | ConvertFrom-Json
@@ -75,7 +87,7 @@ llamadeck template validate --file .\template.json | ConvertFrom-Json
 llamadeck template delete $template.id --yes | ConvertFrom-Json
 ```
 
-`template logs --follow` emits newline-delimited JSON rather than one JSON array. Template validation exits with code 2 when the returned result has `valid: false`. Pass `--file -` to read a template document from stdin.
+Log commands with `--follow` emit newline-delimited JSON rather than one JSON array. Template and LiteLLM config validation exit with code 2 when the returned result has `valid: false`. Pass `--file -` to read a document from stdin. LiteLLM status, logs, errors, installation output, and config reads redact API keys; `config get` is an inspection copy, not a secret-preserving export.
 
 The Windows installer adds the CLI shim to your user `PATH`; open a new PowerShell window after installing or updating. CLI commands start LlamaDeck when needed and communicate with the app over an authenticated per-user named pipe. Portable zip users can run `.\resources\cli\llamadeck.cmd` directly or add that folder to `PATH`.
 

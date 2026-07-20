@@ -10,6 +10,11 @@ const api = {
   stopLiteLlmProxy: () => ipcRenderer.invoke('stop-litellm-proxy'),
   testLiteLlmConnection: () => ipcRenderer.invoke('test-litellm-connection'),
   listLiteLlmModels: () => ipcRenderer.invoke('list-litellm-models'),
+  onLiteLlmManagerChanged: (cb: (data: { at: string }) => void) => {
+    const listener = (_e: Electron.IpcRendererEvent, data: { at: string }) => cb(data)
+    ipcRenderer.on('litellm-manager-changed', listener)
+    return () => ipcRenderer.removeListener('litellm-manager-changed', listener)
+  },
   listModels: () => ipcRenderer.invoke('list-models'),
   deleteModel: (filePath: string) => ipcRenderer.invoke('delete-model', filePath),
   renameModel: (oldPath: string, newName: string) => ipcRenderer.invoke('rename-model', oldPath, newName),

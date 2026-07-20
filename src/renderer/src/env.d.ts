@@ -47,6 +47,7 @@ interface LlamaCppApi {
   stopLiteLlmProxy: () => Promise<{ success: true; snapshot: LiteLlmManagerSnapshot } | { success: false; error?: string; snapshot?: LiteLlmManagerSnapshot }>
   testLiteLlmConnection: () => Promise<{ success: true; modelCount: number } | { success: false; error?: string }>
   listLiteLlmModels: () => Promise<{ success: true; models: LiteLlmModelEntry[] } | { success: false; error?: string }>
+  onLiteLlmManagerChanged: (cb: (data: { at: string }) => void) => () => void
   listModels: () => Promise<ModelFileInfo[]>
   deleteModel: (filePath: string) => Promise<{ success: boolean; error?: string }>
   renameModel: (oldPath: string, newName: string) => Promise<{ success: boolean; newPath?: string; error?: string }>

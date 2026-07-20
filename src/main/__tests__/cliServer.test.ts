@@ -5,7 +5,7 @@ import { tmpdir } from 'os'
 import { join } from 'path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { startCliServer, type CliServerHandle } from '../cliServer'
-import type { CliEndpointDescriptor, CliResponse } from '../cliProtocol'
+import type { CliEndpointDescriptor, CliRequest, CliResponse } from '../cliProtocol'
 
 const tempDirs: string[] = []
 const servers: CliServerHandle[] = []
@@ -168,6 +168,115 @@ describe.runIf(process.platform === 'win32')('startCliServer', () => {
       valid: false,
       errors: ['modelPath is required'],
       warnings: []
+    })
+  })
+
+  it('passes a LiteLLM YAML file to config set', async () => {
+    const userDataDir = mkdtempSync(join(tmpdir(), 'llamadeck-cli-'))
+    tempDirs.push(userDataDir)
+    const configFile = join(userDataDir, 'litellm.yaml')
+    const configText = 'model_list:\n  - model_name: local-model\n'
+    writeFileSync(configFile, configText, 'utf-8')
+    let receivedRequest: CliRequest | null = null
+    const server = await startCliServer({
+      userDataDir,
+      handleRequest: async (request) => {
+        receivedRequest = request
+        return {
+          ok: true,
+          result: { valid: true, diagnostics: [], saved: true }
+        }
+      }
+    })
+    servers.push(server)
+
+    const result = await runPowerShellCli(server.endpointFile, [
+      'litellm',
+      'config',
+      'set',
+      '--file',
+      configFile
+    ])
+
+    expect(result.exitCode).toBe(0)
+    expect(result.stderr).toBe('')
+    expect(receivedRequest).toMatchObject({
+      command: 'litellm.configSet',
+      args: [configText]
+    })
+    expect(JSON.parse(result.stdout)).toEqual({
+      valid: true,
+      diagnostics: [],
+      saved: true
+    })
+  })
+
+  it('uses exit code 2 for invalid LiteLLM config validation', async () => {
+    const userDataDir = mkdtempSync(join(tmpdir(), 'llamadeck-cli-'))
+    tempDirs.push(userDataDir)
+    const configFile = join(userDataDir, 'invalid-litellm.yaml')
+    writeFileSync(configFile, 'model_list: [', 'utf-8')
+    const server = await startCliServer({
+      userDataDir,
+      handleRequest: async () => ({
+        ok: true,
+        result: {
+          valid: false,
+          diagnostics: [{ severity: 'error', message: 'Invalid YAML', line: 1, column: 13 }]
+        }
+      })
+    })
+    servers.push(server)
+
+    const result = await runPowerShellCli(server.endpointFile, [
+      'litellm',
+      'config',
+      'validate',
+      '--file',
+      configFile
+    ])
+
+    expect(result.exitCode).toBe(2)
+    expect(result.stderr).toBe('')
+    expect(JSON.parse(result.stdout)).toMatchObject({
+      valid: false,
+      diagnostics: [{ message: 'Invalid YAML' }]
+    })
+  })
+
+  it('streams LiteLLM logs as newline-delimited JSON', async () => {
+    const userDataDir = mkdtempSync(join(tmpdir(), 'llamadeck-cli-'))
+    tempDirs.push(userDataDir)
+    const server = await startCliServer({
+      userDataDir,
+      handleRequest: async () => ({
+        ok: true,
+        result: {
+          events: [{
+            sequence: 4,
+            timestamp: '2026-07-20T00:00:00.000Z',
+            text: 'proxy stopped'
+          }],
+          nextCursor: 4,
+          hasMore: false,
+          running: false
+        }
+      })
+    })
+    servers.push(server)
+
+    const result = await runPowerShellCli(server.endpointFile, [
+      'litellm',
+      'logs',
+      '--follow'
+    ])
+
+    expect(result.exitCode).toBe(0)
+    expect(result.stderr).toBe('')
+    expect(JSON.parse(result.stdout)).toEqual({
+      sequence: 4,
+      timestamp: '2026-07-20T00:00:00.000Z',
+      text: 'proxy stopped'
     })
   })
 })

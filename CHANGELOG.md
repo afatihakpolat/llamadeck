@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- The PowerShell CLI can now install, update, start, stop, restart, test, inspect, and follow logs for the app-managed LiteLLM proxy, list its models, and validate or save its YAML config. The CLI and GUI stay synchronized, and API keys are redacted from all CLI output.
+
 ## [1.3.0] - 2026-07-20
 
 ### Added

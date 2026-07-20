@@ -21,6 +21,18 @@ llamadeck template logs <id-or-name> [--tail <count>] [--follow]
 llamadeck template wait <id-or-name> --ready [--timeout <seconds>]
 llamadeck backend list
 llamadeck backend use <name-or-display-name>
+llamadeck litellm status
+llamadeck litellm start
+llamadeck litellm stop
+llamadeck litellm restart
+llamadeck litellm install
+llamadeck litellm update
+llamadeck litellm test
+llamadeck litellm models
+llamadeck litellm logs [--tail <count>] [--follow]
+llamadeck litellm config get
+llamadeck litellm config validate --file <path>
+llamadeck litellm config set --file <path>
 llamadeck status
 llamadeck app show
 llamadeck --version
@@ -36,6 +48,10 @@ Model output is retained in a bounded, in-memory main-process buffer. `template 
 
 `backend list` identifies the active backend. `backend use` persists the global active backend and refreshes the open GUI; templates pinned to a specific backend continue to take precedence.
 
+The `litellm` commands operate on the same app-managed proxy shown in the GUI. They expose install/update state, proxy lifecycle, connectivity testing, model discovery, bounded cursor logs with NDJSON follow mode, and YAML config validation/save. CLI mutations notify an open GUI immediately. `config set` may save while the proxy is running and reports that a restart is required.
+
+CLI LiteLLM results never include the saved proxy API key. Literal API keys and other secret-like values are redacted from logs, errors, installer output, and `config get`; invalid YAML is withheld when it cannot be safely parsed for redaction. The `config get` text is therefore an inspection copy and must not be treated as a round-trip backup.
+
 `capabilities` and `--help --json` expose the installed app version, protocol version, output contracts, exit codes, command usage, and template-document fields for agent discovery.
 
 ## Architecture
@@ -49,7 +65,7 @@ The packaged `llamadeck.cmd` invokes a PowerShell client that:
 3. Sends one size-limited, Zod-validated JSON request over the named pipe.
 4. Prints only the response payload as JSON.
 
-No CLI TCP port is opened. The random token prevents a stale or guessed pipe name from being sufficient to issue commands. The descriptor is removed during normal shutdown and overwritten atomically on the next launch. Template documents are separately parsed and validated with strict Zod schemas before mutation.
+No CLI TCP port is opened. The random token prevents a stale or guessed pipe name from being sufficient to issue commands. The descriptor is removed during normal shutdown and overwritten atomically on the next launch. Template documents are separately parsed and validated with strict Zod schemas before mutation. LiteLLM config documents pass through the same size boundary and the shared YAML validator before atomic replacement.
 
 ## Launch consistency
 
