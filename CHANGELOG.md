@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.1] - 2026-07-20
+
+### Changed
+- Packaged upgrades now move the legacy user profile into `%APPDATA%\llamadeck` once instead of continuing to run from the old branded directory. If another LlamaDeck profile already exists, it is preserved as a timestamped backup before the canonical profile is moved.
+- Renderer preferences are migrated to `llamadeck_*` storage keys and their legacy duplicates are removed automatically.
+
+### Fixed
+- The PowerShell CLI now ignores endpoint descriptors owned by dead processes and discovers the running app exclusively through the LlamaDeck profile, preventing stale development or pre-rename endpoints from masking the live app.
+
 ## [1.5.0] - 2026-07-20
 
 ### Added
