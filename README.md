@@ -5,7 +5,7 @@
 <h1 align="center">LlamaDeck</h1>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-1.3.0-black?style=flat-square" alt="Version 1.3.0" />
+  <img src="https://img.shields.io/badge/version-1.4.0-black?style=flat-square" alt="Version 1.4.0" />
   <img src="https://img.shields.io/badge/Electron-191970?style=flat-square&logo=Electron&logoColor=white" alt="Electron" />
   <img src="https://img.shields.io/badge/React-20232A?style=flat-square&logo=react&logoColor=61DAFB" alt="React" />
   <img src="https://img.shields.io/badge/TypeScript-007ACC?style=flat-square&logo=typescript&logoColor=white" alt="TypeScript" />
