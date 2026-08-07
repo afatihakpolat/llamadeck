@@ -230,12 +230,14 @@
     "--adaptive-decay": {
       "label": "Adaptive Decay",
       "category": "Performance",
-      "icon": "Cpu"
+      "icon": "Cpu",
+      "step": 0.01
     },
     "--adaptive-target": {
       "label": "Adaptive Target",
       "category": "Performance",
-      "icon": "Cpu"
+      "icon": "Cpu",
+      "step": 0.01
     },
     "--cache-idle-slots": {
       "label": "Cache Idle Slots",
@@ -597,7 +599,8 @@
       "category": "Sampling",
       "icon": "Sliders",
       "min": 0,
-      "max": 2
+      "max": 2,
+      "step": 0.01
     },
     "--top-k": {
       "label": "Top-K",
@@ -611,14 +614,16 @@
       "category": "Sampling",
       "icon": "Sliders",
       "min": 0,
-      "max": 1
+      "max": 1,
+      "step": 0.01
     },
     "--min-p": {
       "label": "Min-P",
       "category": "Sampling",
       "icon": "Sliders",
       "min": 0,
-      "max": 1
+      "max": 1,
+      "step": 0.01
     },
     "--seed": {
       "label": "Seed",
@@ -647,28 +652,32 @@
       "category": "Sampling",
       "icon": "Sliders",
       "min": 0,
-      "max": 2
+      "max": 2,
+      "step": 0.01
     },
     "--frequency-penalty": {
       "label": "Frequency Penalty",
       "category": "Sampling",
       "icon": "Sliders",
       "min": 0,
-      "max": 2
+      "max": 2,
+      "step": 0.01
     },
     "--dynatemp-range": {
       "label": "Dynamic Temp Range",
       "category": "Sampling",
       "icon": "Sliders",
       "min": 0,
-      "max": 2
+      "max": 2,
+      "step": 0.01
     },
     "--dynatemp-exp": {
       "label": "Dynamic Temp Exponent",
       "category": "Sampling",
       "icon": "Sliders",
       "min": 0,
-      "max": 4
+      "max": 4,
+      "step": 0.01
     },
     "--mirostat": {
       "label": "Mirostat",
@@ -680,42 +689,48 @@
       "category": "Sampling",
       "icon": "Sliders",
       "min": 0,
-      "max": 1
+      "max": 1,
+      "step": 0.01
     },
     "--mirostat-ent": {
       "label": "Mirostat Entropy (tau)",
       "category": "Sampling",
       "icon": "Sliders",
       "min": 0,
-      "max": 10
+      "max": 10,
+      "step": 0.01
     },
     "--xtc-probability": {
       "label": "XTC Probability",
       "category": "Sampling",
       "icon": "Sliders",
       "min": 0,
-      "max": 1
+      "max": 1,
+      "step": 0.01
     },
     "--xtc-threshold": {
       "label": "XTC Threshold",
       "category": "Sampling",
       "icon": "Sliders",
       "min": 0,
-      "max": 1
+      "max": 1,
+      "step": 0.01
     },
     "--dry-multiplier": {
       "label": "DRY Multiplier",
       "category": "Sampling",
       "icon": "Sliders",
       "min": 0,
-      "max": 4
+      "max": 4,
+      "step": 0.01
     },
     "--dry-base": {
       "label": "DRY Base",
       "category": "Sampling",
       "icon": "Sliders",
       "min": 1,
-      "max": 4
+      "max": 4,
+      "step": 0.01
     },
     "--ignore-eos": {
       "label": "Ignore EOS",
@@ -766,12 +781,14 @@
     "--top-nsigma": {
       "label": "Top Nsigma",
       "category": "Sampling",
-      "icon": "Sliders"
+      "icon": "Sliders",
+      "step": 0.01
     },
     "--typical": {
       "label": "Typical",
       "category": "Sampling",
-      "icon": "Sliders"
+      "icon": "Sliders",
+      "step": 0.01
     },
     "--rope-scaling": {
       "label": "RoPE Scaling",
@@ -811,28 +828,32 @@
       "category": "RoPE / YaRN",
       "icon": "Wind",
       "min": -1,
-      "max": 2
+      "max": 2,
+      "step": 0.01
     },
     "--yarn-attn-factor": {
       "label": "YaRN Attn Factor",
       "category": "RoPE / YaRN",
       "icon": "Wind",
       "min": -1,
-      "max": 4
+      "max": 4,
+      "step": 0.01
     },
     "--yarn-beta-slow": {
       "label": "YaRN Beta Slow",
       "category": "RoPE / YaRN",
       "icon": "Wind",
       "min": -1,
-      "max": 128
+      "max": 128,
+      "step": 0.01
     },
     "--yarn-beta-fast": {
       "label": "YaRN Beta Fast",
       "category": "RoPE / YaRN",
       "icon": "Wind",
       "min": -1,
-      "max": 128
+      "max": 128,
+      "step": 0.01
     },
     "--port": {
       "label": "Server Port",

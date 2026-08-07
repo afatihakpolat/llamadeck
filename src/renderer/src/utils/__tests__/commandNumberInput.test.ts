@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { CommandParam } from '../../../../shared/types'
-import { adjustNumberValue, getNumberStep } from '../commandNumberInput'
+import { adjustNumberValue, getNumberStep, NUMBER_INPUT_VALIDATION_STEP } from '../commandNumberInput'
 
 const repeatPenalty: CommandParam = {
   arg: '--repeat-penalty',
@@ -14,6 +14,10 @@ const repeatPenalty: CommandParam = {
 }
 
 describe('command number input', () => {
+  it('allows any finite decimal instead of applying browser step validation', () => {
+    expect(NUMBER_INPUT_VALIDATION_STEP).toBe('any')
+  })
+
   it('uses the explicit fractional step even when all other values are integers', () => {
     expect(getNumberStep(repeatPenalty)).toBe(0.01)
   })

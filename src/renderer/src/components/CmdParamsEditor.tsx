@@ -9,7 +9,7 @@ import {
   parseCommaListCommandValue,
   toggleCommaListCommandValue
 } from '../../../shared/commandArgs'
-import { adjustNumberValue, getDescriptionRange, getNumberStep } from '../utils/commandNumberInput'
+import { adjustNumberValue, getDescriptionRange, NUMBER_INPUT_VALIDATION_STEP } from '../utils/commandNumberInput'
 
 interface DisplayCategory {
   name: string
@@ -185,7 +185,6 @@ export default function CmdParamsEditor({ templateId, args, onChange, modelPathF
     const isActive = hasExplicitValue
     const defaultValue = formatDefaultValue(cmd.default)
     const descriptionRange = getDescriptionRange(cmd)
-    const numericStep = cmd.type === 'number' ? getNumberStep(cmd) : undefined
     const numericMin = cmd.type === 'number' ? (cmd.min ?? descriptionRange.min) : undefined
     const numericMax = cmd.type === 'number' ? (cmd.max ?? descriptionRange.max) : undefined
     const commaListValues = isCommaListSelect ? parseCommaListCommandValue(val) : []
@@ -213,7 +212,7 @@ export default function CmdParamsEditor({ templateId, args, onChange, modelPathF
             <div className="num-input-wrap">
               <button type="button" className="num-btn" onClick={() => handleUpdate(cmd, adjustNumberValue(val, -1, cmd))} disabled={disabled}>-</button>
               <input
-                type="number" className="cmd-input num" value={val} placeholder={cmd.default?.toString()} min={numericMin} max={numericMax} step={numericStep}
+                type="number" className="cmd-input num" value={val} placeholder={cmd.default?.toString()} min={numericMin} max={numericMax} step={NUMBER_INPUT_VALIDATION_STEP}
                 onChange={(e) => handleUpdate(cmd, e.target.value === '' ? '' : Number(e.target.value))}
                 disabled={disabled}
               />

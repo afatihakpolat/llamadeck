@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'fs'
 import { join } from 'path'
 import { OverlaySchema, CommandSchema, StructuralSchema, ArgOverlaySchema } from '../schemas'
+import { parseHelpOutput } from '../commandsSchemaParser'
 
 describe('CommandSchema', () => {
   it('accepts a minimal command', () => {
@@ -40,10 +41,23 @@ describe('OverlaySchema', () => {
     expect(() => OverlaySchema.parse(o)).not.toThrow()
   })
 
-  it('ships a fractional step for repeat penalty', () => {
+  it('ships fractional steps for every known decimal parameter', () => {
     const overlayPath = join(__dirname, '../../../resources/commands/overlay.json')
     const overlay = OverlaySchema.parse(JSON.parse(readFileSync(overlayPath, 'utf-8')))
-    expect(overlay.args['--repeat-penalty'].step).toBe(0.01)
+    for (const fixture of ['b9202-help.txt', 'b9584-help.txt']) {
+      const fixturePath = join(__dirname, `fixtures/${fixture}`)
+      const commands = parseHelpOutput(readFileSync(fixturePath, 'utf-8'))
+      const fractionalCommands = commands.filter(command => command.step !== undefined && command.step < 1)
+
+      expect(fractionalCommands, `${fixture} fractional parameters`).toHaveLength(22)
+      for (const command of fractionalCommands) {
+        const overlayEntry = [command.arg, ...(command.aliasLongs ?? [])]
+          .map(arg => overlay.args[arg])
+          .find(entry => entry !== undefined)
+        expect(overlayEntry, `${command.arg} must have a legacy-compatible overlay entry`).toBeDefined()
+        expect(overlayEntry?.step, `${command.arg} must preserve its inferred fractional step`).toBe(command.step)
+      }
+    }
   })
 })
 

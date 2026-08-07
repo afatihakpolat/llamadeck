@@ -1,5 +1,7 @@
 import type { CommandParam } from '../../../shared/types'
 
+export const NUMBER_INPUT_VALIDATION_STEP = 'any'
+
 function getDecimalPlaces(value: number): number {
   if (!Number.isFinite(value)) return 0
 
