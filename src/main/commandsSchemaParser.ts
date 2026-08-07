@@ -91,6 +91,17 @@ function coerceDefault(raw: string, type: Command['type']): string | number | bo
   return raw.replace(/^['"]|['"]$/g, '')
 }
 
+function inferNumericStep(raw: string): number | null {
+  const match = raw.trim().match(/^[+-]?(?:\d+(?:\.(\d*))?|\.(\d+))(?:e([+-]?\d+))?$/i)
+  if (!match) return null
+
+  const fractionalDigits = (match[1] ?? match[2] ?? '').length
+  const exponent = Number(match[3] ?? 0)
+  const decimalPlaces = Math.max(0, fractionalDigits - exponent)
+
+  return 10 ** -decimalPlaces
+}
+
 export function parseHelpOutput(stdout: string): Command[] {
   const lines = stdout.split(/\r?\n/)
   const sections: { name: string; lines: string[] }[] = []
@@ -252,6 +263,10 @@ export function parseHelpOutput(stdout: string): Command[] {
       if (capturedDefault !== null) {
         const coerced = coerceDefault(capturedDefault, type)
         if (coerced !== null) cmd.default = coerced
+        if (type === 'number') {
+          const step = inferNumericStep(capturedDefault)
+          if (step !== null) cmd.step = step
+        }
       }
       if (envs.length > 0) cmd.env = envs[0]
       if (options) cmd.options = options

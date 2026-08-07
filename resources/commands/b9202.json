@@ -877,6 +877,7 @@
           "description": "penalize repeat sequence of tokens",
           "type": "number",
           "default": 1,
+          "step": 0.01,
           "section": "sampling params"
         },
         {

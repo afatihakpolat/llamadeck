@@ -25,6 +25,7 @@ export interface CommandParam {
   options?: string[]
   min?: number
   max?: number
+  step?: number
   placeholder?: string
   env?: string
   deprecated?: boolean

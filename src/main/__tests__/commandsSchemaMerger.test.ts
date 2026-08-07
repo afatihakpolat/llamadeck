@@ -27,15 +27,21 @@ describe('mergeCommandsSchema — basic merge', () => {
     const merged = mergeCommandsSchema(structural, baseOverlay, null)
     expect(merged.categories[0].commands[0].label).toBe('N Gpu Layers')
   })
+
+  it('preserves a numeric step from the structural schema', () => {
+    const structural = [cmd({ arg: '--repeat-penalty', type: 'number', default: 1, step: 0.01 })]
+    const merged = mergeCommandsSchema(structural, baseOverlay, null)
+    expect(merged.categories[0].commands[0].step).toBe(0.01)
+  })
 })
 
 describe('mergeCommandsSchema — overlay fields win for curated args', () => {
-  it('uses the overlay label, category, icon, placeholder, min, max', () => {
+  it('uses the overlay label, category, icon, placeholder, min, max, step', () => {
     const overlay: Overlay = {
       version: '1.0',
       sectionMap: { 'common params': { name: 'Performance', icon: 'Cpu' } },
       args: {
-        '--ctx-size': { label: 'Context Size', category: 'Performance', icon: 'Cpu', placeholder: '2048', min: 0, max: 131072 }
+        '--ctx-size': { label: 'Context Size', category: 'Performance', icon: 'Cpu', placeholder: '2048', min: 0, max: 131072, step: 1 }
       }
     }
     const structural = [cmd({ arg: '--ctx-size', type: 'number', default: 0 })]
@@ -45,6 +51,7 @@ describe('mergeCommandsSchema — overlay fields win for curated args', () => {
     expect(c.placeholder).toBe('2048')
     expect(c.min).toBe(0)
     expect(c.max).toBe(131072)
+    expect(c.step).toBe(1)
   })
 })
 

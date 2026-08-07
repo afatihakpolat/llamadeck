@@ -52,6 +52,7 @@ export const CommandSchema = z.object({
   description: z.string(),
   type: CommandTypeSchema,
   default: z.union([z.string(), z.number(), z.boolean()]).optional(),
+  step: z.number().positive().finite().optional(),
   env: z.string().optional(),
   options: z.array(z.string()).optional(),
   deprecated: z.boolean().optional(),
@@ -80,7 +81,8 @@ export const ArgOverlaySchema = z.object({
   icon: z.string(),
   placeholder: z.string().optional(),
   min: z.number().optional(),
-  max: z.number().optional()
+  max: z.number().optional(),
+  step: z.number().positive().finite().optional()
 })
 export type ArgOverlay = z.infer<typeof ArgOverlaySchema>
 

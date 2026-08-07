@@ -91,6 +91,9 @@ export function mergeCommandsSchema(
     else if (curated?.min !== undefined) merged.min = curated.min
     if (userEntry?.max !== undefined) merged.max = userEntry.max
     else if (curated?.max !== undefined) merged.max = curated.max
+    if (userEntry?.step !== undefined) merged.step = userEntry.step
+    else if (curated?.step !== undefined) merged.step = curated.step
+    else if (command.step !== undefined) merged.step = command.step
 
     // User override wins for any field it sets, including structural fields
     // like default, description, options, etc.

@@ -77,8 +77,15 @@ describe('parseHelpOutput — b9202 full fixture', () => {
     const c = all.find(x => x.arg === '--ctx-size')!
     expect(c.type).toBe('number')
     expect(c.default).toBe(0)
+    expect(c.step).toBe(1)
     expect(c.env).toBe('LLAMA_ARG_CTX_SIZE')
     expect(c.description).not.toMatch(/default:/)
+  })
+
+  it('--repeat-penalty: preserves decimal precision for numeric controls', () => {
+    const c = all.find(x => x.arg === '--repeat-penalty')!
+    expect(c.default).toBe(1)
+    expect(c.step).toBe(0.01)
   })
 
   it('--flash-attn: select with [on|off|auto] options', () => {
