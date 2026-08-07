@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.4] - 2026-08-07
+
+### Fixed
+- All numeric backend parameters now accept valid fractional values without browser step-validation errors, including profiles backed by older generated command schemas.
+- Fractional adjustment steps are restored for all known decimal llama.cpp parameters, including sampling penalties, temperature controls, adaptive sampling, and YaRN settings.
+
 ## [1.5.3] - 2026-08-07
 
 ### Fixed
