@@ -1,41 +1,27 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { useStore } from '../store/useStore'
-import { RefreshCw, Square } from 'lucide-react'
+import { MoreHorizontal, RefreshCw, Square } from 'lucide-react'
 import type { UsageLiveSession } from '../../../shared/types'
+import {
+  formatUsageNumber,
+  formatUsageTimestamp,
+  getUncachedInputTokens,
+  hasActiveRequests,
+  sortLiveSessionsByRecency
+} from '../utils/titlebarSessions'
 
 interface Props {
   onCheckUpdates: () => void
 }
 
-function formatNumber(value: number): string {
-  return new Intl.NumberFormat().format(value)
-}
-
-function formatTimestamp(timestamp?: string): string {
-  if (!timestamp) return 'No tracked request yet'
-
-  const date = new Date(timestamp)
-  return Number.isNaN(date.getTime())
-    ? 'Unknown activity'
-    : date.toLocaleTimeString([], { hour12: false })
-}
-
-function getUncachedInputTokens(session: Pick<UsageLiveSession, 'promptTokens' | 'cacheTokens'>): number {
-  return Math.max(session.promptTokens - session.cacheTokens, 0)
-}
-
-function getSessionSortTime(session: UsageLiveSession): number {
-  return new Date(session.lastRequestAt ?? session.startedAt).getTime()
-}
-
 export default function Titlebar({ onCheckUpdates }: Props) {
   const { checkingUpdate, setCardStatus } = useStore()
   const [liveSessions, setLiveSessions] = useState<UsageLiveSession[]>([])
-  const [stoppingTemplateId, setStoppingTemplateId] = useState<string | null>(null)
+  const [stoppingIds, setStoppingIds] = useState<Set<string>>(() => new Set())
+  const [detailsOpen, setDetailsOpen] = useState(false)
+  const liveStripRef = useRef<HTMLDivElement | null>(null)
 
-  const featuredSession = useMemo(() => {
-    return [...liveSessions].sort((left, right) => getSessionSortTime(right) - getSessionSortTime(left))[0] ?? null
-  }, [liveSessions])
+  const sessions = useMemo(() => sortLiveSessionsByRecency(liveSessions), [liveSessions])
 
   useEffect(() => {
     let active = true
@@ -64,24 +50,113 @@ export default function Titlebar({ onCheckUpdates }: Props) {
     }
   }, [])
 
-  async function handleStopRunningTemplate(): Promise<void> {
-    if (!featuredSession || stoppingTemplateId) {
+  useEffect(() => {
+    if (!detailsOpen) return
+
+    function handleKeyDown(event: KeyboardEvent): void {
+      if (event.key === 'Escape') {
+        setDetailsOpen(false)
+      }
+    }
+    function handlePointerDown(event: MouseEvent): void {
+      if (liveStripRef.current && !liveStripRef.current.contains(event.target as Node)) {
+        setDetailsOpen(false)
+      }
+    }
+
+    document.addEventListener('keydown', handleKeyDown)
+    document.addEventListener('mousedown', handlePointerDown)
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown)
+      document.removeEventListener('mousedown', handlePointerDown)
+    }
+  }, [detailsOpen])
+
+  function markStopping(templateId: string, stopping: boolean): void {
+    setStoppingIds((current) => {
+      const next = new Set(current)
+      if (stopping) {
+        next.add(templateId)
+      } else {
+        next.delete(templateId)
+      }
+      return next
+    })
+  }
+
+  async function stopSession(session: UsageLiveSession): Promise<void> {
+    if (stoppingIds.has(session.templateId)) {
       return
     }
 
-    setStoppingTemplateId(featuredSession.templateId)
+    markStopping(session.templateId, true)
 
     try {
-      const result = await window.api.stopModel(featuredSession.templateId)
+      const result = await window.api.stopModel(session.templateId)
       if (result.success) {
-        setCardStatus(featuredSession.templateId, 'idle')
-        setLiveSessions((current) => current.filter((session) => session.templateId !== featuredSession.templateId))
+        setCardStatus(session.templateId, 'idle')
+        setLiveSessions((current) => current.filter((other) => other.templateId !== session.templateId))
       } else {
         alert(`Failed to stop: ${result.error || 'Unknown error'}`)
       }
     } finally {
-      setStoppingTemplateId(null)
+      markStopping(session.templateId, false)
     }
+  }
+
+  async function stopAllRunningSessions(): Promise<void> {
+    if (stoppingIds.size > 0 || sessions.length === 0) {
+      return
+    }
+
+    const targets = sessions
+    setStoppingIds(new Set(targets.map((session) => session.templateId)))
+
+    const results = await Promise.all(
+      targets.map(async (session) => {
+        try {
+          const result = await window.api.stopModel(session.templateId)
+          return { templateId: session.templateId, success: result.success, error: result.error }
+        } catch (error) {
+          return {
+            templateId: session.templateId,
+            success: false,
+            error: error instanceof Error ? error.message : 'Unknown error'
+          }
+        }
+      })
+    )
+
+    const successfulIds = new Set<string>(results.flatMap((result) => (result.success ? [result.templateId] : [])))
+    const failures = results.filter((result) => !result.success)
+
+    successfulIds.forEach((templateId) => setCardStatus(templateId, 'idle'))
+    setLiveSessions((current) => current.filter((session) => !successfulIds.has(session.templateId)))
+    setStoppingIds((current) => {
+      const next = new Set(current)
+      targets.forEach((session) => next.delete(session.templateId))
+      return next
+    })
+
+    if (failures.length > 0) {
+      alert(
+        `Failed to stop ${failures.length} running template${failures.length > 1 ? 's' : ''} (${failures
+          .map((failure) => failure.error || 'Unknown error')
+          .join('; ')})`
+      )
+    }
+  }
+
+  function renderSessionMeta(session: UsageLiveSession): React.ReactNode {
+    return (
+      <>
+        <span className="titlebar-session-meta">{formatUsageNumber(session.requestCount)} req</span>
+        <span className="titlebar-session-meta">{formatUsageNumber(session.activeRequests)} active</span>
+        <span className="titlebar-session-meta">{formatUsageNumber(getUncachedInputTokens(session))} in</span>
+        <span className="titlebar-session-meta">{formatUsageNumber(session.completionTokens)} out</span>
+        <span className="titlebar-session-meta">Last {formatUsageTimestamp(session.lastRequestAt)}</span>
+      </>
+    )
   }
 
   return (
@@ -96,29 +171,103 @@ export default function Titlebar({ onCheckUpdates }: Props) {
         <span className="titlebar-brand-text">LlamaDeck</span>
       </div>
 
-      {featuredSession && (
+      {sessions.length === 1 && (
         <div className="titlebar-session-strip">
-          <div className="titlebar-session-copy" title={featuredSession.templateName}>
+          <div className="titlebar-session-copy" title={sessions[0].templateName}>
             <span className="titlebar-session-label">Running</span>
-            <span className="titlebar-session-name">{featuredSession.templateName}</span>
-            {liveSessions.length > 1 && (
-              <span className="titlebar-session-extra">+{liveSessions.length - 1}</span>
-            )}
-            <span className="titlebar-session-meta">{formatNumber(featuredSession.requestCount)} req</span>
-            <span className="titlebar-session-meta">{formatNumber(featuredSession.activeRequests)} active</span>
-            <span className="titlebar-session-meta">{formatNumber(getUncachedInputTokens(featuredSession))} in</span>
-            <span className="titlebar-session-meta">{formatNumber(featuredSession.completionTokens)} out</span>
-            <span className="titlebar-session-meta">Last {formatTimestamp(featuredSession.lastRequestAt)}</span>
+            <span className="titlebar-session-name">{sessions[0].templateName}</span>
+            {renderSessionMeta(sessions[0])}
           </div>
           <button
             className="btn btn-danger btn-sm titlebar-session-stop"
-            onClick={() => void handleStopRunningTemplate()}
-            disabled={stoppingTemplateId !== null}
-            title={`Stop ${featuredSession.templateName}`}
+            onClick={() => void stopSession(sessions[0])}
+            disabled={stoppingIds.size > 0}
+            title={`Stop ${sessions[0].templateName}`}
           >
             <Square size={12} />
-            {stoppingTemplateId ? 'Stopping' : 'Stop'}
+            {stoppingIds.size > 0 ? 'Stopping' : 'Stop'}
           </button>
+        </div>
+      )}
+
+      {sessions.length > 1 && (
+        <div className="titlebar-session-strip titlebar-live-strip" ref={liveStripRef}>
+          <div className="titlebar-live-chips">
+            {sessions.map((session) => (
+              <div key={session.launchId} className="titlebar-live-chip">
+                <span
+                  className={`titlebar-live-chip-dot${hasActiveRequests(session) ? '' : ' no-pulse'}`}
+                />
+                <span className="titlebar-live-chip-name" title={session.templateName}>
+                  {session.templateName}
+                </span>
+                {hasActiveRequests(session) && (
+                  <span className="titlebar-live-chip-active">{formatUsageNumber(session.activeRequests)} act</span>
+                )}
+                <button
+                  className="titlebar-live-chip-stop"
+                  onClick={() => void stopSession(session)}
+                  disabled={stoppingIds.has(session.templateId)}
+                  title={`Stop ${session.templateName}`}
+                >
+                  <Square size={9} />
+                </button>
+              </div>
+            ))}
+          </div>
+          <button
+            className="btn btn-ghost btn-icon titlebar-live-details-toggle"
+            onClick={() => setDetailsOpen((open) => !open)}
+            aria-expanded={detailsOpen}
+            title="Live session details"
+          >
+            <MoreHorizontal size={15} />
+          </button>
+          {detailsOpen && (
+            <div className="titlebar-live-popover">
+              <div className="titlebar-live-popover-header">
+                <span className="titlebar-live-popover-title">
+                  {sessions.length} running
+                </span>
+                <button
+                  className="btn btn-danger btn-sm"
+                  onClick={() => void stopAllRunningSessions()}
+                  disabled={stoppingIds.size > 0}
+                >
+                  Stop all
+                </button>
+              </div>
+              <ul className="titlebar-live-popover-list">
+                {sessions.map((session) => (
+                  <li key={session.launchId} className="titlebar-live-popover-row">
+                    <div className="titlebar-live-popover-name">
+                      <span
+                        className={`titlebar-live-chip-dot${hasActiveRequests(session) ? '' : ' no-pulse'}`}
+                      />
+                      <span className="titlebar-live-popover-name-text" title={session.templateName}>
+                        {session.templateName}
+                      </span>
+                      {session.lastError && (
+                        <span className="titlebar-live-popover-error" title={session.lastError}>
+                          {session.lastError}
+                        </span>
+                      )}
+                    </div>
+                    <button
+                      className="btn btn-danger btn-sm titlebar-live-popover-stop"
+                      onClick={() => void stopSession(session)}
+                      disabled={stoppingIds.has(session.templateId)}
+                      title={`Stop ${session.templateName}`}
+                    >
+                      <Square size={12} />
+                      {stoppingIds.has(session.templateId) ? 'Stopping' : 'Stop'}
+                    </button>
+                    <div className="titlebar-live-popover-meta">{renderSessionMeta(session)}</div>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
         </div>
       )}
 

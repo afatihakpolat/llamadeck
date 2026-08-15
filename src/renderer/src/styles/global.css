@@ -145,6 +145,7 @@ input, textarea, select, pre {
   background: transparent;
   box-shadow: none;
   -webkit-app-region: no-drag;
+  position: relative;
 }
 .titlebar-session-copy {
   display: flex;
@@ -206,6 +207,183 @@ input, textarea, select, pre {
   padding: 5px 9px;
   border-radius: 12px;
   box-shadow: none;
+}
+.titlebar-live-strip {
+  gap: 8px;
+}
+.titlebar-live-chips {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  flex: 1;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+}
+.titlebar-live-chips::-webkit-scrollbar {
+  display: none;
+}
+.titlebar-live-chip {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex-shrink: 0;
+  height: 24px;
+  padding: 0 3px 0 9px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface-hover);
+}
+.titlebar-live-chip-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  display: inline-block;
+  flex-shrink: 0;
+  background: var(--success);
+  box-shadow: 0 0 0 3px rgba(22,163,74,.22);
+  animation: pulse 1.8s ease-in-out infinite;
+}
+.titlebar-live-chip-dot.no-pulse {
+  animation: none;
+}
+.titlebar-live-chip-name {
+  max-width: 130px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text);
+}
+.titlebar-live-chip-active {
+  flex-shrink: 0;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+.titlebar-live-chip-stop {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: background-color var(--transition), color var(--transition);
+}
+.titlebar-live-chip-stop:hover:enabled {
+  background: var(--surface-selected);
+  color: var(--danger);
+}
+.titlebar-live-chip-stop:disabled {
+  opacity: .45;
+  cursor: not-allowed;
+}
+.titlebar-live-details-toggle {
+  flex-shrink: 0;
+}
+.titlebar-live-popover {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  width: 420px;
+  max-width: calc(100vw - 240px);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-lg);
+  padding: 10px 12px 12px;
+  animation: fadeIn 120ms ease-out;
+  z-index: 1;
+}
+.titlebar-live-popover-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+.titlebar-live-popover-title {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .1em;
+  color: var(--text-secondary);
+}
+.titlebar-live-popover-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  max-height: 320px;
+  overflow-y: auto;
+}
+.titlebar-live-popover-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-rows: auto auto;
+  column-gap: 10px;
+  row-gap: 2px;
+  align-items: center;
+  padding: 7px 8px;
+  border-radius: var(--radius-sm);
+}
+.titlebar-live-popover-row:hover {
+  background: var(--surface-hover);
+}
+.titlebar-live-popover-name {
+  grid-column: 1;
+  grid-row: 1;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+}
+.titlebar-live-popover-name-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text);
+}
+.titlebar-live-popover-error {
+  min-width: 0;
+  max-width: 45%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--warning);
+}
+.titlebar-live-popover-stop {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  flex-shrink: 0;
+}
+.titlebar-live-popover-meta {
+  grid-column: 1;
+  grid-row: 2;
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  -webkit-app-region: no-drag;
+}
+.titlebar-live-popover-meta .titlebar-session-meta {
+  color: var(--text-secondary);
 }
 .brand-logo-img {
   transition: filter var(--transition), opacity var(--transition);
