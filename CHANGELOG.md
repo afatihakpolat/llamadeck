@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.6.0] - 2026-08-15
+
 ### Added
 - When multiple templates are running, the header now shows every one: each template appears as a compact chip with its own stop control, and a details popover opens full per-template stats alongside a Stop all action. A single running template keeps the existing header display.
 
