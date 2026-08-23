@@ -98,7 +98,7 @@ Run `llamadeck --help` for human-readable usage or `llamadeck --help --json` for
 ### Download the Release
 The fastest way to get started is to use the pre-compiled installer.
 
-1. Navigate to the [Releases](https://github.com/andersondanieln/hexllama/releases) page.
+1. Navigate to the [Releases](https://github.com/afatihakpolat/llamadeck/releases) page.
 2. Download the installer for your operating system.
 3. Run the installer and launch LlamaDeck.
 
@@ -111,10 +111,10 @@ Prerequisites:
 
 ```bash
 # Clone the repository
-git clone https://github.com/andersondanieln/hexllama.git
+git clone https://github.com/afatihakpolat/llamadeck.git
 
 # Enter the project directory
-cd hexllama
+cd llamadeck
 
 # Install dependencies
 npm install
