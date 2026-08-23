@@ -1,6 +1,6 @@
 import type { CardState } from '../../../shared/types'
 
-const UNASSIGNED_GROUP_ID = 'unassigned'
+export const UNASSIGNED_GROUP_ID = 'unassigned'
 const UNASSIGNED_GROUP_LABEL = 'No model selected'
 
 export interface TemplateModelGroup {

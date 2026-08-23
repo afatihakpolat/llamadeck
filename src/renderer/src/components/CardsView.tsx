@@ -1,13 +1,67 @@
-import React, { useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import { useStore } from '../store/useStore'
 import ModelCard from './ModelCard'
 import { ChevronDown, Folder, FolderOpen, Plus, Search, Upload } from 'lucide-react'
 import type { Template } from '../../../shared/types'
 import { groupTemplatesByModelFolder } from '../utils/templateGrouping'
+import {
+  DEFAULT_TEMPLATE_SORT_MODE,
+  TEMPLATE_SORT_OPTIONS,
+  buildTemplateUsageMap,
+  sortCardsByMode,
+  sortTemplateGroupsByMode,
+  type TemplateSortMode,
+  type TemplateUsage
+} from '../utils/templateSorting'
+import { LLAMADECK_STORAGE_KEYS, readLlamaDeckStorage, writeLlamaDeckStorage } from '../utils/storageMigration'
+
+function readStoredTemplateSortMode(): TemplateSortMode {
+  if (typeof window === 'undefined') return DEFAULT_TEMPLATE_SORT_MODE
+
+  const storedValue = readLlamaDeckStorage(LLAMADECK_STORAGE_KEYS.templateSort)
+  return storedValue === 'most-used' || storedValue === 'name' || storedValue === 'default'
+    ? storedValue
+    : DEFAULT_TEMPLATE_SORT_MODE
+}
 
 export default function CardsView() {
   const { cards, setShowCreateModal, addCard, templateSearch, setTemplateSearch } = useStore()
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({})
+  const [sortMode, setSortMode] = useState<TemplateSortMode>(readStoredTemplateSortMode)
+  const [templateUsage, setTemplateUsage] = useState<Map<string, TemplateUsage>>(() => new Map())
+
+  useEffect(() => {
+    let active = true
+
+    async function loadTemplateUsage() {
+      try {
+        const snapshot = await window.api.getUsageStats({ limit: 1 })
+        if (active) {
+          setTemplateUsage(buildTemplateUsageMap(snapshot.templateRollups))
+        }
+      } catch (error) {
+        // Keep the last known usage counts; ranking degrades to name order only.
+        console.warn('Failed to load template usage for sorting:', error)
+      }
+    }
+
+    void loadTemplateUsage()
+    const unsubscribe = window.api.onUsageUpdated(() => {
+      void loadTemplateUsage()
+    })
+
+    return () => {
+      active = false
+      unsubscribe()
+    }
+  }, [])
+
+  function changeSortMode(mode: TemplateSortMode) {
+    setSortMode(mode)
+    if (typeof window !== 'undefined') {
+      writeLlamaDeckStorage(LLAMADECK_STORAGE_KEYS.templateSort, mode)
+    }
+  }
 
   async function handleImport() {
     const template = await window.api.importTemplate()
@@ -17,19 +71,22 @@ export default function CardsView() {
   }
 
   const normalizedSearch = templateSearch.trim().toLowerCase()
-  const allGroups = useMemo(() => groupTemplatesByModelFolder(cards), [cards])
+  const sortedCards = useMemo(
+    () => sortCardsByMode(cards, sortMode, templateUsage),
+    [cards, sortMode, templateUsage]
+  )
   const filtered = useMemo(() => {
-    if (!normalizedSearch) return cards
+    if (!normalizedSearch) return sortedCards
 
-    return cards.filter((card) => (
+    return sortedCards.filter((card) => (
       card.template.name.toLowerCase().includes(normalizedSearch) ||
       (card.template.description || '').toLowerCase().includes(normalizedSearch) ||
       (card.template.modelPath || '').toLowerCase().includes(normalizedSearch)
     ))
-  }, [cards, normalizedSearch])
+  }, [sortedCards, normalizedSearch])
   const visibleGroups = useMemo(
-    () => normalizedSearch ? groupTemplatesByModelFolder(filtered) : allGroups,
-    [allGroups, filtered, normalizedSearch]
+    () => sortTemplateGroupsByMode(groupTemplatesByModelFolder(filtered), sortMode, templateUsage),
+    [filtered, sortMode, templateUsage]
   )
 
   function toggleGroup(groupId: string) {
@@ -49,7 +106,7 @@ export default function CardsView() {
               ? 'Create your first template to get started'
               : normalizedSearch
                 ? `${filtered.length} of ${cards.length} template${cards.length !== 1 ? 's' : ''}`
-                : `${cards.length} template${cards.length !== 1 ? 's' : ''} in ${allGroups.length} model group${allGroups.length !== 1 ? 's' : ''}`}
+                : `${cards.length} template${cards.length !== 1 ? 's' : ''} in ${visibleGroups.length} model group${visibleGroups.length !== 1 ? 's' : ''}`}
           </p>
         </div>
         <div className="page-actions">
@@ -81,6 +138,18 @@ export default function CardsView() {
               title="Clear"
             >×</button>
           )}
+          <span className="template-search-divider" aria-hidden="true" />
+          <label className="template-sort-label" htmlFor="template-sort-select">Sort</label>
+          <select
+            id="template-sort-select"
+            className="template-sort-select"
+            value={sortMode}
+            onChange={(event) => changeSortMode(event.target.value as TemplateSortMode)}
+          >
+            {TEMPLATE_SORT_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>{option.label}</option>
+            ))}
+          </select>
         </div>
       )}
       {cards.length === 0 ? (

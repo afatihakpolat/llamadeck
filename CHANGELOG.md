@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- The Templates page now has a sort control with three modes: Name, Default, and Most used (the default). Most used surfaces the templates you rely on the most first — both inside each model group and in the order of the groups themselves — based on request counts from Usage Stats. Your choice is remembered between launches.
+
 ## [1.6.2] - 2026-08-22
 
 ### Fixed
