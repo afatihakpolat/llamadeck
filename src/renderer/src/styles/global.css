@@ -1707,11 +1707,26 @@ input, textarea, select, pre {
 .usage-list-row {
   display: flex;
   justify-content: space-between;
-  gap: 16px;
+  flex-wrap: wrap;
+  gap: 8px 16px;
   align-items: center;
   border: 1px solid var(--border);
   border-radius: 14px;
   padding: 14px 16px;
+}
+/* Same reflow rule as the model/template row headers: the title owns the
+   first line (ellipsized) and the metrics drop below when they no longer fit. */
+.usage-list-row > div:first-child {
+  flex: 1 1 240px;
+  min-width: 0;
+}
+.usage-list-row .usage-list-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.usage-list-row .usage-list-metrics {
+  min-width: 0;
 }
 .usage-section-header-start {
   display: flex;
@@ -1760,12 +1775,16 @@ input, textarea, select, pre {
 .usage-model-group.open {
   border-color: var(--border-strong);
 }
+/* flex-wrap keeps the row on a single line while there is room, then drops the
+   metrics (and the trailing chevron) to a second line instead of crushing the
+   title or clipping the row. */
 .usage-model-group-header,
 .usage-template-row-header {
   width: 100%;
   display: flex;
   align-items: center;
-  gap: 12px;
+  flex-wrap: wrap;
+  gap: 10px 12px;
   border: 0;
   background: transparent;
   color: var(--text);
@@ -1801,11 +1820,22 @@ input, textarea, select, pre {
 .usage-template-row.open > .usage-template-row-header .usage-model-chevron {
   transform: rotate(180deg);
 }
+/* The title is the row's identity: keep a real minimum width so the model /
+   template name is never crushed away when the metrics block needs room. */
 .usage-model-group-title {
   display: flex;
   flex-direction: column;
   gap: 2px;
   flex: 1;
+  min-width: 140px;
+}
+/* The metrics keep their natural (content) width while they fit on the first
+   line — exactly the pre-existing look; once they no longer fit, min-width: 0
+   lets them shrink/re-flow, and flex-wrap drops them to their own line
+   instead of crushing the title or clipping the row. */
+.usage-model-group-header .usage-list-metrics,
+.usage-template-row-header .usage-list-metrics {
+  flex: 0 1 auto;
   min-width: 0;
 }
 .usage-model-group-title .usage-list-title {

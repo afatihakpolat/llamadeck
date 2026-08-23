@@ -12,7 +12,12 @@ import type {
   UsageStatsSnapshot,
   UsageSummaryRollup
 } from '../../../shared/types'
-import { resolveTemplatePricing } from '../utils/templatePricing'
+import {
+  getAggregateCostBreakdown,
+  getUsageCostBreakdown,
+  resolveTemplatePricing,
+  type UsageCostBreakdown
+} from '../utils/templatePricing'
 import {
   buildSortedSessionModelGroups,
   buildSortedTemplateModelGroups,
@@ -114,13 +119,6 @@ type UsageSessionStatusFilter = 'all' | UsageSessionStatus
 type UsageCostSortBy = 'cost' | 'activity' | 'requests' | 'duration'
 type UsageTemplateSectionGroupBy = 'model' | 'template'
 
-interface UsageCostBreakdown {
-  inputCost: number
-  cacheCost: number
-  outputCost: number
-  totalCost: number
-}
-
 const STATS_TAB_OPTIONS: Array<{ label: string; value: UsageStatsTab }> = [
   { label: 'Overview', value: 'overview' },
   { label: 'Sessions', value: 'sessions' },
@@ -210,19 +208,6 @@ function formatCost(value: number, currency: string): string {
 
 function getUncachedInputTokens(record: Pick<UsageSummaryRollup, 'promptTokens' | 'cacheTokens'>): number {
   return Math.max(record.promptTokens, 0)
-}
-
-function getUsageCostBreakdown(record: Pick<UsageSummaryRollup, 'promptTokens' | 'cacheTokens' | 'completionTokens'>, settings: UsageCostSettings): UsageCostBreakdown {
-  const inputCost = (getUncachedInputTokens(record) / 1_000_000) * settings.inputCostPerMillion
-  const cacheCost = (record.cacheTokens / 1_000_000) * settings.cacheCostPerMillion
-  const outputCost = (record.completionTokens / 1_000_000) * settings.outputCostPerMillion
-
-  return {
-    inputCost,
-    cacheCost,
-    outputCost,
-    totalCost: inputCost + cacheCost + outputCost
-  }
 }
 
 function renderTokenSummary(record: Pick<UsageRequestRecord, 'countedExactly' | 'promptTokens' | 'cacheTokens' | 'completionTokens' | 'totalTokens'>): string {
@@ -568,7 +553,16 @@ export default function UsageStatsView() {
     'cost',
     (rollup) => getUsageCostBreakdown(rollup, pricingForTemplate(rollup.templateId, rollup.modelPath)).totalCost
   )
-  const summaryCost = snapshot ? getUsageCostBreakdown(snapshot.summary, appSettings) : null
+  // The summary cards must reflect the same model -> template -> app-wide
+  // cascade as the rows below them, so aggregate per template rollup instead
+  // of pricing the combined summary at app-wide rates.
+  const summaryCost = snapshot
+    ? getAggregateCostBreakdown(
+        snapshot.templateRollups,
+        snapshot.summary,
+        (templateId, modelPath) => pricingForTemplate(templateId, modelPath)
+      )
+    : null
 
   function toggleUsageGroup(groupId: string) {
     setExpandedUsageGroups((current) => ({

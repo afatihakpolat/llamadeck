@@ -1,4 +1,9 @@
-import type { Template, UsageCostSettings } from '../../../shared/types'
+import type {
+  Template,
+  UsageCostSettings,
+  UsageSummaryRollup,
+  UsageTemplateRollup
+} from '../../../shared/types'
 import { getTemplateModelFolder } from './templateGrouping'
 
 // Strict-group rule: a pricing block either owns all three valid rates or is
@@ -76,5 +81,74 @@ export function resolveTemplatePricing(
     outputCostPerMillion: appSettings.outputCostPerMillion,
     modelPricing: appSettings.modelPricing
   }
+}
+
+// Cost math for the Usage Stats screen. Rollup `promptTokens` already exclude
+// cached prompt tokens (see normalizeUsageRecord), so "uncached input" is the
+// prompt total clamped at zero.
+function getUncachedRollupInputTokens(record: Pick<UsageSummaryRollup, 'promptTokens'>): number {
+  return Math.max(record.promptTokens, 0)
+}
+
+export interface UsageCostBreakdown {
+  inputCost: number
+  cacheCost: number
+  outputCost: number
+  totalCost: number
+}
+
+export const ZERO_COST_BREAKDOWN: UsageCostBreakdown = {
+  inputCost: 0,
+  cacheCost: 0,
+  outputCost: 0,
+  totalCost: 0
+}
+
+export function getUsageCostBreakdown(
+  record: Pick<UsageSummaryRollup, 'promptTokens' | 'cacheTokens' | 'completionTokens'>,
+  settings: UsageCostSettings
+): UsageCostBreakdown {
+  const inputCost = (getUncachedRollupInputTokens(record) / 1_000_000) * settings.inputCostPerMillion
+  const cacheCost = (record.cacheTokens / 1_000_000) * settings.cacheCostPerMillion
+  const outputCost = (record.completionTokens / 1_000_000) * settings.outputCostPerMillion
+
+  return {
+    inputCost,
+    cacheCost,
+    outputCost,
+    totalCost: inputCost + cacheCost + outputCost
+  }
+}
+
+// Aggregate for the Cost tab's "Estimated Total Cost / Input / Cache / Output"
+// cards. The snapshot `summary` rollup is exactly the sum of the
+// `templateRollups` (the main process merges the same per-session window
+// summaries into both), so pricing each template rollup with its own resolved
+// rates (model -> template -> app-wide cascade) and summing yields the same
+// totals the per-row figures show. Pricing the combined summary at app-wide
+// rates would ignore per-model and per-template pricing.
+export function getAggregateCostBreakdown(
+  templateRollups: ReadonlyArray<
+    Pick<UsageTemplateRollup, 'templateId' | 'modelPath' | 'promptTokens' | 'cacheTokens' | 'completionTokens'>
+  >,
+  fallbackSummary: Pick<UsageSummaryRollup, 'promptTokens' | 'cacheTokens' | 'completionTokens'> | null | undefined,
+  pricingForTemplate: (templateId: string, modelPath?: string) => UsageCostSettings
+): UsageCostBreakdown {
+  if (templateRollups.length === 0) {
+    // No template rollups means there is no model/template identity to price;
+    // price the raw summary at the app-wide rates (the resolver's last resort).
+    if (!fallbackSummary) return ZERO_COST_BREAKDOWN
+    return getUsageCostBreakdown(fallbackSummary, pricingForTemplate('', undefined))
+  }
+
+  return templateRollups.reduce((total, rollup) => {
+    const breakdown = getUsageCostBreakdown(rollup, pricingForTemplate(rollup.templateId, rollup.modelPath))
+    return {
+      inputCost: total.inputCost + breakdown.inputCost,
+      cacheCost: total.cacheCost + breakdown.cacheCost,
+      outputCost: total.outputCost + breakdown.outputCost,
+      totalCost: total.totalCost + breakdown.totalCost
+    }
+  }, ZERO_COST_BREAKDOWN)
 }
 

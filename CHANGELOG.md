@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- Usage Stats model and template rows no longer overlap or lose their names when the window is narrowed; the stats block now reflows to a second line instead of crushing the row title.
+- The Cost tab's overall Estimated Total, Input, Cache, and Output figures now respect per-model (and template-level) rates instead of always using the app-wide defaults.
+
 ## [1.6.1] - 2026-08-22
 
 ### Added
