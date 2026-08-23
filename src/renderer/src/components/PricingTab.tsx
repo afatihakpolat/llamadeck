@@ -1,13 +1,23 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { useStore } from '../store/useStore'
-import type { Template, UsageCostSettings } from '../../../shared/types'
-import { resolveTemplatePricing } from '../utils/templatePricing'
+import type { ModelPricing, UsageCostSettings } from '../../../shared/types'
+import { getTemplateModelFolder } from '../utils/templateGrouping'
 
 const DEFAULT_USAGE_COST_SETTINGS: UsageCostSettings = {
   currency: 'USD',
   inputCostPerMillion: 0,
   cacheCostPerMillion: 0,
-  outputCostPerMillion: 0
+  outputCostPerMillion: 0,
+  modelPricing: []
+}
+
+// The app-wide section only edits these keys; model pricing is saved by the
+// model section below. Saving a partial keeps the other section intact.
+interface AppWideCostRate {
+  currency: string
+  inputCostPerMillion: number
+  cacheCostPerMillion: number
+  outputCostPerMillion: number
 }
 
 interface UsageCostDraft {
@@ -17,12 +27,22 @@ interface UsageCostDraft {
   outputCostPerMillion: string
 }
 
-interface TemplatePricingDraft {
+interface ModelPricingDraft {
   enabled: boolean
   inputCostPerMillion: string
   cacheCostPerMillion: string
   outputCostPerMillion: string
 }
+
+// One row in the per-model table. `model` is the folder name as first seen in
+// a template path (what gets saved); `key` is the case-insensitive identity.
+interface ModelPricingRow {
+  key: string
+  model: string
+  templateNames: string[]
+}
+
+const MODEL_ROW_TEMPLATE_NAME_LIMIT = 3
 
 function createUsageCostDraft(settings: UsageCostSettings): UsageCostDraft {
   return {
@@ -33,12 +53,22 @@ function createUsageCostDraft(settings: UsageCostSettings): UsageCostDraft {
   }
 }
 
-function createTemplatePricingDraft(template: Template): TemplatePricingDraft {
+function createDisabledModelDraft(): ModelPricingDraft {
   return {
-    enabled: Boolean(template.pricing),
-    inputCostPerMillion: String(template.pricing?.inputCostPerMillion ?? 0),
-    cacheCostPerMillion: String(template.pricing?.cacheCostPerMillion ?? 0),
-    outputCostPerMillion: String(template.pricing?.outputCostPerMillion ?? 0)
+    enabled: false,
+    inputCostPerMillion: '0',
+    cacheCostPerMillion: '0',
+    outputCostPerMillion: '0'
+  }
+}
+
+function createModelDraftFromEntry(entry: ModelPricing | undefined): ModelPricingDraft {
+  if (!entry) return createDisabledModelDraft()
+  return {
+    enabled: true,
+    inputCostPerMillion: String(entry.inputCostPerMillion),
+    cacheCostPerMillion: String(entry.cacheCostPerMillion),
+    outputCostPerMillion: String(entry.outputCostPerMillion)
   }
 }
 
@@ -52,7 +82,7 @@ function parseNonNegativeRate(rawValue: string, label: string): number {
   return parsed
 }
 
-function parseUsageCostDraft(draft: UsageCostDraft): UsageCostSettings {
+function parseAppWideCostDraft(draft: UsageCostDraft): AppWideCostRate {
   return {
     currency: draft.currency.trim().toUpperCase() || DEFAULT_USAGE_COST_SETTINGS.currency,
     inputCostPerMillion: parseNonNegativeRate(draft.inputCostPerMillion, 'Input cost'),
@@ -61,13 +91,7 @@ function parseUsageCostDraft(draft: UsageCostDraft): UsageCostSettings {
   }
 }
 
-// Strict-group rule: a template either owns all three valid rates or falls back
-// entirely to the app-wide rates — there is no per-rate mixing. An explicit
-// { 0, 0, 0 } block is honored as a real override (a user hard-zeroing a template).
-// This parse path aligns with the main-process `normalizeTemplatePricing`.
-function parseTemplatePricingDraft(
-  draft: TemplatePricingDraft
-): NonNullable<Template['pricing']> {
+function parseModelRateDraft(draft: ModelPricingDraft): Omit<ModelPricing, 'model'> {
   return {
     inputCostPerMillion: parseNonNegativeRate(draft.inputCostPerMillion, 'Input cost'),
     cacheCostPerMillion: parseNonNegativeRate(draft.cacheCostPerMillion, 'Cache cost'),
@@ -100,47 +124,77 @@ interface PricingTabProps {
 
 export function PricingTab({ appSettings, onAppSettingsChange }: PricingTabProps): JSX.Element {
   const cards = useStore((state) => state.cards)
-  const updateCard = useStore((state) => state.updateCard)
 
   const [appDraft, setAppDraft] = useState<UsageCostDraft>(createUsageCostDraft(appSettings))
   const [savingApp, setSavingApp] = useState(false)
   const [appError, setAppError] = useState<string | null>(null)
-  const [templateDrafts, setTemplateDrafts] = useState<Record<string, TemplatePricingDraft>>({})
-  const [templateErrors, setTemplateErrors] = useState<Record<string, string | null>>({})
-  const [savingTemplateId, setSavingTemplateId] = useState<string | null>(null)
+  const [modelDrafts, setModelDrafts] = useState<Record<string, ModelPricingDraft>>({})
+  const [modelErrors, setModelErrors] = useState<Record<string, string | null>>({})
+  const [savingModelKey, setSavingModelKey] = useState<string | null>(null)
+
+  // Model rows are derived from the templates' model paths. Templates without
+  // a usable model folder cannot participate in model-level pricing and are
+  // skipped (they stay on the app-wide defaults).
+  const modelRows = useMemo<ModelPricingRow[]>(() => {
+    const map = new Map<string, ModelPricingRow>()
+    for (const card of cards) {
+      const folderName = getTemplateModelFolder(card.template.modelPath)
+      if (!folderName) continue
+      const key = folderName.toLowerCase()
+      const existingRow = map.get(key)
+      if (existingRow) {
+        existingRow.templateNames.push(card.template.name)
+        continue
+      }
+      map.set(key, { key, model: folderName, templateNames: [card.template.name] })
+    }
+    return Array.from(map.values()).sort((left, right) =>
+      left.model.localeCompare(right.model, undefined, { sensitivity: 'base' })
+    )
+  }, [cards])
 
   useEffect(() => {
     setAppDraft(createUsageCostDraft(appSettings))
   }, [appSettings])
 
+  // Hydrate drafts for newly appeared model rows without clobbering in-flight
+  // edits (same fill-missing-keys pattern the cards list uses elsewhere).
   useEffect(() => {
-    setTemplateDrafts((current) => {
-      const cardIds = new Set(cards.map((c) => c.template.id))
-      const currentIds = Object.keys(current)
-      const allPresent = currentIds.length === cardIds.size && currentIds.every((id) => cardIds.has(id))
+    setModelDrafts((current) => {
+      const rowKeys = modelRows.map((row) => row.key)
+      const currentKeys = Object.keys(current)
+      const allPresent = rowKeys.length === currentKeys.length && rowKeys.every((key) => currentKeys.includes(key))
       if (allPresent) {
         return current
       }
-      const next: Record<string, TemplatePricingDraft> = {}
-      for (const card of cards) {
-        next[card.template.id] = current[card.template.id] ?? createTemplatePricingDraft(card.template)
+      const saved = (appSettings.modelPricing ?? [])
+      const next: Record<string, ModelPricingDraft> = {}
+      for (const row of modelRows) {
+        next[row.key] =
+          current[row.key] ??
+          createModelDraftFromEntry(saved.find((entry) => entry.model.trim().toLowerCase() === row.key))
       }
       return next
     })
-  }, [cards])
+  }, [modelRows])
 
-  const effectiveAppSettings = useMemo(() => {
+  const effectiveAppSettings = useMemo<AppWideCostRate>(() => {
     try {
-      return parseUsageCostDraft(appDraft)
+      return parseAppWideCostDraft(appDraft)
     } catch {
-      return appSettings
+      return {
+        currency: appSettings.currency,
+        inputCostPerMillion: appSettings.inputCostPerMillion,
+        cacheCostPerMillion: appSettings.cacheCostPerMillion,
+        outputCostPerMillion: appSettings.outputCostPerMillion
+      }
     }
   }, [appDraft, appSettings])
 
   async function handleSaveAppSettings() {
     try {
       setSavingApp(true)
-      const parsed = parseUsageCostDraft(appDraft)
+      const parsed = parseAppWideCostDraft(appDraft)
       const result = await window.api.saveUsageCostSettings(parsed)
       if (!result.success) {
         const message = `Failed to save app-wide pricing: ${result.error || 'Unknown error'}`
@@ -159,37 +213,64 @@ export function PricingTab({ appSettings, onAppSettingsChange }: PricingTabProps
     }
   }
 
-  function updateTemplateDraft(templateId: string, patch: Partial<TemplatePricingDraft>) {
-    setTemplateDrafts((current) => ({
+  function updateModelDraft(modelKey: string, patch: Partial<ModelPricingDraft>) {
+    setModelDrafts((current) => ({
       ...current,
-      [templateId]: { ...current[templateId], ...patch }
+      [modelKey]: { ...current[modelKey], ...patch }
     }))
   }
 
-  async function handleSaveTemplatePricing(template: Template) {
-    const draft = templateDrafts[template.id]
-    if (!draft) return
-    try {
-      setSavingTemplateId(template.id)
-      let nextTemplate: Template
-      if (draft.enabled) {
-        const pricing = parseTemplatePricingDraft(draft)
-        nextTemplate = { ...template, pricing }
-      } else {
-        const { pricing: _removed, ...rest } = template
-        nextTemplate = rest
+  async function handleSaveModelPricing(rowKey: string) {
+    // Saving one row persists the whole model list, so every enabled row must
+    // parse; the first invalid row owns the error.
+    const nextModelPricing: ModelPricing[] = []
+    let failedKey: string | null = null
+    let failedMessage: string | null = null
+    for (const row of modelRows) {
+      const draft = modelDrafts[row.key]
+      if (!draft || !draft.enabled) continue
+      try {
+        nextModelPricing.push({ model: row.model, ...parseModelRateDraft(draft) })
+      } catch (saveError) {
+        failedKey = row.key
+        failedMessage = saveError instanceof Error ? saveError.message : String(saveError)
+        break
       }
-      const { id } = await window.api.saveTemplate(nextTemplate)
-      updateCard(id, nextTemplate)
-      setTemplateErrors((current) => ({ ...current, [template.id]: null }))
+    }
+    if (failedKey && failedMessage) {
+      setModelErrors(Object.fromEntries(modelRows.map((row) => [row.key, row.key === failedKey ? failedMessage : null])))
+      return
+    }
+    try {
+      setSavingModelKey(rowKey)
+      const result = await window.api.saveUsageCostSettings({ modelPricing: nextModelPricing })
+      if (!result.success) {
+        const message = `Failed to save model pricing: ${result.error || 'Unknown error'}`
+        setModelErrors((current) => ({ ...current, [rowKey]: message }))
+        return
+      }
+      setModelErrors((current) => ({ ...current, [rowKey]: null }))
+      onAppSettingsChange(result.settings)
     } catch (saveError) {
-      setTemplateErrors((current) => ({
+      setModelErrors((current) => ({
         ...current,
-        [template.id]: saveError instanceof Error ? saveError.message : String(saveError)
+        [rowKey]: saveError instanceof Error ? saveError.message : String(saveError)
       }))
     } finally {
-      setSavingTemplateId(null)
+      setSavingModelKey(null)
     }
+  }
+
+  function effectiveRatesFor(modelKey: string): AppWideCostRate {
+    const draft = modelDrafts[modelKey]
+    if (draft?.enabled) {
+      try {
+        return { ...parseModelRateDraft(draft), currency: effectiveAppSettings.currency }
+      } catch {
+        // Invalid in-flight input falls through to the app-wide defaults.
+      }
+    }
+    return effectiveAppSettings
   }
 
   return (
@@ -198,7 +279,7 @@ export function PricingTab({ appSettings, onAppSettingsChange }: PricingTabProps
         <div className="usage-section-header usage-section-header-stack">
           <div>
             <h2>App-Wide Pricing</h2>
-            <span className="usage-section-header-note">Default rates used by templates that don't override them. Currency is shared across all templates.</span>
+            <span className="usage-section-header-note">Fallback rates used when no model-level override applies. Currency is shared everywhere.</span>
           </div>
           <span>Default rates</span>
         </div>
@@ -265,19 +346,19 @@ export function PricingTab({ appSettings, onAppSettingsChange }: PricingTabProps
       <section className="usage-section">
         <div className="usage-section-header usage-section-header-stack">
           <div>
-            <h2>Per-Template Pricing</h2>
-            <span className="usage-section-header-note">Override rates for individual templates. Templates without overrides use the app-wide defaults above.</span>
+            <h2>Per-Model Pricing</h2>
+            <span className="usage-section-header-note">Rates apply per model folder (the folder holding the model's GGUF files) and are shared by every template under it. Models without an override fall back to the app-wide defaults; templates with no model folder selected can only use the defaults.</span>
           </div>
-          <span>{cards.length} templates</span>
+          <span>{modelRows.length} models</span>
         </div>
-        {cards.length === 0 ? (
-          <div className="usage-section-empty">No templates yet. Create one from the cards view.</div>
+        {modelRows.length === 0 ? (
+          <div className="usage-section-empty">No models yet — set a model path on a template and its folder will appear here.</div>
         ) : (
           <div className="usage-request-table-wrapper">
             <table className="usage-request-table">
               <thead>
                 <tr>
-                  <th>Template</th>
+                  <th>Model</th>
                   <th>Override</th>
                   <th>Input / 1M</th>
                   <th>Cache / 1M</th>
@@ -286,24 +367,26 @@ export function PricingTab({ appSettings, onAppSettingsChange }: PricingTabProps
                 </tr>
               </thead>
               <tbody>
-                {cards.map((card) => {
-                  const template = card.template
-                  const draft = templateDrafts[template.id] ?? createTemplatePricingDraft(template)
-                  const resolved = resolveTemplatePricing(template, appSettings)
-                  const isSaving = savingTemplateId === template.id
-                  const error = templateErrors[template.id]
+                {modelRows.map((row) => {
+                  const draft = modelDrafts[row.key] ?? createDisabledModelDraft()
+                  const effective = effectiveRatesFor(row.key)
+                  const isSaving = savingModelKey === row.key
+                  const error = modelErrors[row.key]
+                  const visibleNames = row.templateNames.slice(0, MODEL_ROW_TEMPLATE_NAME_LIMIT).join(', ')
+                  const extraCount = row.templateNames.length - MODEL_ROW_TEMPLATE_NAME_LIMIT
                   return (
-                    <tr key={template.id}>
+                    <tr key={row.key}>
                       <td>
-                        <div className="usage-request-primary">{template.name}</div>
-                        <div className="usage-request-secondary">Effective: {formatRatePerMillion(resolved.inputCostPerMillion, resolved.currency)} input • {formatRatePerMillion(resolved.cacheCostPerMillion, resolved.currency)} cache • {formatRatePerMillion(resolved.outputCostPerMillion, resolved.currency)} output</div>
+                        <div className="usage-request-primary">{row.model}</div>
+                        <div className="usage-request-secondary">{row.templateNames.length} template{row.templateNames.length === 1 ? '' : 's'}: {visibleNames}{extraCount > 0 ? ` (+${extraCount} more)` : ''}</div>
+                        <div className="usage-request-secondary">Effective: {formatRatePerMillion(effective.inputCostPerMillion, effective.currency)} input • {formatRatePerMillion(effective.cacheCostPerMillion, effective.currency)} cache • {formatRatePerMillion(effective.outputCostPerMillion, effective.currency)} output</div>
                       </td>
                       <td>
                         <label className="usage-control-field">
                           <input
                             type="checkbox"
                             checked={draft.enabled}
-                            onChange={(event) => updateTemplateDraft(template.id, { enabled: event.target.checked })}
+                            onChange={(event) => updateModelDraft(row.key, { enabled: event.target.checked })}
                             disabled={isSaving}
                           />
                           <span>{draft.enabled ? 'Custom' : 'Use defaults'}</span>
@@ -316,7 +399,7 @@ export function PricingTab({ appSettings, onAppSettingsChange }: PricingTabProps
                           min="0"
                           step="0.000001"
                           value={draft.inputCostPerMillion}
-                          onChange={(event) => updateTemplateDraft(template.id, { inputCostPerMillion: event.target.value })}
+                          onChange={(event) => updateModelDraft(row.key, { inputCostPerMillion: event.target.value })}
                           disabled={!draft.enabled || isSaving}
                         />
                       </td>
@@ -327,7 +410,7 @@ export function PricingTab({ appSettings, onAppSettingsChange }: PricingTabProps
                           min="0"
                           step="0.000001"
                           value={draft.cacheCostPerMillion}
-                          onChange={(event) => updateTemplateDraft(template.id, { cacheCostPerMillion: event.target.value })}
+                          onChange={(event) => updateModelDraft(row.key, { cacheCostPerMillion: event.target.value })}
                           disabled={!draft.enabled || isSaving}
                         />
                       </td>
@@ -338,14 +421,14 @@ export function PricingTab({ appSettings, onAppSettingsChange }: PricingTabProps
                           min="0"
                           step="0.000001"
                           value={draft.outputCostPerMillion}
-                          onChange={(event) => updateTemplateDraft(template.id, { outputCostPerMillion: event.target.value })}
+                          onChange={(event) => updateModelDraft(row.key, { outputCostPerMillion: event.target.value })}
                           disabled={!draft.enabled || isSaving}
                         />
                       </td>
                       <td>
                         <button
                           className="btn btn-primary"
-                          onClick={() => void handleSaveTemplatePricing(template)}
+                          onClick={() => void handleSaveModelPricing(row.key)}
                           disabled={!draft.enabled || isSaving}
                         >
                           {isSaving ? 'Saving...' : 'Save'}

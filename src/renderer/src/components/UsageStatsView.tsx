@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
-import { Activity, BarChart3, RefreshCw } from 'lucide-react'
+import { Activity, BarChart3, ChevronDown, Folder, FolderOpen, RefreshCw } from 'lucide-react'
 import { useStore } from '../store/useStore'
 import type {
   Template,
@@ -13,6 +13,18 @@ import type {
   UsageSummaryRollup
 } from '../../../shared/types'
 import { resolveTemplatePricing } from '../utils/templatePricing'
+import {
+  buildSortedSessionModelGroups,
+  buildSortedTemplateModelGroups,
+  getModelFileName,
+  getSessionActivityTimestamp,
+  getSessionDurationMs,
+  getUsageTimestampValue,
+  mergeSummary,
+  sortSessionRollupsBy,
+  zeroSummary,
+  type UsageSessionModelGroup
+} from '../utils/usageModelGrouping'
 import {
   LLAMADECK_STORAGE_KEYS,
   readLlamaDeckStorage,
@@ -91,14 +103,16 @@ const DEFAULT_USAGE_COST_SETTINGS: UsageCostSettings = {
   currency: 'USD',
   inputCostPerMillion: 0,
   cacheCostPerMillion: 0,
-  outputCostPerMillion: 0
+  outputCostPerMillion: 0,
+  modelPricing: []
 }
 
 type UsageStatsTab = 'overview' | 'sessions' | 'cost' | 'pricing'
-type UsageSessionGroupBy = 'none' | 'template' | 'status'
+type UsageSessionGroupBy = 'none' | 'model' | 'template' | 'status'
 type UsageSessionSortBy = 'activity' | 'tokens' | 'requests' | 'duration'
 type UsageSessionStatusFilter = 'all' | UsageSessionStatus
 type UsageCostSortBy = 'cost' | 'activity' | 'requests' | 'duration'
+type UsageTemplateSectionGroupBy = 'model' | 'template'
 
 interface UsageCostBreakdown {
   inputCost: number
@@ -122,9 +136,10 @@ const SESSION_STATUS_OPTIONS: Array<{ label: string; value: UsageSessionStatusFi
 ]
 
 const SESSION_GROUP_OPTIONS: Array<{ label: string; value: UsageSessionGroupBy }> = [
-  { label: 'No grouping', value: 'none' },
+  { label: 'Group by model', value: 'model' },
   { label: 'Group by template', value: 'template' },
-  { label: 'Group by status', value: 'status' }
+  { label: 'Group by status', value: 'status' },
+  { label: 'No grouping', value: 'none' }
 ]
 
 const SESSION_SORT_OPTIONS: Array<{ label: string; value: UsageSessionSortBy }> = [
@@ -233,51 +248,6 @@ function renderLiveSessionTitle(session: UsageLiveSession): string {
   return `${session.templateName} • ${session.publicPort} -> ${session.upstreamPort}`
 }
 
-function zeroSummary(): UsageSummaryRollup {
-  return {
-    requestCount: 0,
-    successCount: 0,
-    errorCount: 0,
-    exactUsageCount: 0,
-    promptTokens: 0,
-    cacheTokens: 0,
-    completionTokens: 0,
-    totalTokens: 0
-  }
-}
-
-function mergeSummary(target: UsageSummaryRollup, source: UsageSummaryRollup): void {
-  target.requestCount += source.requestCount
-  target.successCount += source.successCount
-  target.errorCount += source.errorCount
-  target.exactUsageCount += source.exactUsageCount
-  target.promptTokens += source.promptTokens
-  target.cacheTokens += source.cacheTokens
-  target.completionTokens += source.completionTokens
-  target.totalTokens += source.totalTokens
-}
-
-function getTimestampValue(timestamp?: string): number {
-  if (!timestamp) return 0
-  const value = new Date(timestamp).getTime()
-  return Number.isFinite(value) ? value : 0
-}
-
-function getSessionActivityTimestamp(session: UsageSessionRollup): string {
-  return session.windowLastRequestAt ?? session.lastRequestAt ?? session.windowEndedAt ?? session.stoppedAt ?? session.windowStartedAt ?? session.startedAt
-}
-
-function getSessionDurationMs(session: UsageSessionRollup): number {
-  const startedAt = getTimestampValue(session.windowStartedAt ?? session.startedAt)
-  const endedAt = getTimestampValue(session.windowEndedAt ?? session.windowLastRequestAt ?? session.stoppedAt ?? session.lastRequestAt ?? session.windowStartedAt ?? session.startedAt)
-
-  if (!startedAt || !endedAt || endedAt <= startedAt) {
-    return 0
-  }
-
-  return endedAt - startedAt
-}
-
 function formatSessionStatus(status: UsageSessionStatus): string {
   if (status === 'running') return 'Running'
   if (status === 'error') return 'Error'
@@ -294,10 +264,6 @@ function getSessionGroupSubtitle(session: UsageSessionRollup): string {
   }
 
   return session.launchId
-}
-
-function buildSessionAnalysisGroups(sessions: UsageSessionRollup[], groupBy: UsageSessionGroupBy): SessionAnalysisGroup[] {
-  return buildSortedSessionAnalysisGroups(sessions, groupBy, 'tokens')
 }
 
 function buildSortedSessionAnalysisGroups(
@@ -328,7 +294,7 @@ function buildSortedSessionAnalysisGroups(
     group.durationMs += getSessionDurationMs(session)
     mergeSummary(group, session)
     const sessionActivityAt = getSessionActivityTimestamp(session)
-    if (!group.lastActivityAt || getTimestampValue(group.lastActivityAt) < getTimestampValue(sessionActivityAt)) {
+    if (!group.lastActivityAt || getUsageTimestampValue(group.lastActivityAt) < getUsageTimestampValue(sessionActivityAt)) {
       group.lastActivityAt = sessionActivityAt
     }
     groups.set(key, group)
@@ -336,7 +302,7 @@ function buildSortedSessionAnalysisGroups(
 
   return Array.from(groups.values()).sort((left, right) => {
     if (sortBy === 'activity') {
-      return getTimestampValue(right.lastActivityAt) - getTimestampValue(left.lastActivityAt)
+      return getUsageTimestampValue(right.lastActivityAt) - getUsageTimestampValue(left.lastActivityAt)
         || right.totalTokens - left.totalTokens
         || right.requestCount - left.requestCount
         || left.label.localeCompare(right.label)
@@ -345,7 +311,7 @@ function buildSortedSessionAnalysisGroups(
     if (sortBy === 'requests') {
       return right.requestCount - left.requestCount
         || right.totalTokens - left.totalTokens
-        || getTimestampValue(right.lastActivityAt) - getTimestampValue(left.lastActivityAt)
+        || getUsageTimestampValue(right.lastActivityAt) - getUsageTimestampValue(left.lastActivityAt)
         || left.label.localeCompare(right.label)
     }
 
@@ -358,34 +324,8 @@ function buildSortedSessionAnalysisGroups(
 
     return right.totalTokens - left.totalTokens
       || right.requestCount - left.requestCount
-      || getTimestampValue(right.lastActivityAt) - getTimestampValue(left.lastActivityAt)
+      || getUsageTimestampValue(right.lastActivityAt) - getUsageTimestampValue(left.lastActivityAt)
       || left.label.localeCompare(right.label)
-  })
-}
-
-function sortSessionRollups(sessions: UsageSessionRollup[], sortBy: UsageSessionSortBy): UsageSessionRollup[] {
-  return [...sessions].sort((left, right) => {
-    if (sortBy === 'tokens') {
-      return right.totalTokens - left.totalTokens
-        || right.requestCount - left.requestCount
-        || getTimestampValue(getSessionActivityTimestamp(right)) - getTimestampValue(getSessionActivityTimestamp(left))
-    }
-
-    if (sortBy === 'requests') {
-      return right.requestCount - left.requestCount
-        || right.totalTokens - left.totalTokens
-        || getTimestampValue(getSessionActivityTimestamp(right)) - getTimestampValue(getSessionActivityTimestamp(left))
-    }
-
-    if (sortBy === 'duration') {
-      return getSessionDurationMs(right) - getSessionDurationMs(left)
-        || right.totalTokens - left.totalTokens
-        || right.requestCount - left.requestCount
-    }
-
-    return getTimestampValue(getSessionActivityTimestamp(right)) - getTimestampValue(getSessionActivityTimestamp(left))
-      || right.totalTokens - left.totalTokens
-      || right.requestCount - left.requestCount
   })
 }
 
@@ -395,13 +335,13 @@ function sortCostSessionRollups(
   pricingFor: (templateId: string) => UsageCostSettings
 ): UsageSessionRollup[] {
   if (sortBy !== 'cost') {
-    return sortSessionRollups(sessions, sortBy)
+    return sortSessionRollupsBy(sessions, sortBy)
   }
 
   return [...sessions].sort((left, right) => {
     return getUsageCostBreakdown(right, pricingFor(right.templateId)).totalCost - getUsageCostBreakdown(left, pricingFor(left.templateId)).totalCost
       || right.requestCount - left.requestCount
-      || getTimestampValue(getSessionActivityTimestamp(right)) - getTimestampValue(getSessionActivityTimestamp(left))
+      || getUsageTimestampValue(getSessionActivityTimestamp(right)) - getUsageTimestampValue(getSessionActivityTimestamp(left))
   })
 }
 
@@ -417,9 +357,94 @@ function sortCostSessionGroups(
   return [...groups].sort((left, right) => {
     return getUsageCostBreakdown(right, pricingFor(right.key)).totalCost - getUsageCostBreakdown(left, pricingFor(left.key)).totalCost
       || right.requestCount - left.requestCount
-      || getTimestampValue(right.lastActivityAt) - getTimestampValue(left.lastActivityAt)
+      || getUsageTimestampValue(right.lastActivityAt) - getUsageTimestampValue(left.lastActivityAt)
       || left.label.localeCompare(right.label)
   })
+}
+
+function pluralize(count: number, singular: string): string {
+  return `${formatNumber(count)} ${singular}${count === 1 ? '' : 's'}`
+}
+
+function getModelGroupCost(group: UsageSessionModelGroup, pricingFor: (templateId: string, modelPath?: string) => UsageCostSettings): UsageCostBreakdown {
+  return group.templates.reduce((total, template) => {
+    const cost = getUsageCostBreakdown(template, pricingFor(template.templateId, template.modelPath))
+    return {
+      inputCost: total.inputCost + cost.inputCost,
+      cacheCost: total.cacheCost + cost.cacheCost,
+      outputCost: total.outputCost + cost.outputCost,
+      totalCost: total.totalCost + cost.totalCost
+    }
+  }, { inputCost: 0, cacheCost: 0, outputCost: 0, totalCost: 0 })
+}
+
+interface NestedSessionTableProps {
+  sessions: UsageSessionRollup[]
+  showCost: boolean
+  pricingFor: (templateId: string, modelPath?: string) => UsageCostSettings
+}
+
+function NestedSessionTable({ sessions, showCost, pricingFor }: NestedSessionTableProps) {
+  return (
+    <div className="usage-request-table-wrapper">
+      <table className="usage-request-table usage-session-table">
+        <thead>
+          <tr>
+            <th>Session</th>
+            <th>Status</th>
+            <th>Requests</th>
+            {showCost ? <th>Estimated Cost</th> : null}
+            <th>Tokens</th>
+            {!showCost ? <th>Duration</th> : null}
+            <th>Activity</th>
+          </tr>
+        </thead>
+        <tbody>
+          {sessions.map((session) => {
+            const sessionPricing = pricingFor(session.templateId, session.modelPath)
+            const sessionCost = showCost ? getUsageCostBreakdown(session, sessionPricing) : null
+
+            return (
+              <tr key={session.launchId}>
+                <td>
+                  <div className="usage-request-primary">{typeof session.publicPort === 'number' ? `Port ${session.publicPort}` : 'Port unavailable'}</div>
+                  <div className="usage-request-secondary">{session.lastEndpoint || 'No endpoint snapshot'}</div>
+                </td>
+                <td>
+                  <div className={`usage-status-pill usage-session-status ${session.status === 'running' ? 'ok' : session.status === 'error' ? 'error' : ''}`}>{formatSessionStatus(session.status)}</div>
+                  <div className="usage-request-secondary">{session.lastEndpoint || 'No endpoint snapshot'}</div>
+                </td>
+                <td>
+                  <div className="usage-request-primary">{formatNumber(session.requestCount)}</div>
+                  <div className="usage-request-secondary">{formatNumber(session.successCount)} ok • {formatNumber(session.errorCount)} failed</div>
+                </td>
+                {showCost && sessionCost ? (
+                  <td>
+                    <div className="usage-request-primary">{formatCost(sessionCost.totalCost, sessionPricing.currency)}</div>
+                    <div className="usage-request-secondary">{formatCost(sessionCost.inputCost, sessionPricing.currency)} input • {formatCost(sessionCost.cacheCost, sessionPricing.currency)} cache • {formatCost(sessionCost.outputCost, sessionPricing.currency)} output</div>
+                  </td>
+                ) : null}
+                <td>
+                  <div className="usage-request-primary">{formatNumber(session.totalTokens)}</div>
+                  <div className="usage-request-secondary">{formatNumber(getUncachedInputTokens(session))} input • {formatNumber(session.cacheTokens)} cache • {formatNumber(session.completionTokens)} output</div>
+                </td>
+                {!showCost ? (
+                  <td>
+                    <div className="usage-request-primary">{formatDuration(getSessionDurationMs(session))}</div>
+                    <div className="usage-request-secondary">Window start {formatTimestamp(session.windowStartedAt ?? session.startedAt)}</div>
+                  </td>
+                ) : null}
+                <td>
+                  <div className="usage-request-primary">{formatTimestamp(getSessionActivityTimestamp(session))}</div>
+                  <div className="usage-request-secondary">{session.windowEndedAt ? `Window end ${formatTimestamp(session.windowEndedAt)}` : 'Still running or open'}</div>
+                </td>
+              </tr>
+            )
+          })}
+        </tbody>
+      </table>
+    </div>
+  )
 }
 
 export default function UsageStatsView() {
@@ -442,11 +467,14 @@ export default function UsageStatsView() {
   })
   const [activeTab, setActiveTab] = useState<UsageStatsTab>('overview')
   const [sessionStatusFilter, setSessionStatusFilter] = useState<UsageSessionStatusFilter>('all')
-  const [sessionGroupBy, setSessionGroupBy] = useState<UsageSessionGroupBy>('none')
+  const [sessionGroupBy, setSessionGroupBy] = useState<UsageSessionGroupBy>('model')
   const [sessionSortBy, setSessionSortBy] = useState<UsageSessionSortBy>('activity')
   const [costSessionStatusFilter, setCostSessionStatusFilter] = useState<UsageSessionStatusFilter>('all')
-  const [costSessionGroupBy, setCostSessionGroupBy] = useState<UsageSessionGroupBy>('none')
+  const [costSessionGroupBy, setCostSessionGroupBy] = useState<UsageSessionGroupBy>('model')
   const [costSessionSortBy, setCostSessionSortBy] = useState<UsageCostSortBy>('cost')
+  const [expandedUsageGroups, setExpandedUsageGroups] = useState<Record<string, boolean>>({})
+  const [templateSectionGroupBy, setTemplateSectionGroupBy] = useState<UsageTemplateSectionGroupBy>('model')
+  const [costTemplateSectionGroupBy, setCostTemplateSectionGroupBy] = useState<UsageTemplateSectionGroupBy>('model')
   const [appSettings, setAppSettings] = useState<UsageCostSettings>(DEFAULT_USAGE_COST_SETTINGS)
   const [snapshot, setSnapshot] = useState<UsageStatsSnapshot | null>(null)
   const [loading, setLoading] = useState(true)
@@ -486,9 +514,16 @@ export default function UsageStatsView() {
     return map
   }, [cards])
 
-  const pricingForTemplate = (templateId: string | null | undefined) => {
-    if (!templateId) return appSettings
-    return resolveTemplatePricing(templatesById.get(templateId), appSettings)
+  // `fallbackModelPath` (the session/rollup's own captured model path) lets
+  // deleted templates still resolve their model-level pricing, since the
+  // rollup snapshot keeps the path even after the template is gone.
+  const pricingForTemplate = (templateId: string | null | undefined, fallbackModelPath?: string) => {
+    const template = templateId ? templatesById.get(templateId) : undefined
+    if (template) return resolveTemplatePricing(template, appSettings)
+    if (fallbackModelPath) {
+      return resolveTemplatePricing({ pricing: undefined, modelPath: fallbackModelPath }, appSettings)
+    }
+    return appSettings
   }
 
   const pricingForGroupKey = (key: string) => {
@@ -498,13 +533,14 @@ export default function UsageStatsView() {
     return appSettings
   }
 
-  const filteredSessionRollups = sortSessionRollups(
+  const filteredSessionRollups = sortSessionRollupsBy(
     (snapshot?.sessionRollups ?? []).filter((session) => {
       return sessionStatusFilter === 'all' || session.status === sessionStatusFilter
     }),
     sessionSortBy
   )
   const sessionAnalysisGroups = buildSortedSessionAnalysisGroups(filteredSessionRollups, sessionGroupBy, sessionSortBy)
+  const sessionModelGroups = buildSortedSessionModelGroups(filteredSessionRollups, sessionSortBy)
   const filteredCostSessionRollups = sortCostSessionRollups(
     (snapshot?.sessionRollups ?? []).filter((session) => {
       return costSessionStatusFilter === 'all' || session.status === costSessionStatusFilter
@@ -521,7 +557,25 @@ export default function UsageStatsView() {
     costSessionSortBy,
     pricingForGroupKey
   )
+  const costSessionModelGroups = buildSortedSessionModelGroups(filteredCostSessionRollups, costSessionSortBy, {
+    costOfTemplate: (template) => getUsageCostBreakdown(template, pricingForTemplate(template.templateId, template.modelPath)).totalCost,
+    costOfSession: (session) => getUsageCostBreakdown(session, pricingForTemplate(session.templateId, session.modelPath)).totalCost
+  })
+  const templateRollups = snapshot?.templateRollups ?? []
+  const overviewTemplateModelGroups = buildSortedTemplateModelGroups(templateRollups)
+  const costTemplateModelGroups = buildSortedTemplateModelGroups(
+    templateRollups,
+    'cost',
+    (rollup) => getUsageCostBreakdown(rollup, pricingForTemplate(rollup.templateId, rollup.modelPath)).totalCost
+  )
   const summaryCost = snapshot ? getUsageCostBreakdown(snapshot.summary, appSettings) : null
+
+  function toggleUsageGroup(groupId: string) {
+    setExpandedUsageGroups((current) => ({
+      ...current,
+      [groupId]: !current[groupId]
+    }))
+  }
 
   async function loadSnapshot(nextQuery: UsageStatsQuery, mode: 'initial' | 'refresh' = 'refresh') {
     if (mode === 'initial') {
@@ -799,18 +853,91 @@ export default function UsageStatsView() {
               <div className="usage-rollups-grid">
                 <section className="usage-section">
                   <div className="usage-section-header">
-                    <h2>Templates</h2>
-                    <span>{snapshot.templateRollups.length} template rows</span>
+                    <div className="usage-section-header-start">
+                      <h2>{templateSectionGroupBy === 'model' ? 'Models' : 'Templates'}</h2>
+                      <div className="usage-mini-toggle" role="group" aria-label="Group templates by">
+                        <button
+                          type="button"
+                          className={templateSectionGroupBy === 'model' ? 'active' : ''}
+                          onClick={() => setTemplateSectionGroupBy('model')}
+                        >
+                          Model
+                        </button>
+                        <button
+                          type="button"
+                          className={templateSectionGroupBy === 'template' ? 'active' : ''}
+                          onClick={() => setTemplateSectionGroupBy('template')}
+                        >
+                          Template
+                        </button>
+                      </div>
+                    </div>
+                    <span>
+                      {templateSectionGroupBy === 'model'
+                        ? `${pluralize(overviewTemplateModelGroups.length, 'model')} • ${pluralize(snapshot.templateRollups.length, 'template')}`
+                        : `${snapshot.templateRollups.length} template rows`}
+                    </span>
                   </div>
                   {snapshot.templateRollups.length === 0 ? (
                     <div className="usage-section-empty">No matching historical usage for the selected filter.</div>
+                  ) : templateSectionGroupBy === 'model' ? (
+                    <div className="usage-list-table">
+                      {overviewTemplateModelGroups.map((group) => {
+                        const groupId = `overview-model:${group.key}`
+                        const groupExpanded = expandedUsageGroups[groupId] === true
+
+                        return (
+                          <div key={group.key} className={`usage-model-group ${groupExpanded ? 'open' : ''}`}>
+                            <button
+                              type="button"
+                              className="usage-model-group-header"
+                              aria-expanded={groupExpanded}
+                              onClick={() => toggleUsageGroup(groupId)}
+                            >
+                              <span className="usage-model-group-icon">{groupExpanded ? <FolderOpen size={15} /> : <Folder size={15} />}</span>
+                              <span className="usage-model-group-title">
+                                <span className="usage-list-title">{group.label}</span>
+                                <span className="usage-list-subtitle">{pluralize(group.templateCount, 'template')}</span>
+                              </span>
+                              <span className="usage-list-metrics">
+                                <span>{formatNumber(group.requestCount)} requests</span>
+                                <span>{formatNumber(getUncachedInputTokens(group))} input • {formatNumber(group.cacheTokens)} cache • {formatNumber(group.completionTokens)} output</span>
+                                <span>{formatNumber(group.totalTokens)} total</span>
+                                <span>{group.lastRequestAt ? formatTimestamp(group.lastRequestAt) : 'No recent activity'}</span>
+                              </span>
+                              <ChevronDown className="usage-model-chevron" size={16} />
+                            </button>
+                            {groupExpanded && (
+                              <div className="usage-model-group-body">
+                                {group.templates.map((rollup) => (
+                                  <div className="usage-template-row" key={rollup.templateId}>
+                                    <div className="usage-template-row-header usage-template-row-static">
+                                      <span className="usage-model-group-title">
+                                        <span className="usage-list-title">{rollup.templateName}</span>
+                                        <span className="usage-list-subtitle">{getModelFileName(rollup.modelPath) ?? 'No model path snapshot'}</span>
+                                      </span>
+                                      <span className="usage-list-metrics">
+                                        <span>{formatNumber(rollup.requestCount)} requests</span>
+                                        <span>{formatNumber(getUncachedInputTokens(rollup))} input • {formatNumber(rollup.cacheTokens)} cache • {formatNumber(rollup.completionTokens)} output</span>
+                                        <span>{formatNumber(rollup.totalTokens)} total</span>
+                                        <span>{rollup.lastRequestAt ? formatTimestamp(rollup.lastRequestAt) : 'No recent activity'}</span>
+                                      </span>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        )
+                      })}
+                    </div>
                   ) : (
                     <div className="usage-list-table">
                       {snapshot.templateRollups.map((rollup) => (
                         <div className="usage-list-row" key={rollup.templateId}>
                           <div>
                             <div className="usage-list-title">{rollup.templateName}</div>
-                            <div className="usage-list-subtitle">{rollup.modelPath?.split(/[/\\]/).pop() || 'No model path snapshot'}</div>
+                            <div className="usage-list-subtitle">{getModelFileName(rollup.modelPath) ?? 'No model path snapshot'}</div>
                           </div>
                           <div className="usage-list-metrics">
                             <span>{formatNumber(rollup.requestCount)} requests</span>
@@ -963,6 +1090,73 @@ export default function UsageStatsView() {
 
                 {filteredSessionRollups.length === 0 ? (
                   <div className="usage-section-empty">No persisted sessions match the current filters yet.</div>
+                ) : sessionGroupBy === 'model' ? (
+                  <div className="usage-list-table">
+                    {sessionModelGroups.map((group) => {
+                      const groupId = `sessions-model:${group.key}`
+                      const groupExpanded = expandedUsageGroups[groupId] === true
+
+                      return (
+                        <div key={group.key} className={`usage-model-group ${groupExpanded ? 'open' : ''}`}>
+                          <button
+                            type="button"
+                            className="usage-model-group-header"
+                            aria-expanded={groupExpanded}
+                            onClick={() => toggleUsageGroup(groupId)}
+                          >
+                            <span className="usage-model-group-icon">{groupExpanded ? <FolderOpen size={15} /> : <Folder size={15} />}</span>
+                            <span className="usage-model-group-title">
+                              <span className="usage-list-title">{group.label}</span>
+                              <span className="usage-list-subtitle">{pluralize(group.templateCount, 'template')} • {pluralize(group.sessionCount, 'session')}</span>
+                            </span>
+                            <span className="usage-list-metrics">
+                              <span>{formatNumber(group.requestCount)} requests</span>
+                              <span>{formatNumber(getUncachedInputTokens(group))} input • {formatNumber(group.cacheTokens)} cache • {formatNumber(group.completionTokens)} output</span>
+                              <span>{formatNumber(group.totalTokens)} total</span>
+                              <span>{group.lastActivityAt ? `Last activity ${formatTimestamp(group.lastActivityAt)}` : 'No recent activity'}</span>
+                            </span>
+                            <ChevronDown className="usage-model-chevron" size={16} />
+                          </button>
+                          {groupExpanded && (
+                            <div className="usage-model-group-body">
+                              {group.templates.map((template) => {
+                                const templateId = `${groupId}:${template.templateId}`
+                                const templateExpanded = expandedUsageGroups[templateId] === true
+
+                                return (
+                                  <div key={template.templateId} className={`usage-template-row ${templateExpanded ? 'open' : ''}`}>
+                                    <button
+                                      type="button"
+                                      className="usage-template-row-header"
+                                      aria-expanded={templateExpanded}
+                                      onClick={() => toggleUsageGroup(templateId)}
+                                    >
+                                      <span className="usage-model-group-title">
+                                        <span className="usage-list-title">{template.templateName}</span>
+                                        <span className="usage-list-subtitle">{template.modelFileName ?? 'No model path snapshot'}</span>
+                                      </span>
+                                      <span className="usage-list-metrics">
+                                        <span>{pluralize(template.sessionCount, 'session')}</span>
+                                        <span>{formatNumber(template.requestCount)} requests</span>
+                                        <span>{formatNumber(template.totalTokens)} tokens</span>
+                                        <span>{template.lastActivityAt ? `Last activity ${formatTimestamp(template.lastActivityAt)}` : 'No recent activity'}</span>
+                                      </span>
+                                      <ChevronDown className="usage-model-chevron" size={14} />
+                                    </button>
+                                    {templateExpanded && (
+                                      <div className="usage-template-row-body">
+                                        <NestedSessionTable sessions={template.sessions} showCost={false} pricingFor={pricingForTemplate} />
+                                      </div>
+                                    )}
+                                  </div>
+                                )
+                              })}
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })}
+                  </div>
                 ) : sessionGroupBy === 'none' ? (
                   <div className="usage-request-table-wrapper">
                     <table className="usage-request-table usage-session-table">
@@ -1058,7 +1252,7 @@ export default function UsageStatsView() {
                 <div className="usage-section-header usage-section-header-stack">
                   <div>
                     <h2>Session Cost Analysis</h2>
-                    <span className="usage-section-header-note">Inspect estimated cost by persisted session, or group sessions by template or status.</span>
+                    <span className="usage-section-header-note">Inspect estimated cost by persisted session, or group sessions by model, template, or status.</span>
                   </div>
                   <span>{filteredCostSessionRollups.length} sessions match</span>
                 </div>
@@ -1103,6 +1297,77 @@ export default function UsageStatsView() {
 
                 {filteredCostSessionRollups.length === 0 ? (
                   <div className="usage-section-empty">No persisted sessions match the current filters yet.</div>
+                ) : costSessionGroupBy === 'model' ? (
+                  <div className="usage-list-table">
+                    {costSessionModelGroups.map((group) => {
+                      const groupId = `cost-model:${group.key}`
+                      const groupExpanded = expandedUsageGroups[groupId] === true
+                      const groupCost = getModelGroupCost(group, pricingForTemplate)
+
+                      return (
+                        <div key={group.key} className={`usage-model-group ${groupExpanded ? 'open' : ''}`}>
+                          <button
+                            type="button"
+                            className="usage-model-group-header"
+                            aria-expanded={groupExpanded}
+                            onClick={() => toggleUsageGroup(groupId)}
+                          >
+                            <span className="usage-model-group-icon">{groupExpanded ? <FolderOpen size={15} /> : <Folder size={15} />}</span>
+                            <span className="usage-model-group-title">
+                              <span className="usage-list-title">{group.label}</span>
+                              <span className="usage-list-subtitle">{pluralize(group.templateCount, 'template')} • {pluralize(group.sessionCount, 'session')}</span>
+                            </span>
+                            <span className="usage-list-metrics">
+                              <span>{formatNumber(group.requestCount)} requests</span>
+                              <span>{formatCost(groupCost.totalCost, appSettings.currency)} total</span>
+                              <span>{formatCost(groupCost.inputCost, appSettings.currency)} input • {formatCost(groupCost.cacheCost, appSettings.currency)} cache • {formatCost(groupCost.outputCost, appSettings.currency)} output</span>
+                              <span>{group.lastActivityAt ? `Last activity ${formatTimestamp(group.lastActivityAt)}` : 'No recent activity'}</span>
+                            </span>
+                            <ChevronDown className="usage-model-chevron" size={16} />
+                          </button>
+                          {groupExpanded && (
+                            <div className="usage-model-group-body">
+                              {group.templates.map((template) => {
+                                 const templateId = `${groupId}:${template.templateId}`
+                                 const templateExpanded = expandedUsageGroups[templateId] === true
+                                 const templatePricing = pricingForTemplate(template.templateId, template.modelPath)
+                                const templateCost = getUsageCostBreakdown(template, templatePricing)
+
+                                return (
+                                  <div key={template.templateId} className={`usage-template-row ${templateExpanded ? 'open' : ''}`}>
+                                    <button
+                                      type="button"
+                                      className="usage-template-row-header"
+                                      aria-expanded={templateExpanded}
+                                      onClick={() => toggleUsageGroup(templateId)}
+                                    >
+                                      <span className="usage-model-group-title">
+                                        <span className="usage-list-title">{template.templateName}</span>
+                                        <span className="usage-list-subtitle">{template.modelFileName ?? 'No model path snapshot'}</span>
+                                      </span>
+                                      <span className="usage-list-metrics">
+                                        <span>{pluralize(template.sessionCount, 'session')}</span>
+                                        <span>{formatNumber(template.requestCount)} requests</span>
+                                        <span>{formatCost(templateCost.totalCost, templatePricing.currency)} total</span>
+                                        <span>{formatCost(templateCost.inputCost, templatePricing.currency)} input • {formatCost(templateCost.cacheCost, templatePricing.currency)} cache • {formatCost(templateCost.outputCost, templatePricing.currency)} output</span>
+                                        <span>{template.lastActivityAt ? `Last activity ${formatTimestamp(template.lastActivityAt)}` : 'No recent activity'}</span>
+                                      </span>
+                                      <ChevronDown className="usage-model-chevron" size={14} />
+                                    </button>
+                                    {templateExpanded && (
+                                      <div className="usage-template-row-body">
+                                        <NestedSessionTable sessions={template.sessions} showCost pricingFor={pricingForTemplate} />
+                                      </div>
+                                    )}
+                                  </div>
+                                )
+                              })}
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })}
+                  </div>
                 ) : costSessionGroupBy === 'none' ? (
                   <div className="usage-request-table-wrapper">
                     <table className="usage-request-table usage-session-table">
@@ -1118,7 +1383,7 @@ export default function UsageStatsView() {
                       </thead>
                       <tbody>
                         {filteredCostSessionRollups.map((session) => {
-                          const sessionPricing = pricingForTemplate(session.templateId)
+                          const sessionPricing = pricingForTemplate(session.templateId, session.modelPath)
                           const sessionCost = getUsageCostBreakdown(session, sessionPricing)
 
                           return (
@@ -1182,22 +1447,110 @@ export default function UsageStatsView() {
               <div className="usage-rollups-grid">
                 <section className="usage-section">
                   <div className="usage-section-header">
-                    <h2>Template Costs</h2>
-                    <span>{snapshot.templateRollups.length} template rows</span>
+                    <div className="usage-section-header-start">
+                      <h2>{costTemplateSectionGroupBy === 'model' ? 'Model Costs' : 'Template Costs'}</h2>
+                      <div className="usage-mini-toggle" role="group" aria-label="Group template costs by">
+                        <button
+                          type="button"
+                          className={costTemplateSectionGroupBy === 'model' ? 'active' : ''}
+                          onClick={() => setCostTemplateSectionGroupBy('model')}
+                        >
+                          Model
+                        </button>
+                        <button
+                          type="button"
+                          className={costTemplateSectionGroupBy === 'template' ? 'active' : ''}
+                          onClick={() => setCostTemplateSectionGroupBy('template')}
+                        >
+                          Template
+                        </button>
+                      </div>
+                    </div>
+                    <span>
+                      {costTemplateSectionGroupBy === 'model'
+                        ? `${pluralize(costTemplateModelGroups.length, 'model')} • ${pluralize(snapshot.templateRollups.length, 'template')}`
+                        : `${snapshot.templateRollups.length} template rows`}
+                    </span>
                   </div>
                   {snapshot.templateRollups.length === 0 ? (
                     <div className="usage-section-empty">No matching historical usage for the selected filter.</div>
+                  ) : costTemplateSectionGroupBy === 'model' ? (
+                    <div className="usage-list-table">
+                      {costTemplateModelGroups.map((group) => {
+                        const groupId = `cost-model-row:${group.key}`
+                        const groupExpanded = expandedUsageGroups[groupId] === true
+                        const groupCost = group.templates.reduce((total, rollup) => {
+                          const rollupCost = getUsageCostBreakdown(rollup, pricingForTemplate(rollup.templateId, rollup.modelPath))
+                          return {
+                            inputCost: total.inputCost + rollupCost.inputCost,
+                            cacheCost: total.cacheCost + rollupCost.cacheCost,
+                            outputCost: total.outputCost + rollupCost.outputCost,
+                            totalCost: total.totalCost + rollupCost.totalCost
+                          }
+                        }, { inputCost: 0, cacheCost: 0, outputCost: 0, totalCost: 0 })
+
+                        return (
+                          <div key={group.key} className={`usage-model-group ${groupExpanded ? 'open' : ''}`}>
+                            <button
+                              type="button"
+                              className="usage-model-group-header"
+                              aria-expanded={groupExpanded}
+                              onClick={() => toggleUsageGroup(groupId)}
+                            >
+                              <span className="usage-model-group-icon">{groupExpanded ? <FolderOpen size={15} /> : <Folder size={15} />}</span>
+                              <span className="usage-model-group-title">
+                                <span className="usage-list-title">{group.label}</span>
+                                <span className="usage-list-subtitle">{pluralize(group.templateCount, 'template')}</span>
+                              </span>
+                              <span className="usage-list-metrics">
+                                <span>{formatNumber(group.requestCount)} requests</span>
+                                <span>{formatCost(groupCost.totalCost, appSettings.currency)} total</span>
+                                <span>{formatCost(groupCost.inputCost, appSettings.currency)} input • {formatCost(groupCost.cacheCost, appSettings.currency)} cache • {formatCost(groupCost.outputCost, appSettings.currency)} output</span>
+                                <span>{formatNumber(group.totalTokens)} tokens</span>
+                                <span>{group.lastRequestAt ? formatTimestamp(group.lastRequestAt) : 'No recent activity'}</span>
+                              </span>
+                              <ChevronDown className="usage-model-chevron" size={16} />
+                            </button>
+                            {groupExpanded && (
+                              <div className="usage-model-group-body">
+                                {group.templates.map((rollup) => {
+                                  const rollupPricing = pricingForTemplate(rollup.templateId, rollup.modelPath)
+                                  const rollupCost = getUsageCostBreakdown(rollup, rollupPricing)
+
+                                  return (
+                                    <div className="usage-template-row" key={rollup.templateId}>
+                                      <div className="usage-template-row-header usage-template-row-static">
+                                        <span className="usage-model-group-title">
+                                          <span className="usage-list-title">{rollup.templateName}</span>
+                                          <span className="usage-list-subtitle">{getModelFileName(rollup.modelPath) ?? 'No model path snapshot'}</span>
+                                        </span>
+                                        <span className="usage-list-metrics">
+                                          <span>{formatNumber(rollup.requestCount)} requests</span>
+                                          <span>{formatCost(rollupCost.totalCost, rollupPricing.currency)} total</span>
+                                          <span>{formatCost(rollupCost.inputCost, rollupPricing.currency)} input • {formatCost(rollupCost.cacheCost, rollupPricing.currency)} cache • {formatCost(rollupCost.outputCost, rollupPricing.currency)} output</span>
+                                          <span>{rollup.lastRequestAt ? formatTimestamp(rollup.lastRequestAt) : 'No recent activity'}</span>
+                                        </span>
+                                      </div>
+                                    </div>
+                                  )
+                                })}
+                              </div>
+                            )}
+                          </div>
+                        )
+                      })}
+                    </div>
                   ) : (
                     <div className="usage-list-table">
                       {snapshot.templateRollups.map((rollup) => {
-                        const rollupPricing = pricingForTemplate(rollup.templateId)
+                        const rollupPricing = pricingForTemplate(rollup.templateId, rollup.modelPath)
                         const rollupCost = getUsageCostBreakdown(rollup, rollupPricing)
 
                         return (
                           <div className="usage-list-row" key={rollup.templateId}>
                             <div>
                               <div className="usage-list-title">{rollup.templateName}</div>
-                              <div className="usage-list-subtitle">{rollup.modelPath?.split(/[/\\]/).pop() || 'No model path snapshot'}</div>
+                              <div className="usage-list-subtitle">{getModelFileName(rollup.modelPath) ?? 'No model path snapshot'}</div>
                             </div>
                             <div className="usage-list-metrics">
                               <span>{formatNumber(rollup.requestCount)} requests</span>
@@ -1266,7 +1619,7 @@ export default function UsageStatsView() {
                       </thead>
                       <tbody>
                         {snapshot.recentRequests.map((record) => {
-                          const requestPricing = pricingForTemplate(record.templateId)
+                          const requestPricing = pricingForTemplate(record.templateId, record.modelPathSnapshot)
                           const requestCost = record.countedExactly ? getUsageCostBreakdown(record, requestPricing) : null
 
                           return (

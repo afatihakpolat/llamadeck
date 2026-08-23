@@ -166,11 +166,21 @@ export interface UsageStatsSnapshot {
 export interface UsageUpdatedEvent {
   at: string
 }
+// One model-level pricing override, keyed by the model folder name (the leaf
+// folder holding the model's GGUF files — the same identity the Templates
+// screen and Usage Stats model grouping use). Matching is case-insensitive.
+export interface ModelPricing {
+  model: string
+  inputCostPerMillion: number
+  cacheCostPerMillion: number
+  outputCostPerMillion: number
+}
 export interface UsageCostSettings {
   currency: string
   inputCostPerMillion: number
   cacheCostPerMillion: number
   outputCostPerMillion: number
+  modelPricing: ModelPricing[]
 }
 export interface AppWindowBehaviorSettings {
   minimizeToTray: boolean

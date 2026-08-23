@@ -1713,6 +1713,133 @@ input, textarea, select, pre {
   border-radius: 14px;
   padding: 14px 16px;
 }
+.usage-section-header-start {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+.usage-mini-toggle {
+  display: inline-flex;
+  gap: 2px;
+  flex-shrink: 0;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 2px;
+  background: var(--bg);
+}
+.usage-mini-toggle button {
+  border: 0;
+  background: transparent;
+  color: var(--text-secondary);
+  font-family: var(--font);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  padding: 4px 11px;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: background var(--transition), color var(--transition);
+}
+.usage-mini-toggle button:hover {
+  color: var(--text);
+}
+.usage-mini-toggle button.active {
+  background: var(--accent);
+  color: var(--accent-fg);
+}
+.usage-mini-toggle button.active:hover {
+  color: var(--accent-fg);
+}
+.usage-model-group {
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface);
+  overflow: hidden;
+}
+.usage-model-group.open {
+  border-color: var(--border-strong);
+}
+.usage-model-group-header,
+.usage-template-row-header {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font-family: var(--font);
+  text-align: left;
+  cursor: pointer;
+}
+.usage-model-group-header {
+  padding: 14px 16px;
+}
+.usage-template-row-header {
+  padding: 11px 14px;
+}
+.usage-model-group-header:hover,
+.usage-template-row-header:hover {
+  background: var(--surface-hover);
+}
+.usage-model-group-header:focus-visible,
+.usage-template-row-header:focus-visible,
+.usage-mini-toggle button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+.usage-model-group-icon,
+.usage-model-chevron {
+  flex-shrink: 0;
+  color: var(--text-secondary);
+}
+.usage-model-chevron {
+  transition: transform var(--transition);
+}
+.usage-model-group.open > .usage-model-group-header .usage-model-chevron,
+.usage-template-row.open > .usage-template-row-header .usage-model-chevron {
+  transform: rotate(180deg);
+}
+.usage-model-group-title {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+.usage-model-group-title .usage-list-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.usage-model-group-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  border-top: 1px solid var(--border);
+  background: var(--bg);
+}
+.usage-template-row {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+}
+.usage-template-row.open {
+  border-color: var(--border-strong);
+}
+.usage-template-row-body {
+  padding: 12px;
+  border-top: 1px solid var(--border);
+  background: var(--surface);
+}
+.usage-template-row-header.usage-template-row-static {
+  cursor: default;
+}
+.usage-template-row-header.usage-template-row-static:hover {
+  background: transparent;
+}
 .usage-request-table-wrapper {
   overflow-x: auto;
 }

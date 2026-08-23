@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'fs'
 import { dirname, join } from 'path'
 import { z } from 'zod'
-import type { AppWindowBehaviorSettings, UsageCostSettings } from '../shared/types'
+import type { AppWindowBehaviorSettings, ModelPricing, UsageCostSettings } from '../shared/types'
 import { USER_DATA_ROOT } from './userData'
 
 const APP_WINDOW_SETTINGS_FILE = join(USER_DATA_ROOT, 'app-window-settings.json')
@@ -19,8 +19,13 @@ const DEFAULT_USAGE_COST_SETTINGS: UsageCostSettings = {
   currency: 'USD',
   inputCostPerMillion: 0,
   cacheCostPerMillion: 0,
-  outputCostPerMillion: 0
+  outputCostPerMillion: 0,
+  modelPricing: []
 }
+
+// Model names are folder names in practice; the cap only guards against
+// hand-edited settings files holding unreasonably long strings.
+const MODEL_PRICING_NAME_MAX_LENGTH = 200
 
 function ensureSettingsDirectory(settingsFilePath: string): void {
   const settingsDir = dirname(settingsFilePath)
@@ -76,6 +81,35 @@ function normalizeCurrency(value: unknown): string {
   return normalized || DEFAULT_USAGE_COST_SETTINGS.currency
 }
 
+// On-disk model pricing is normalized defensively: malformed entries are
+// dropped, names are trimmed and capped, case-insensitive duplicates keep the
+// first occurrence, and negative/invalid rates clamp to 0.
+function normalizeModelPricing(value: unknown): ModelPricing[] {
+  if (!Array.isArray(value)) return []
+
+  const seen = new Set<string>()
+  const normalized: ModelPricing[] = []
+  for (const entry of value) {
+    if (typeof entry !== 'object' || entry === null) continue
+
+    const record = entry as Record<string, unknown>
+    const model = typeof record.model === 'string' ? record.model.trim() : ''
+    if (!model || model.length > MODEL_PRICING_NAME_MAX_LENGTH) continue
+
+    const key = model.toLowerCase()
+    if (seen.has(key)) continue
+    seen.add(key)
+
+    normalized.push({
+      model,
+      inputCostPerMillion: normalizeNonNegativeNumber(record.inputCostPerMillion, 0),
+      cacheCostPerMillion: normalizeNonNegativeNumber(record.cacheCostPerMillion, 0),
+      outputCostPerMillion: normalizeNonNegativeNumber(record.outputCostPerMillion, 0)
+    })
+  }
+  return normalized
+}
+
 export function getUsageCostSettings(): UsageCostSettings {
   try {
     if (!existsSync(USAGE_COST_SETTINGS_FILE)) {
@@ -88,10 +122,11 @@ export function getUsageCostSettings(): UsageCostSettings {
       currency: normalizeCurrency(parsed.currency),
       inputCostPerMillion: normalizeNonNegativeNumber(parsed.inputCostPerMillion, DEFAULT_USAGE_COST_SETTINGS.inputCostPerMillion),
       cacheCostPerMillion: normalizeNonNegativeNumber(parsed.cacheCostPerMillion, DEFAULT_USAGE_COST_SETTINGS.cacheCostPerMillion),
-      outputCostPerMillion: normalizeNonNegativeNumber(parsed.outputCostPerMillion, DEFAULT_USAGE_COST_SETTINGS.outputCostPerMillion)
+      outputCostPerMillion: normalizeNonNegativeNumber(parsed.outputCostPerMillion, DEFAULT_USAGE_COST_SETTINGS.outputCostPerMillion),
+      modelPricing: normalizeModelPricing(parsed.modelPricing)
     }
   } catch {
-    return { ...DEFAULT_USAGE_COST_SETTINGS }
+    return { ...DEFAULT_USAGE_COST_SETTINGS, modelPricing: [] }
   }
 }
 
@@ -101,7 +136,13 @@ export function saveUsageCostSettings(nextSettings: Partial<UsageCostSettings>):
     currency: normalizeCurrency(nextSettings.currency ?? currentSettings.currency),
     inputCostPerMillion: normalizeNonNegativeNumber(nextSettings.inputCostPerMillion, currentSettings.inputCostPerMillion),
     cacheCostPerMillion: normalizeNonNegativeNumber(nextSettings.cacheCostPerMillion, currentSettings.cacheCostPerMillion),
-    outputCostPerMillion: normalizeNonNegativeNumber(nextSettings.outputCostPerMillion, currentSettings.outputCostPerMillion)
+    outputCostPerMillion: normalizeNonNegativeNumber(nextSettings.outputCostPerMillion, currentSettings.outputCostPerMillion),
+    // A save without a modelPricing key preserves the stored model overrides
+    // (the app-wide section and the model section save independently); a key
+    // present on the caller's side replaces the whole list.
+    modelPricing: nextSettings.modelPricing === undefined
+      ? currentSettings.modelPricing
+      : normalizeModelPricing(nextSettings.modelPricing)
   }
 
   ensureSettingsDirectory(USAGE_COST_SETTINGS_FILE)
