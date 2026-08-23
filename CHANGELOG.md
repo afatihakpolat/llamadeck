@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.6.1] - 2026-08-22
+
 ### Added
 - Usage Stats is now organized by model: sessions, template usage, and costs group by the model folder (the same grouping the Templates screen uses), so all quantizations of one model are treated as a single model with per-template and per-session details available on expand. Model grouping is the default view, and the previous per-template views remain selectable.
 - Pricing is now defined per model: the Pricing tab lists every model folder among your templates, and a saved rate set applies to all quantizations/templates in that folder — no more repeating the same rates per template. Model rates flow through all cost figures in Usage Stats, and app-wide defaults remain the fallback for models without an override. Previously saved per-template rates are respected for models that have no model-level rate.
