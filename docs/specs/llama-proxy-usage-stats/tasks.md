@@ -11,5 +11,6 @@
 - DONE: Added shared `UsageCostSettings` types plus main-process persistence for app-wide cost settings and exposed get/save IPC methods through preload and renderer typings.
 - DONE: Added a `Cost` tab inside `src/renderer/src/components/UsageStatsView.tsx` that lets the user define input/cache/output rates and derives cost analysis from the existing summary, session, template, day, and recent-request rollups.
 - IN_PROGRESS: Validate the pricing flow with `npm run build` and a manual smoke test that changes rates, reloads the app, and confirms persisted settings plus recalculated cost totals.
-- IN_PROGRESS: Add the smallest viable automated tests for port rewriting, response extraction, ledger aggregation, and proxy forwarding behavior, then complete a manual API smoke test in the running app.
+- DONE: Added automated coverage for response extraction, query-bearing endpoint tracking, fragmented streaming usage, bounded large responses, proxy backpressure/disconnect behavior, and asynchronous coalesced session persistence.
+- IN_PROGRESS: Add focused coverage for the remaining port/legacy-ledger helpers and complete a manual API smoke test against a real llama.cpp server in the running app.
 - DONE: Updated `docs/HANDOFF.md` and `docs/specs/llama-proxy-usage-stats/implementation-notes.md` with implementation findings, open issues, and the next recommended execution step.

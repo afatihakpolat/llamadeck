@@ -30,9 +30,9 @@ import {
   finalizePersistedSession,
   loadUsageSessions,
   migrateLegacyUsageLedger,
-  saveUsageSession,
   type UsagePersistedSession
 } from './usageSessions'
+import { UsageSessionWriter } from './usageSessionWriter'
 import type {
   AppWindowBehaviorSettings,
   BackendVersion,
@@ -1136,6 +1136,8 @@ export async function shutdownManagedProcesses(): Promise<void> {
     await killProcessTree(liteLlmProxyProcess.pid)
     liteLlmProxyProcess = null
   }
+
+  await usageSessionWriter.flush()
 }
 
 function isSafePath(base: string, target: string): boolean {
@@ -1547,6 +1549,9 @@ const persistedUsageSessions = new Map<string, UsagePersistedSession>(
 )
 const recentUsageRequests: UsageRequestRecord[] = []
 const liveUsageSessions = new Map<string, UsageLiveSession>()
+const usageSessionWriter = new UsageSessionWriter(USAGE_SESSIONS_DIR, {
+  onError: (error, context) => reportUsageSessionWriteFailure(error, context.templateId)
+})
 
 function broadcastToRenderer(channel: string, payload: unknown): void {
   BrowserWindow.getAllWindows().forEach((win) => {
@@ -1601,19 +1606,23 @@ function getLiveUsageSessions(): UsageLiveSession[] {
   return Array.from(liveUsageSessions.values())
 }
 
+function reportUsageSessionWriteFailure(error: unknown, templateId?: string): void {
+  console.error('[usage-session] failed to persist session:', error)
+  if (templateId) {
+    broadcastModelOutput({
+      id: templateId,
+      stream: 'system',
+      text: `Usage session write failed: ${error instanceof Error ? error.message : String(error)}\n`,
+      timestamp: new Date().toISOString()
+    })
+  }
+}
+
 function persistUsageSession(session: UsagePersistedSession, templateId?: string): void {
   try {
-    saveUsageSession(USAGE_SESSIONS_DIR, session)
+    usageSessionWriter.enqueue(session)
   } catch (error) {
-    console.error('[usage-session] failed to persist session:', error)
-    if (templateId) {
-      broadcastModelOutput({
-        id: templateId,
-        stream: 'system',
-        text: `Usage session write failed: ${error instanceof Error ? error.message : String(error)}\n`,
-        timestamp: new Date().toISOString()
-      })
-    }
+    reportUsageSessionWriteFailure(error, templateId ?? session.templateId)
   }
 }
 
@@ -1814,6 +1823,7 @@ async function startRunningModel(opts: RunModelOptions): Promise<RunModelResult>
       runningProcesses.delete(opts.id)
       await stopProxyRuntime(opts.id)
       finalizeUsageSession(opts.id, 'error', message)
+      await usageSessionWriter.flush()
       broadcastToRenderer('model-error', { id: opts.id, error: message })
     })
     runningProcesses.set(opts.id, proc)
@@ -1856,6 +1866,7 @@ async function startRunningModel(opts: RunModelOptions): Promise<RunModelResult>
       runningProcesses.delete(opts.id)
       await stopProxyRuntime(opts.id)
       finalizeUsageSession(opts.id, code !== null && code !== 0 ? 'error' : signal ? 'error' : 'stopped')
+      await usageSessionWriter.flush()
       emitOutput('system', `Process exited${code !== null ? ` with code ${code}` : ''}${signal ? ` (${signal})` : ''}.\n`)
       broadcastModelExit({
         id: opts.id,
@@ -1893,6 +1904,7 @@ async function stopRunningModel(id: string): Promise<void> {
   try {
     await stopProxyRuntime(id)
     finalizeUsageSession(id, 'stopped')
+    await usageSessionWriter.flush()
     if (typeof proc.pid === 'number') {
       await killProcessTree(proc.pid)
     } else {

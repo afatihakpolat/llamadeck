@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.6.5] - 2026-08-30
+
+### Fixed
+- Model API streaming now stays memory-bounded when clients are slow or disconnect, and abandoned requests stop upstream generation instead of continuing in the background.
+- Usage accounting now recognizes supported endpoints with query parameters and persists request totals without blocking the app's interface.
+
 ## [1.6.4] - 2026-08-30
 
 ### Fixed

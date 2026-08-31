@@ -1,5 +1,6 @@
 import { randomUUID } from 'crypto'
 import http, { type IncomingMessage, type Server, type ServerResponse } from 'http'
+import { StringDecoder } from 'string_decoder'
 import type { UsageRequestRecord, UsageTimingSnapshot } from '../shared/types'
 
 interface ProxyUsageContext {
@@ -54,6 +55,12 @@ const EXACT_USAGE_PATHS = new Set([
   '/v1/completions',
   '/v1/responses'
 ])
+
+const MAX_NON_STREAM_USAGE_BYTES = 8 * 1024 * 1024
+const MAX_NON_STREAM_USAGE_TAIL_BYTES = 512 * 1024
+const MAX_SSE_EVENT_CHARACTERS = 256 * 1024
+const SSE_BOUNDARY_LOOKBEHIND_CHARACTERS = 3
+const SSE_EVENT_BOUNDARY_PATTERN = /\r?\n\r?\n/
 
 function shouldTrackRequest(pathname: string): boolean {
   return TRACKED_PATHS.has(pathname)
@@ -197,41 +204,235 @@ function buildProxyErrorRecord(context: ProxyUsageContext, method: string, pathn
   }
 }
 
-function parseSseUsage(text: string): ExtractedUsage {
-  const usage: ExtractedUsage = {
+function emptyExtractedUsage(): ExtractedUsage {
+  return {
     countedExactly: false,
     promptTokens: 0,
     cacheTokens: 0,
     completionTokens: 0,
     totalTokens: 0
   }
+}
 
-  const events = text.split(/\r?\n\r?\n/)
-  for (const eventText of events) {
-    const payload = eventText
-      .split(/\r?\n/)
-      .filter((line) => line.startsWith('data:'))
-      .map((line) => line.slice(5).trim())
-      .join('')
+function extractSseEventUsage(eventText: string): ExtractedUsage | null {
+  const payload = eventText
+    .split(/\r?\n/)
+    .filter((line) => line.startsWith('data:'))
+    .map((line) => line.slice(5).trim())
+    .join('')
 
-    if (!payload || payload === '[DONE]') {
+  if (!payload || payload === '[DONE]' || (!payload.includes('"usage"') && !payload.includes('"timings"'))) {
+    return null
+  }
+
+  try {
+    const extracted = extractUsage(JSON.parse(payload))
+    return extracted.countedExactly || extracted.timings ? extracted : null
+  } catch {
+    return null
+  }
+}
+
+class SseUsageCollector {
+  private readonly decoder = new StringDecoder('utf8')
+  private readonly usage = emptyExtractedUsage()
+  private buffer = ''
+  private droppingOversizedEvent = false
+
+  add(chunk: Buffer): void {
+    this.processText(this.decoder.write(chunk), false)
+  }
+
+  finish(): ExtractedUsage {
+    this.processText(this.decoder.end(), true)
+    return this.usage
+  }
+
+  private processText(text: string, flush: boolean): void {
+    this.buffer += text
+
+    while (this.buffer.length > 0) {
+      const boundary = SSE_EVENT_BOUNDARY_PATTERN.exec(this.buffer)
+      if (!boundary || boundary.index === undefined) {
+        if (flush) {
+          if (!this.droppingOversizedEvent && this.buffer.length <= MAX_SSE_EVENT_CHARACTERS) {
+            this.captureUsage(this.buffer)
+          }
+          this.buffer = ''
+          this.droppingOversizedEvent = false
+        } else if (this.buffer.length > MAX_SSE_EVENT_CHARACTERS) {
+          this.buffer = this.buffer.slice(-SSE_BOUNDARY_LOOKBEHIND_CHARACTERS)
+          this.droppingOversizedEvent = true
+        }
+        return
+      }
+
+      const eventText = this.buffer.slice(0, boundary.index)
+      this.buffer = this.buffer.slice(boundary.index + boundary[0].length)
+      if (!this.droppingOversizedEvent && eventText.length <= MAX_SSE_EVENT_CHARACTERS) {
+        this.captureUsage(eventText)
+      }
+      this.droppingOversizedEvent = false
+    }
+  }
+
+  private captureUsage(eventText: string): void {
+    const extracted = extractSseEventUsage(eventText)
+    if (!extracted) return
+
+    this.usage.countedExactly = extracted.countedExactly
+    this.usage.promptTokens = extracted.promptTokens
+    this.usage.cacheTokens = extracted.cacheTokens
+    this.usage.completionTokens = extracted.completionTokens
+    this.usage.totalTokens = extracted.totalTokens
+    this.usage.timings = extracted.timings
+  }
+}
+
+function isEscapedJsonQuote(text: string, quoteIndex: number): boolean {
+  let backslashCount = 0
+  for (let index = quoteIndex - 1; index >= 0 && text[index] === '\\'; index -= 1) {
+    backslashCount += 1
+  }
+  return backslashCount % 2 === 1
+}
+
+function findJsonObjectEnd(text: string, objectStart: number): number | null {
+  let depth = 0
+  let inString = false
+  let escaped = false
+
+  for (let index = objectStart; index < text.length; index += 1) {
+    const character = text[index]
+    if (inString) {
+      if (escaped) {
+        escaped = false
+      } else if (character === '\\') {
+        escaped = true
+      } else if (character === '"') {
+        inString = false
+      }
       continue
     }
 
-    try {
-      const extracted = extractUsage(JSON.parse(payload))
-      if (extracted.countedExactly || extracted.timings) {
-        usage.countedExactly = extracted.countedExactly
-        usage.promptTokens = extracted.promptTokens
-        usage.cacheTokens = extracted.cacheTokens
-        usage.completionTokens = extracted.completionTokens
-        usage.totalTokens = extracted.totalTokens
-        usage.timings = extracted.timings
-      }
-    } catch {}
+    if (character === '"') {
+      inString = true
+    } else if (character === '{') {
+      depth += 1
+    } else if (character === '}') {
+      depth -= 1
+      if (depth === 0) return index + 1
+    }
   }
 
-  return usage
+  return null
+}
+
+function extractJsonObjectProperty(text: string, propertyName: string): Record<string, unknown> | null {
+  const propertyToken = `"${propertyName}"`
+  let propertyIndex = text.lastIndexOf(propertyToken)
+
+  while (propertyIndex >= 0) {
+    if (!isEscapedJsonQuote(text, propertyIndex)) {
+      let valueStart = propertyIndex + propertyToken.length
+      while (/\s/.test(text[valueStart] ?? '')) valueStart += 1
+      if (text[valueStart] === ':') {
+        valueStart += 1
+        while (/\s/.test(text[valueStart] ?? '')) valueStart += 1
+        if (text[valueStart] === '{') {
+          const valueEnd = findJsonObjectEnd(text, valueStart)
+          if (valueEnd !== null) {
+            try {
+              const value = JSON.parse(text.slice(valueStart, valueEnd))
+              return asRecord(value)
+            } catch {}
+          }
+        }
+      }
+    }
+
+    propertyIndex = text.lastIndexOf(propertyToken, propertyIndex - 1)
+  }
+
+  return null
+}
+
+function extractUsageFromJsonTail(tail: Buffer): ExtractedUsage {
+  const text = tail.toString('utf-8')
+  const usage = extractJsonObjectProperty(text, 'usage')
+  const timings = extractJsonObjectProperty(text, 'timings')
+  return usage || timings ? extractUsage({ usage, timings }) : emptyExtractedUsage()
+}
+
+class ResponseUsageCollector {
+  private readonly sseCollector: SseUsageCollector | null
+  private chunks: Buffer[] = []
+  private tail = Buffer.alloc(0)
+  private capturedBytes = 0
+  private captureExceeded = false
+
+  constructor(stream: boolean) {
+    this.sseCollector = stream ? new SseUsageCollector() : null
+  }
+
+  add(chunk: Buffer): void {
+    if (this.sseCollector) {
+      this.sseCollector.add(chunk)
+      return
+    }
+
+    if (this.captureExceeded) {
+      this.appendToTail(chunk)
+      return
+    }
+    if (this.capturedBytes + chunk.length > MAX_NON_STREAM_USAGE_BYTES) {
+      const captured = Buffer.concat([...this.chunks, chunk], this.capturedBytes + chunk.length)
+      this.tail = Buffer.from(captured.subarray(Math.max(0, captured.length - MAX_NON_STREAM_USAGE_TAIL_BYTES)))
+      this.chunks = []
+      this.capturedBytes = 0
+      this.captureExceeded = true
+      return
+    }
+
+    this.chunks.push(chunk)
+    this.capturedBytes += chunk.length
+  }
+
+  finish(): ExtractedUsage {
+    if (this.sseCollector) return this.sseCollector.finish()
+    if (this.captureExceeded) return extractUsageFromJsonTail(this.tail)
+
+    const chunks = this.chunks
+    const capturedBytes = this.capturedBytes
+    this.chunks = []
+    this.capturedBytes = 0
+
+    try {
+      return extractUsage(JSON.parse(Buffer.concat(chunks, capturedBytes).toString('utf-8') || '{}'))
+    } catch {
+      return emptyExtractedUsage()
+    }
+  }
+
+  private appendToTail(chunk: Buffer): void {
+    if (chunk.length >= MAX_NON_STREAM_USAGE_TAIL_BYTES) {
+      this.tail = Buffer.from(chunk.subarray(chunk.length - MAX_NON_STREAM_USAGE_TAIL_BYTES))
+      return
+    }
+
+    const retainedTailBytes = Math.min(this.tail.length, MAX_NON_STREAM_USAGE_TAIL_BYTES - chunk.length)
+    const retainedTail = this.tail.subarray(this.tail.length - retainedTailBytes)
+    this.tail = Buffer.concat([retainedTail, chunk], retainedTailBytes + chunk.length)
+  }
+}
+
+function getRequestPathname(requestTarget: string): string {
+  try {
+    return new URL(requestTarget, 'http://127.0.0.1').pathname
+  } catch {
+    const [pathname] = requestTarget.split('?', 1)
+    return pathname || '/'
+  }
 }
 
 function writeProxyResponseHeaders(clientResponse: ServerResponse, upstreamResponse: IncomingMessage): void {
@@ -241,12 +442,18 @@ function writeProxyResponseHeaders(clientResponse: ServerResponse, upstreamRespo
 
 function createProxyServer(options: StartLlamaProxyOptions): Server {
   return http.createServer((clientRequest, clientResponse) => {
-    const pathname = clientRequest.url || '/'
+    const requestTarget = clientRequest.url || '/'
+    const pathname = getRequestPathname(requestTarget)
     const method = (clientRequest.method || 'GET').toUpperCase()
     const trackRequest = shouldTrackRequest(pathname)
     const startTimeMs = Date.now()
     const startedAt = new Date(startTimeMs).toISOString()
     let finished = false
+    let upstreamSettled = false
+    let clientDisconnected = false
+    let upstreamResponseRef: IncomingMessage | null = null
+    let finalizeTrackedResponse: ((override?: Partial<UsageRequestRecord>) => void) | null = null
+    let clearResponseBackpressure: (() => void) | null = null
 
     if (trackRequest) {
       options.onRequestStarted(pathname)
@@ -255,17 +462,19 @@ function createProxyServer(options: StartLlamaProxyOptions): Server {
     const upstreamRequest = http.request({
       hostname: options.upstreamHost,
       port: options.upstreamPort,
-      path: pathname,
+      path: requestTarget,
       method,
       headers: {
         ...clientRequest.headers,
         host: `${options.upstreamHost}:${options.upstreamPort}`
       }
     }, (upstreamResponse) => {
+      upstreamResponseRef = upstreamResponse
       const contentType = `${upstreamResponse.headers['content-type'] || ''}`.toLowerCase()
       const stream = contentType.includes('text/event-stream')
       const shouldExtractUsage = trackRequest && isExactUsagePath(method, pathname)
-      const chunks: Buffer[] = []
+      const usageCollector = shouldExtractUsage ? new ResponseUsageCollector(stream) : null
+      let waitingForDrain = false
 
       const finalizeTrackedRequest = (override: Partial<UsageRequestRecord> = {}) => {
         if (!trackRequest || finished) {
@@ -273,28 +482,7 @@ function createProxyServer(options: StartLlamaProxyOptions): Server {
         }
 
         finished = true
-        const bodyText = Buffer.concat(chunks).toString('utf-8')
-        const extracted = shouldExtractUsage
-          ? (stream ? parseSseUsage(bodyText) : (() => {
-              try {
-                return extractUsage(JSON.parse(bodyText || '{}'))
-              } catch {
-                return {
-                  countedExactly: false,
-                  promptTokens: 0,
-                  cacheTokens: 0,
-                  completionTokens: 0,
-                  totalTokens: 0
-                }
-              }
-            })())
-          : {
-              countedExactly: false,
-              promptTokens: 0,
-              cacheTokens: 0,
-              completionTokens: 0,
-              totalTokens: 0
-            }
+        const extracted = usageCollector?.finish() ?? emptyExtractedUsage()
 
         options.onRequestFinished({
           id: randomUUID(),
@@ -319,68 +507,120 @@ function createProxyServer(options: StartLlamaProxyOptions): Server {
           ...override
         })
       }
+      finalizeTrackedResponse = finalizeTrackedRequest
 
-      writeProxyResponseHeaders(clientResponse, upstreamResponse)
+      const resumeUpstream = () => {
+        waitingForDrain = false
+        if (!upstreamSettled && !clientDisconnected && !upstreamResponse.destroyed) {
+          upstreamResponse.resume()
+        }
+      }
+
+      const clearDrainWait = () => {
+        if (!waitingForDrain) return
+        waitingForDrain = false
+        clientResponse.off('drain', resumeUpstream)
+      }
+      clearResponseBackpressure = clearDrainWait
+
+      const endClientResponse = () => {
+        if (!clientResponse.destroyed && !clientResponse.writableEnded) {
+          clientResponse.end()
+        }
+      }
+
+      const settleUpstreamResponse = (error?: string) => {
+        if (upstreamSettled) return
+        upstreamSettled = true
+        clearDrainWait()
+        endClientResponse()
+        finalizeTrackedRequest(error ? { error } : {})
+      }
+
+      if (!clientResponse.destroyed) {
+        writeProxyResponseHeaders(clientResponse, upstreamResponse)
+      }
 
       upstreamResponse.on('data', (chunk: Buffer) => {
-        chunks.push(chunk)
-        clientResponse.write(chunk)
+        if (upstreamSettled) return
+        usageCollector?.add(chunk)
+        if (clientResponse.destroyed || clientResponse.writableEnded) return
+
+        if (!clientResponse.write(chunk) && !waitingForDrain) {
+          waitingForDrain = true
+          upstreamResponse.pause()
+          clientResponse.once('drain', resumeUpstream)
+        }
       })
 
       upstreamResponse.on('end', () => {
-        clientResponse.end()
-        finalizeTrackedRequest()
+        settleUpstreamResponse()
       })
 
       upstreamResponse.on('aborted', () => {
-        if (!clientResponse.writableEnded) {
-          clientResponse.end()
-        }
-        finalizeTrackedRequest({ error: 'Upstream response terminated unexpectedly.' })
+        settleUpstreamResponse('Upstream response terminated unexpectedly.')
       })
 
       upstreamResponse.on('error', (error) => {
-        if (!clientResponse.writableEnded) {
-          clientResponse.end()
-        }
-        finalizeTrackedRequest({ error: error instanceof Error ? error.message : String(error) })
+        settleUpstreamResponse(error instanceof Error ? error.message : String(error))
       })
 
       upstreamResponse.on('close', () => {
-        if (clientResponse.writableEnded || finished) {
-          return
-        }
-
-        clientResponse.end()
-        finalizeTrackedRequest({ error: 'Upstream response closed before completion.' })
+        settleUpstreamResponse('Upstream response closed before completion.')
       })
     })
 
     upstreamRequest.on('error', (error) => {
+      if (upstreamSettled) return
+      upstreamSettled = true
+      clearResponseBackpressure?.()
       const message = error instanceof Error ? error.message : String(error)
+      const errorBody = JSON.stringify({ error: { message: `Upstream request failed: ${message}` } })
 
-      if (!clientResponse.headersSent) {
+      if (!clientResponse.destroyed && !clientResponse.headersSent) {
         clientResponse.writeHead(502, { 'Content-Type': 'application/json' })
       }
-      clientResponse.end(JSON.stringify({ error: { message: `Upstream request failed: ${message}` } }))
+      if (!clientResponse.destroyed && !clientResponse.writableEnded) {
+        clientResponse.end(clientResponse.headersSent && upstreamResponseRef ? undefined : errorBody)
+      }
 
       if (!trackRequest || finished) {
         return
       }
 
-      finished = true
-      options.onRequestFinished(buildProxyErrorRecord(options, method, pathname, startedAt, startTimeMs, message))
+      if (finalizeTrackedResponse) {
+        finalizeTrackedResponse({ error: message })
+      } else {
+        finished = true
+        options.onRequestFinished(buildProxyErrorRecord(options, method, pathname, startedAt, startTimeMs, message))
+      }
+      upstreamResponseRef?.destroy()
     })
 
-    clientRequest.on('aborted', () => {
+    const handleClientDisconnect = () => {
+      if (clientDisconnected || upstreamSettled || clientResponse.writableFinished) return
+
+      clientDisconnected = true
+      upstreamSettled = true
+      clearResponseBackpressure?.()
+      const message = 'Client disconnected before the response completed.'
+
+      if (trackRequest && !finished) {
+        if (finalizeTrackedResponse) {
+          finalizeTrackedResponse({ error: message })
+        } else {
+          finished = true
+          options.onRequestFinished(buildProxyErrorRecord(options, method, pathname, startedAt, startTimeMs, message))
+        }
+      }
+
+      upstreamResponseRef?.destroy()
       upstreamRequest.destroy()
-      if (!trackRequest || finished) {
-        return
-      }
+    }
 
-      finished = true
-      options.onRequestFinished(buildProxyErrorRecord(options, method, pathname, startedAt, startTimeMs, 'Client disconnected before the response completed.'))
-    })
+    clientRequest.on('aborted', handleClientDisconnect)
+    clientResponse.on('error', handleClientDisconnect)
+    clientResponse.on('close', handleClientDisconnect)
 
     clientRequest.pipe(upstreamRequest)
   })
