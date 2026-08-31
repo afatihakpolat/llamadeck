@@ -1,6 +1,13 @@
 import React, { useState, useEffect } from 'react'
 import { ExternalLink, Copy, Check, RefreshCw } from 'lucide-react'
 
+interface AppRegionStyle extends React.CSSProperties {
+  WebkitAppRegion: 'drag' | 'no-drag'
+}
+
+const dragRegionStyle: AppRegionStyle = { WebkitAppRegion: 'drag' }
+const noDragRegionStyle: AppRegionStyle = { WebkitAppRegion: 'no-drag' }
+
 export default function ChatWindow({ url }: { url: string }) {
   const [copied, setCopied] = useState(false)
   const [showIframe, setShowIframe] = useState(false)
@@ -31,9 +38,9 @@ export default function ChatWindow({ url }: { url: string }) {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', width: '100vw', background: 'var(--bg)' }}>
-      <div style={{ height: 48, WebkitAppRegion: 'drag', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 16px', background: 'var(--card-bg)', borderBottom: '1px solid var(--border)' }}>
+      <div style={{ ...dragRegionStyle, height: 48, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 16px', background: 'var(--card-bg)', borderBottom: '1px solid var(--border)' }}>
         <div style={{ fontWeight: 600, color: 'var(--text)', fontSize: 14 }}>LlamaDeck - Llama-UI</div>
-        <div style={{ WebkitAppRegion: 'no-drag', display: 'flex', gap: 8 }}>
+        <div style={{ ...noDragRegionStyle, display: 'flex', gap: 8 }}>
           <button className="btn btn-ghost" style={{ padding: '4px 12px', fontSize: 13 }} onClick={handleReload}>
             <RefreshCw size={14} />
             Reload

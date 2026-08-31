@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react'
+import { useShallow } from 'zustand/react/shallow'
 import { useStore } from '../store/useStore'
 import { HardDrive, Download, Trash, RefreshCw, Loader2, ChevronDown, Terminal, Bell, BellOff, FolderOpen, Moon, Sun, Monitor } from 'lucide-react'
 import CommandsEditor from './CommandsEditor'
@@ -60,7 +61,26 @@ export default function SettingsView() {
     setModels, setCards, paths, setPaths, modelDownloads,
     releaseInfo, checkingUpdate, downloadProgress, setDownloadProgress, setCheckingUpdate, setReleaseInfo,
     themeMode, setThemeMode
-  } = useStore()
+  } = useStore(useShallow((state) => ({
+    backends: state.backends,
+    activeBackend: state.activeBackend,
+    setActiveBackend: state.setActiveBackend,
+    setCommandsSchema: state.setCommandsSchema,
+    setBackends: state.setBackends,
+    setModels: state.setModels,
+    setCards: state.setCards,
+    paths: state.paths,
+    setPaths: state.setPaths,
+    modelDownloads: state.modelDownloads,
+    releaseInfo: state.releaseInfo,
+    checkingUpdate: state.checkingUpdate,
+    downloadProgress: state.downloadProgress,
+    setDownloadProgress: state.setDownloadProgress,
+    setCheckingUpdate: state.setCheckingUpdate,
+    setReleaseInfo: state.setReleaseInfo,
+    themeMode: state.themeMode,
+    setThemeMode: state.setThemeMode
+  })))
   const [updatingSource, setUpdatingSource] = useState(false)
   const [expandedEditor, setExpandedEditor] = useState<string | null>(null)
   const [notifPref, setNotifPref] = useState<'banner' | 'manual'>(getNotifPref())

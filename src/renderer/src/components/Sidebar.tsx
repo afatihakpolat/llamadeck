@@ -1,4 +1,5 @@
 import React from 'react'
+import { useShallow } from 'zustand/react/shallow'
 import { useStore } from '../store/useStore'
 import { LayoutGrid, Settings, FolderOpen, HardDrive, Search, Globe, Terminal, BarChart3, Sparkles } from 'lucide-react'
 import type { BackendBuildMode } from '../../../shared/types'
@@ -10,7 +11,15 @@ function getBuildModeLabel(buildMode: BackendBuildMode | null): string {
 }
 
 export default function Sidebar() {
-  const { view, setView, backends, activeBackend, setActiveBackend, setCommandsSchema, paths } = useStore()
+  const { view, setView, backends, activeBackend, setActiveBackend, setCommandsSchema, paths } = useStore(useShallow((state) => ({
+    view: state.view,
+    setView: state.setView,
+    backends: state.backends,
+    activeBackend: state.activeBackend,
+    setActiveBackend: state.setActiveBackend,
+    setCommandsSchema: state.setCommandsSchema,
+    paths: state.paths
+  })))
 
   async function switchBackend(name: string) {
     const b = backends.find((x) => x.name === name)

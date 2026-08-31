@@ -1,4 +1,5 @@
 import React, { useEffect } from 'react'
+import { useShallow } from 'zustand/react/shallow'
 import { useStore } from './store/useStore'
 import type { ThemeMode } from './store/useStore'
 import { readStoredActiveBackendName } from './store/useStore'
@@ -20,7 +21,10 @@ import {
   LLAMADECK_STORAGE_KEYS,
   readLlamaDeckStorage
 } from './utils/storageMigration'
-import type { Template } from '../../shared/types'
+import { isCurrentModelExit } from './utils/modelLifecycle'
+import type { ModelOutputEvent, Template } from '../../shared/types'
+
+const MODEL_OUTPUT_FLUSH_INTERVAL_MS = 50
 
 function resolveThemeMode(themeMode: ThemeMode, prefersDark: boolean): 'light' | 'dark' {
   if (themeMode === 'system') {
@@ -46,28 +50,43 @@ function applyTheme(themeMode: ThemeMode): void {
 function MainApp() {
   const [loading, setLoading] = React.useState(true)
 
-  React.useEffect(() => {
-    const timer = setTimeout(() => setLoading(false), 2000)
-    return () => clearTimeout(timer)
-  }, [])
-
   const {
     view, showCreateModal, activeBackend,
     setBackends, setModels, setActiveBackend, setCommandsSchema,
     setCards, setPaths, setReleaseInfo, setCheckingUpdate,
-    setHfDownload, removeHfDownload, addCard, appendModelOutput,
+    setHfDownload, removeHfDownload,
     upsertModelDownload, removeModelDownload,
     setAppUpdateState, setAppUpdatePreferences
-  } = useStore()
+  } = useStore(useShallow((state) => ({
+    view: state.view,
+    showCreateModal: state.showCreateModal,
+    activeBackend: state.activeBackend,
+    setBackends: state.setBackends,
+    setModels: state.setModels,
+    setActiveBackend: state.setActiveBackend,
+    setCommandsSchema: state.setCommandsSchema,
+    setCards: state.setCards,
+    setPaths: state.setPaths,
+    setReleaseInfo: state.setReleaseInfo,
+    setCheckingUpdate: state.setCheckingUpdate,
+    setHfDownload: state.setHfDownload,
+    removeHfDownload: state.removeHfDownload,
+    upsertModelDownload: state.upsertModelDownload,
+    removeModelDownload: state.removeModelDownload,
+    setAppUpdateState: state.setAppUpdateState,
+    setAppUpdatePreferences: state.setAppUpdatePreferences
+  })))
 
   useEffect(() => {
     async function init() {
       try {
-        const [paths, backendsData, modelsData, persistedActiveBackendName] = await Promise.all([
+        const [paths, backendsData, modelsData, persistedActiveBackendName, templates, runningModels] = await Promise.all([
           window.api.getPaths(),
           window.api.listBackends(),
           window.api.listModels(),
-          window.api.getActiveBackendName()
+          window.api.getActiveBackendName(),
+          window.api.listTemplates(),
+          window.api.listRunningModels()
         ])
         setPaths(paths)
         setBackends(backendsData)
@@ -85,10 +104,6 @@ function MainApp() {
           const cmds = await window.api.getCommands('')
           setCommandsSchema(cmds)
         }
-        const [templates, runningModels] = await Promise.all([
-          window.api.listTemplates(),
-          window.api.listRunningModels()
-        ])
         const runningById = new Map(runningModels.map((runningModel) => [runningModel.id, runningModel]))
         setCards(
           (templates as Template[]).map((t) => ({
@@ -100,8 +115,10 @@ function MainApp() {
         )
       } catch (e) {
         console.error('Init error:', e)
+      } finally {
+        setLoading(false)
       }
-      checkUpdates()
+      void checkUpdates()
     }
     init()
     window.api.onModelError((data) => {
@@ -162,16 +179,39 @@ function MainApp() {
   }, [])
 
   useEffect(() => {
+    let pendingEvents: ModelOutputEvent[] = []
+    let flushTimer: number | null = null
+
+    const flushPendingEvents = () => {
+      flushTimer = null
+      if (pendingEvents.length === 0) return
+
+      const events = pendingEvents
+      pendingEvents = []
+      useStore.getState().appendModelOutputBatch(events)
+    }
+
     window.api.onModelOutput((data) => {
-      appendModelOutput(data)
+      pendingEvents.push(data)
+      if (flushTimer === null) {
+        flushTimer = window.setTimeout(flushPendingEvents, MODEL_OUTPUT_FLUSH_INTERVAL_MS)
+      }
     })
 
-    return () => window.api.removeModelOutputListener()
-  }, [appendModelOutput])
+    return () => {
+      window.api.removeModelOutputListener()
+      if (flushTimer !== null) window.clearTimeout(flushTimer)
+      flushPendingEvents()
+    }
+  }, [])
 
   useEffect(() => {
     window.api.onModelExit((data) => {
-      useStore.getState().setCardStatus(data.id, data.code && data.code !== 0 ? 'error' : 'idle')
+      const state = useStore.getState()
+      const currentCard = state.cards.find((card) => card.template.id === data.id)
+      if (!isCurrentModelExit(currentCard?.pid, data)) return
+
+      state.setCardStatus(data.id, data.code && data.code !== 0 ? 'error' : 'idle')
     })
 
     return () => window.api.removeModelExitListener()

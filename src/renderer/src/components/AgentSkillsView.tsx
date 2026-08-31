@@ -13,6 +13,7 @@ import {
   Sparkles,
   Trash2
 } from 'lucide-react'
+import type { LucideIcon } from 'lucide-react'
 import type {
   AgentHarnessId,
   AgentHarnessSnapshot,
@@ -24,7 +25,7 @@ import type {
 type BusyAction = string | null
 type Notice = { tone: 'success' | 'danger' | 'muted'; text: string }
 
-const HARNESS_ICONS: Record<AgentHarnessId, React.ComponentType<{ size?: number }>> = {
+const HARNESS_ICONS: Record<AgentHarnessId, LucideIcon> = {
   codex: Code2,
   'claude-code': Sparkles,
   'gemini-cli': Gem,

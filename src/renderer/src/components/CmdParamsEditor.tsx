@@ -52,10 +52,13 @@ interface Props {
   disabled?: boolean
 }
 export default function CmdParamsEditor({ templateId, args, onChange, modelPathFallback, serverPortFallback, disabled: disabledProp }: Props) {
-  const { commandsSchema, updateCard, cards } = useStore()
+  const commandsSchema = useStore((state) => state.commandsSchema)
+  const updateCard = useStore((state) => state.updateCard)
+  const card = useStore((state) => (
+    templateId ? state.cards.find((candidate) => candidate.template.id === templateId) : undefined
+  ))
   const [searchQuery, setSearchQuery] = useState('')
 
-  const card = templateId ? cards.find(c => c.template.id === templateId) : null
   const isRunning = card?.status === 'running'
   const disabled = disabledProp || isRunning
   const cmdPreview = useMemo(() => {
@@ -90,7 +93,7 @@ export default function CmdParamsEditor({ templateId, args, onChange, modelPathF
          parts.push(' ', <span key="arg-port" className="arg">--port</span>, ' ', <span key="val-port" className="val">{finalPort}</span>)
     }
     return parts
-  }, [args, cards, commandsSchema, templateId, modelPathFallback, serverPortFallback])
+  }, [args, card, commandsSchema, modelPathFallback, serverPortFallback])
   const filteredCategories = useMemo<DisplayCategory[]>(() => {
     if (!commandsSchema) return []
     let allCommands: CommandParam[] = []

@@ -10,12 +10,15 @@ import {
   sortLiveSessionsByRecency
 } from '../utils/titlebarSessions'
 
+const LIVE_SESSION_REFRESH_DELAY_MS = 200
+
 interface Props {
   onCheckUpdates: () => void
 }
 
 export default function Titlebar({ onCheckUpdates }: Props) {
-  const { checkingUpdate, setCardStatus } = useStore()
+  const checkingUpdate = useStore((state) => state.checkingUpdate)
+  const setCardStatus = useStore((state) => state.setCardStatus)
   const [liveSessions, setLiveSessions] = useState<UsageLiveSession[]>([])
   const [stoppingIds, setStoppingIds] = useState<Set<string>>(() => new Set())
   const [detailsOpen, setDetailsOpen] = useState(false)
@@ -25,6 +28,7 @@ export default function Titlebar({ onCheckUpdates }: Props) {
 
   useEffect(() => {
     let active = true
+    let refreshTimer: number | null = null
 
     async function loadLiveSessions() {
       try {
@@ -41,11 +45,16 @@ export default function Titlebar({ onCheckUpdates }: Props) {
 
     void loadLiveSessions()
     const unsubscribe = window.api.onUsageUpdated(() => {
-      void loadLiveSessions()
+      if (refreshTimer !== null) return
+      refreshTimer = window.setTimeout(() => {
+        refreshTimer = null
+        void loadLiveSessions()
+      }, LIVE_SESSION_REFRESH_DELAY_MS)
     })
 
     return () => {
       active = false
+      if (refreshTimer !== null) window.clearTimeout(refreshTimer)
       unsubscribe()
     }
   }, [])

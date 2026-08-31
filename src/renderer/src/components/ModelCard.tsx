@@ -1,7 +1,8 @@
-import React, { useState, useEffect, useRef } from 'react'
+import React, { memo, useState, useEffect, useMemo, useRef } from 'react'
+import { useShallow } from 'zustand/react/shallow'
 import { useStore } from '../store/useStore'
 import { buildTemplateLaunchArgs, normalizeCommandArgs } from '../../../shared/commandArgs'
-import { Play, Square, Settings, ChevronDown, MoreVertical, Copy, Trash, Download, Globe, Server } from 'lucide-react'
+import { Play, Square, Settings, ChevronDown, MoreVertical, Copy, Trash, Download, Globe, Server, Loader2 } from 'lucide-react'
 import type { CardState } from '../../../shared/types'
 import CmdParamsEditor from './CmdParamsEditor'
 
@@ -15,14 +16,30 @@ function getFileName(filePath?: string): string {
   return (filePath || '').split(/[/\\]/).pop()?.toLowerCase() || ''
 }
 
-export default function ModelCard({ card }: Props) {
-  const { toggleCardExpanded, updateCard, setCardStatus, removeCard, backends, activeBackend, commandsSchema, setShowCreateModal, models, clearModelOutput, focusModelOutput } = useStore()
+function ModelCard({ card }: Props) {
+  const { toggleCardExpanded, updateCard, setCardStatus, removeCard, backends, activeBackend, commandsSchema, setShowCreateModal, models, clearModelOutput, focusModelOutput } = useStore(useShallow((state) => ({
+    toggleCardExpanded: state.toggleCardExpanded,
+    updateCard: state.updateCard,
+    setCardStatus: state.setCardStatus,
+    removeCard: state.removeCard,
+    backends: state.backends,
+    activeBackend: state.activeBackend,
+    commandsSchema: state.commandsSchema,
+    setShowCreateModal: state.setShowCreateModal,
+    models: state.models,
+    clearModelOutput: state.clearModelOutput,
+    focusModelOutput: state.focusModelOutput
+  })))
   const [showMenu, setShowMenu] = useState(false)
+  const [runAction, setRunAction] = useState<'starting' | 'stopping' | null>(null)
   const menuRef = useRef<HTMLDivElement>(null)
   const isRunning = card.status === 'running'
   const isExpanded = card.expanded
   const launchMode = card.template.launchMode || 'chat'
-  const normalizedTemplateArgs = normalizeCommandArgs(card.template.args || {}, commandsSchema)
+  const normalizedTemplateArgs = useMemo(
+    () => normalizeCommandArgs(card.template.args || {}, commandsSchema),
+    [card.template.args, commandsSchema]
+  )
   const hasModelPath = Boolean(card.template.modelPath?.trim())
   const normalizedTemplateModelPath = normalizeModelPath(card.template.modelPath)
   const exactModelMatch = hasModelPath
@@ -68,42 +85,49 @@ export default function ModelCard({ card }: Props) {
   }, [card.template, commandsSchema, normalizedTemplateArgs, updateCard])
 
   async function handleRunToggle() {
-    if (isRunning) {
-      const res = await window.api.stopModel(card.template.id)
-      if (res.success) setCardStatus(card.template.id, 'idle')
-      else alert(`Failed to stop: ${res.error}`)
-      return
-    }
+    if (runAction) return
 
-    let targetBackend = preferredBackend
-    if (!targetBackend && activeBackend) targetBackend = activeBackend
-    if (!targetBackend || !targetBackend.exe) {
-      alert('Backend not found or has no executable.')
-      return
+    setRunAction(isRunning ? 'stopping' : 'starting')
+    try {
+      if (isRunning) {
+        const res = await window.api.stopModel(card.template.id)
+        if (res.success || res.error === 'Not running') setCardStatus(card.template.id, 'idle')
+        else alert(`Failed to stop: ${res.error}`)
+        return
+      }
+
+      let targetBackend = preferredBackend
+      if (!targetBackend && activeBackend) targetBackend = activeBackend
+      if (!targetBackend || !targetBackend.exe) {
+        alert('Backend not found or has no executable.')
+        return
+      }
+      if (!resolvedModelPath?.trim()) {
+        alert('Model file is required.')
+        return
+      }
+      const args = buildTemplateLaunchArgs(
+        { ...card.template, args: normalizedTemplateArgs, launchMode },
+        commandsSchema,
+        resolvedModelPath
+      )
+      clearModelOutput(card.template.id)
+      const res = await window.api.runModel({
+        id: card.template.id,
+        backendPath: targetBackend.path,
+        exe: targetBackend.exe,
+        args,
+        openBrowser: false,
+        port: card.template.serverPort || 8080
+      })
+      if (res.success) {
+        setCardStatus(card.template.id, 'running', res.pid)
+        focusModelOutput(card.template.id)
+      }
+      else { alert(`Failed to run: ${res.error}`); setCardStatus(card.template.id, 'error') }
+    } finally {
+      setRunAction(null)
     }
-    if (!resolvedModelPath?.trim()) {
-      alert('Model file is required.')
-      return
-    }
-    const args = buildTemplateLaunchArgs(
-      { ...card.template, args: normalizedTemplateArgs, launchMode },
-      commandsSchema,
-      resolvedModelPath
-    )
-    clearModelOutput(card.template.id)
-    const res = await window.api.runModel({
-      id: card.template.id,
-      backendPath: targetBackend.path,
-      exe: targetBackend.exe,
-      args,
-      openBrowser: false,
-      port: card.template.serverPort || 8080
-    })
-    if (res.success) {
-      setCardStatus(card.template.id, 'running', res.pid)
-      focusModelOutput(card.template.id)
-    }
-    else { alert(`Failed to run: ${res.error}`); setCardStatus(card.template.id, 'error') }
   }
   async function handleDelete() {
     if (isRunning) { alert('Please stop the model before deleting.'); return }
@@ -197,11 +221,17 @@ export default function ModelCard({ card }: Props) {
         <button
           className={`btn card-run-btn ${isRunning ? 'btn-danger' : 'btn-primary'}`}
           onClick={handleRunToggle}
-          disabled={!isRunning && !canStart}
+          disabled={runAction !== null || (!isRunning && !canStart)}
           title={!isRunning && !canStart ? 'Cannot start: local configuration is missing' : ''}
           style={isRunning && launchMode === 'chat' ? { flex: 0.5 } : {}}
         >
-          {isRunning ? <><Square size={14} /> Stop</> : <><Play size={14} /> Start</>}
+          {runAction ? (
+            <><Loader2 size={14} className="spin" /> {runAction === 'starting' ? 'Starting…' : 'Stopping…'}</>
+          ) : isRunning ? (
+            <><Square size={14} /> Stop</>
+          ) : (
+            <><Play size={14} /> Start</>
+          )}
         </button>
         {isRunning && launchMode === 'chat' && (
           <button
@@ -229,3 +259,5 @@ export default function ModelCard({ card }: Props) {
     </div>
   )
 }
+
+export default memo(ModelCard)

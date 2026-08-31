@@ -1,4 +1,5 @@
 import type { Template, BackendVersion, BackendBuildFlavor, CommandsSchema, LiteLlmInstallStatus, LiteLlmManagerSettingsInput, LiteLlmManagerSnapshot, LiteLlmModelEntry, ReleaseInfo, AppWindowBehaviorSettings, ModelExitEvent, ModelOutputEvent, ModelStartedEvent, UsageCostSettings, UsageStatsQuery, UsageStatsSnapshot, UsageUpdatedEvent, AgentHarnessId, AgentSkillsSnapshot } from '../../shared/types'
+import type { UpdatePreferences, UpdateState } from '../../shared/update'
 interface ModelFileInfo {
   name: string
   path: string
@@ -115,6 +116,13 @@ interface LlamaCppApi {
   getAppWindowBehaviorSettings: () => Promise<AppWindowBehaviorSettings>
   saveAppWindowBehaviorSettings: (settings: Partial<AppWindowBehaviorSettings>) => Promise<{ success: true; settings: AppWindowBehaviorSettings } | { success: false; error?: string }>
   saveUsageCostSettings: (settings: Partial<UsageCostSettings>) => Promise<{ success: true; settings: UsageCostSettings } | { success: false; error?: string }>
+  updateGetState: () => Promise<UpdateState>
+  updateCheck: () => Promise<{ success: true; state: UpdateState } | { success: false; error: string }>
+  updateDownload: () => Promise<{ success: boolean; error?: string }>
+  updateInstallAndRestart: () => Promise<{ success: boolean; error?: string }>
+  updateGetPreferences: () => Promise<UpdatePreferences>
+  updateSetPreferences: (preferences: UpdatePreferences) => Promise<UpdatePreferences>
+  onUpdateStateChanged: (cb: (state: UpdateState) => void) => () => void
 }
 declare global {
   interface Window { api: LlamaCppApi }

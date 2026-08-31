@@ -79,11 +79,10 @@ function CmdForm({ cmd, onChange, onDelete }: CmdFormProps) {
 }
 interface CategorySectionProps {
   cat: CommandCategory
-  catIndex: number
   onChange: (c: CommandCategory) => void
   onDelete: () => void
 }
-function CategorySection({ cat, catIndex, onChange, onDelete }: CategorySectionProps) {
+function CategorySection({ cat, onChange, onDelete }: CategorySectionProps) {
   const [open, setOpen] = useState(false)
   const [editingName, setEditingName] = useState(false)
   const [nameVal, setNameVal] = useState(cat.name)
@@ -156,7 +155,7 @@ function CategorySection({ cat, catIndex, onChange, onDelete }: CategorySectionP
   )
 }
 export default function CommandsEditor({ backendName }: { backendName: string }) {
-  const { setCommandsSchema, backends } = useStore()
+  const setCommandsSchema = useStore((state) => state.setCommandsSchema)
   const [schema, setSchema] = useState<CommandsSchema | null>(null)
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -219,7 +218,7 @@ export default function CommandsEditor({ backendName }: { backendName: string })
       </div>
       {schema.categories.map((cat, i) => (
         <CategorySection
-          key={i} cat={cat} catIndex={i}
+          key={i} cat={cat}
           onChange={c => updateCategory(i, c)}
           onDelete={() => deleteCategory(i)}
         />

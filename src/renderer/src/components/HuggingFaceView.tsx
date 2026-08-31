@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react'
+import { useShallow } from 'zustand/react/shallow'
 import { useStore } from '../store/useStore'
 import {
   Search, Download, Heart, ChevronDown, ChevronLeft,
@@ -52,7 +53,17 @@ export default function HuggingFaceView() {
     hfDownloads, setHfDownload, removeHfDownload,
     hubQuery, hubResults, hubSelectedModelId,
     setHubQuery, setHubResults, setHubSelectedModelId
-  } = useStore()
+  } = useStore(useShallow((state) => ({
+    hfDownloads: state.hfDownloads,
+    setHfDownload: state.setHfDownload,
+    removeHfDownload: state.removeHfDownload,
+    hubQuery: state.hubQuery,
+    hubResults: state.hubResults,
+    hubSelectedModelId: state.hubSelectedModelId,
+    setHubQuery: state.setHubQuery,
+    setHubResults: state.setHubResults,
+    setHubSelectedModelId: state.setHubSelectedModelId
+  })))
 
   const selectedModel = (hubResults as HfModel[]).find(m => m.id === hubSelectedModelId) ?? null
 

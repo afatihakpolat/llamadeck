@@ -4,6 +4,7 @@ import type { LiteLlmLogLevel, LiteLlmManagerSnapshot, LiteLlmModelEntry } from 
 import type { LiteLlmConfigValidation } from '../../../shared/liteLlmConfig'
 
 const LiteLlmConfigEditor = lazy(() => import('./LiteLlmConfigEditor'))
+const LITELLM_EDITOR_IDLE_TIMEOUT_MS = 500
 
 type BusyAction = 'refresh' | 'save-runtime' | 'save-config' | 'reload-config' | 'install' | 'update' | 'start' | 'stop' | 'test' | 'models' | null
 type StatusMessage = { tone: 'muted' | 'success' | 'danger'; text: string }
@@ -23,12 +24,27 @@ export default function LiteLlmView() {
   const [configDirty, setConfigDirty] = useState(false)
   const managerDraftDirtyRef = useRef(false)
   const configDirtyRef = useRef(false)
+  const managerRequestIdRef = useRef(0)
   const [liteLlmModels, setLiteLlmModels] = useState<LiteLlmModelEntry[]>([])
   const [busyAction, setBusyAction] = useState<BusyAction>(null)
   const [managerStatus, setManagerStatus] = useState<StatusMessage | null>(null)
   const [proxyStatus, setProxyStatus] = useState<StatusMessage | null>(null)
   const [configStatus, setConfigStatus] = useState<StatusMessage | null>(null)
   const [configValidation, setConfigValidation] = useState<{ source: string; result: LiteLlmConfigValidation } | null>(null)
+  const [editorReady, setEditorReady] = useState(false)
+
+  useEffect(() => {
+    if (typeof window.requestIdleCallback === 'function') {
+      const idleCallbackId = window.requestIdleCallback(
+        () => setEditorReady(true),
+        { timeout: LITELLM_EDITOR_IDLE_TIMEOUT_MS }
+      )
+      return () => window.cancelIdleCallback(idleCallbackId)
+    }
+
+    const timer = window.setTimeout(() => setEditorReady(true), 0)
+    return () => window.clearTimeout(timer)
+  }, [])
 
   function applyManagerSnapshot(snapshot: LiteLlmManagerSnapshot, syncDrafts = false) {
     setManager(snapshot)
@@ -47,8 +63,15 @@ export default function LiteLlmView() {
     }
   }
 
+  function applyAuthoritativeManagerSnapshot(snapshot: LiteLlmManagerSnapshot, syncDrafts = false) {
+    managerRequestIdRef.current += 1
+    applyManagerSnapshot(snapshot, syncDrafts)
+  }
+
   async function loadManager(syncDrafts = false) {
+    const requestId = ++managerRequestIdRef.current
     const snapshot = await window.api.getLiteLlmManager()
+    if (requestId !== managerRequestIdRef.current) return
     applyManagerSnapshot(snapshot, syncDrafts)
   }
 
@@ -88,7 +111,7 @@ export default function LiteLlmView() {
         throw new Error(result.error || 'Failed to save LiteLLM runtime settings.')
       }
 
-      applyManagerSnapshot(result.snapshot, true)
+      applyAuthoritativeManagerSnapshot(result.snapshot, true)
       setManagerStatus({ tone: 'success', text: 'LiteLLM runtime settings saved.' })
     } catch (error) {
       setManagerStatus({ tone: 'danger', text: String(error) })
@@ -116,7 +139,7 @@ export default function LiteLlmView() {
         throw new Error(result.error || 'Failed to save LiteLLM config.')
       }
 
-      setManager(result.snapshot)
+      applyAuthoritativeManagerSnapshot(result.snapshot, false)
       setConfigText(result.snapshot.configText)
       setConfigDirty(false)
       configDirtyRef.current = false
@@ -141,7 +164,7 @@ export default function LiteLlmView() {
     setBusyAction('reload-config')
     try {
       const snapshot = await window.api.getLiteLlmManager()
-      setManager(snapshot)
+      applyAuthoritativeManagerSnapshot(snapshot, false)
       setConfigText(snapshot.configText)
       setConfigDirty(false)
       configDirtyRef.current = false
@@ -161,7 +184,7 @@ export default function LiteLlmView() {
         throw new Error(result.error || (upgrade ? 'LiteLLM update failed.' : 'LiteLLM installation failed.'))
       }
 
-      applyManagerSnapshot(result.snapshot, false)
+      applyAuthoritativeManagerSnapshot(result.snapshot, false)
       setManagerStatus({ tone: 'success', text: upgrade ? 'LiteLLM updated successfully.' : 'LiteLLM installed successfully.' })
     } catch (error) {
       setManagerStatus({ tone: 'danger', text: String(error) })
@@ -179,7 +202,7 @@ export default function LiteLlmView() {
         throw new Error(result.error || `Failed to ${manager?.running ? 'stop' : 'start'} LiteLLM proxy.`)
       }
 
-      applyManagerSnapshot(result.snapshot, false)
+      applyAuthoritativeManagerSnapshot(result.snapshot, false)
       setManagerStatus({ tone: 'success', text: manager?.running ? 'LiteLLM proxy stopped.' : 'LiteLLM proxy started.' })
     } catch (error) {
       setManagerStatus({ tone: 'danger', text: String(error) })
@@ -246,12 +269,12 @@ export default function LiteLlmView() {
         <div className="settings-section-title"><Package /> Local Proxy Runtime</div>
         <div className="settings-row" style={{ borderBottom: 'none', flexDirection: 'column', alignItems: 'stretch', gap: 12 }}>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-            <span className="version-badge">{install?.installed ? `Installed${install.currentVersion ? ` · ${install.currentVersion}` : ''}` : 'Not Installed'}</span>
-            <span className={`version-badge ${manager?.running ? 'active-version' : ''}`}>{manager?.running ? `Running${manager?.pid ? ` · PID ${manager.pid}` : ''}` : 'Stopped'}</span>
+            <span className="version-badge">{manager ? (install?.installed ? `Installed${install.currentVersion ? ` · ${install.currentVersion}` : ''}` : 'Not Installed') : 'Checking installation…'}</span>
+            <span className={`version-badge ${manager?.running ? 'active-version' : ''}`}>{manager ? (manager.running ? `Running${manager.pid ? ` · PID ${manager.pid}` : ''}` : 'Stopped') : 'Checking status…'}</span>
             {install?.hasUpdate && install.latestVersion && <span className="version-badge">Update Available · {install.latestVersion}</span>}
           </div>
           <div className="settings-row-sub mono">
-            {install?.pythonCommand ? `${install.pythonCommand} · Python ${install.pythonVersion}` : 'Python 3 not detected'}
+            {manager ? (install?.pythonCommand ? `${install.pythonCommand} · Python ${install.pythonVersion}` : 'Python 3 not detected') : 'Detecting Python and LiteLLM…'}
           </div>
           {install?.error && (
             <div className="text-sm text-danger" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -408,15 +431,19 @@ export default function LiteLlmView() {
             </div>
           </div>
 
-          <Suspense fallback={<div className="litellm-editor-loading"><Loader2 size={16} className="spin" /> Loading editor…</div>}>
-            <LiteLlmConfigEditor
-              value={configText}
-              canSave={configCanSave}
-              onChange={handleConfigChange}
-              onSave={() => void handleSaveConfig()}
-              onValidationChange={(source, result) => setConfigValidation({ source, result })}
-            />
-          </Suspense>
+          {editorReady ? (
+            <Suspense fallback={<div className="litellm-editor-loading"><Loader2 size={16} className="spin" /> Loading editor…</div>}>
+              <LiteLlmConfigEditor
+                value={configText}
+                canSave={configCanSave}
+                onChange={handleConfigChange}
+                onSave={() => void handleSaveConfig()}
+                onValidationChange={(source, result) => setConfigValidation({ source, result })}
+              />
+            </Suspense>
+          ) : (
+            <div className="litellm-editor-loading"><Loader2 size={16} className="spin" /> Preparing editor…</div>
+          )}
 
           <div className="litellm-config-statusbar" aria-live="polite">
             <div className={configError ? 'is-invalid' : 'is-valid'}>

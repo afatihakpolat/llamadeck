@@ -51,6 +51,7 @@ export interface ModelExitEvent {
   id: string
   code: number | null
   signal: string | null
+  pid?: number
 }
 export interface ModelStartedEvent {
   id: string

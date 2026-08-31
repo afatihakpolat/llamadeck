@@ -72,7 +72,7 @@ function request(command: CliRequest['command'], args: string[] = []): CliReques
 }
 
 function createDependencies(): CliCommandDependencies {
-  return {
+  const dependencies: CliCommandDependencies = {
     getVersion: () => '1.2.5',
     listTemplates: () => templates,
     listRunningSessions: () => [],
@@ -104,7 +104,7 @@ function createDependencies(): CliCommandDependencies {
       errors: template.modelPath ? [] : ['Model file is required.'],
       warnings: []
     })),
-    getTemplateLogs: vi.fn((template, afterSequence) => ({
+    getTemplateLogs: vi.fn<CliCommandDependencies['getTemplateLogs']>((template, afterSequence) => ({
       id: template.id,
       name: template.name,
       events: afterSequence === 0
@@ -114,7 +114,7 @@ function createDependencies(): CliCommandDependencies {
       hasMore: false,
       running: true
     })),
-    waitForTemplateReady: vi.fn(async (template) => ({
+    waitForTemplateReady: vi.fn<CliCommandDependencies['waitForTemplateReady']>(async (template) => ({
       id: template.id,
       name: template.name,
       ready: true,
@@ -135,7 +135,7 @@ function createDependencies(): CliCommandDependencies {
     startLiteLlm: vi.fn(async () => ({ ...liteLlmStatus, running: true, pid: 456 })),
     stopLiteLlm: vi.fn(async () => liteLlmStatus),
     installLiteLlm: vi.fn(async () => ({ status: liteLlmStatus, output: 'installed' })),
-    testLiteLlm: vi.fn(async () => ({
+    testLiteLlm: vi.fn<CliCommandDependencies['testLiteLlm']>(async () => ({
       connected: true,
       modelCount: 2,
       endpoint: liteLlmStatus.endpoint
@@ -152,14 +152,14 @@ function createDependencies(): CliCommandDependencies {
       hasMore: false,
       running: true
     })),
-    getLiteLlmConfig: vi.fn(() => ({
+    getLiteLlmConfig: vi.fn<CliCommandDependencies['getLiteLlmConfig']>(() => ({
       path: 'C:\\data\\litellm-config.yaml',
       text: 'general_settings:\\n  master_key: <redacted>\\n',
       redacted: true,
       valid: true,
       diagnostics: []
     })),
-    validateLiteLlmConfig: vi.fn((configText) => ({
+    validateLiteLlmConfig: vi.fn<CliCommandDependencies['validateLiteLlmConfig']>((configText) => ({
       valid: !configText.includes('invalid'),
       diagnostics: configText.includes('invalid')
         ? [{
@@ -177,6 +177,8 @@ function createDependencies(): CliCommandDependencies {
       restartRequired: false
     }))
   }
+
+  return dependencies
 }
 
 describe('createCliCommandHandler', () => {

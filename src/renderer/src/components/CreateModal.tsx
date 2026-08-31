@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react'
+import { useShallow } from 'zustand/react/shallow'
 import { useStore } from '../store/useStore'
 import { FolderOpen, ChevronDown, Terminal, Globe, Server } from 'lucide-react'
 import type { Template } from '../../../shared/types'
@@ -40,7 +41,16 @@ function parseCommand(cmd: string): {
   return { modelPath, serverPort, args }
 }
 export default function CreateModal() {
-  const { setShowCreateModal, editingTemplate, backends, activeBackend, addCard, updateCard, models, commandsSchema } = useStore()
+  const { setShowCreateModal, editingTemplate, backends, activeBackend, addCard, updateCard, models, commandsSchema } = useStore(useShallow((state) => ({
+    setShowCreateModal: state.setShowCreateModal,
+    editingTemplate: state.editingTemplate,
+    backends: state.backends,
+    activeBackend: state.activeBackend,
+    addCard: state.addCard,
+    updateCard: state.updateCard,
+    models: state.models,
+    commandsSchema: state.commandsSchema
+  })))
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
   const [backendVersion, setBackendVersion] = useState('')

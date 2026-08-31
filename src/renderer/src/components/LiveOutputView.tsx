@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useShallow } from 'zustand/react/shallow'
 import { Terminal, Trash2 } from 'lucide-react'
 import { useStore } from '../store/useStore'
 
@@ -19,7 +20,13 @@ export default function LiveOutputView() {
     selectedModelOutputId,
     setSelectedModelOutputId,
     clearModelOutput
-  } = useStore()
+  } = useStore(useShallow((state) => ({
+    cards: state.cards,
+    modelOutput: state.modelOutput,
+    selectedModelOutputId: state.selectedModelOutputId,
+    setSelectedModelOutputId: state.setSelectedModelOutputId,
+    clearModelOutput: state.clearModelOutput
+  })))
   const viewportRef = useRef<HTMLDivElement>(null)
   const stickyRef = useRef(true)
   const [isAtBottom, setIsAtBottom] = useState(true)

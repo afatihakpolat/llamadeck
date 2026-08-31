@@ -1,4 +1,5 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useDeferredValue, useEffect, useMemo, useState } from 'react'
+import { useShallow } from 'zustand/react/shallow'
 import { useStore } from '../store/useStore'
 import ModelCard from './ModelCard'
 import { ChevronDown, Folder, FolderOpen, Plus, Search, Upload } from 'lucide-react'
@@ -15,6 +16,8 @@ import {
 } from '../utils/templateSorting'
 import { LLAMADECK_STORAGE_KEYS, readLlamaDeckStorage, writeLlamaDeckStorage } from '../utils/storageMigration'
 
+const TEMPLATE_USAGE_REFRESH_DELAY_MS = 1_000
+
 function readStoredTemplateSortMode(): TemplateSortMode {
   if (typeof window === 'undefined') return DEFAULT_TEMPLATE_SORT_MODE
 
@@ -25,13 +28,20 @@ function readStoredTemplateSortMode(): TemplateSortMode {
 }
 
 export default function CardsView() {
-  const { cards, setShowCreateModal, addCard, templateSearch, setTemplateSearch } = useStore()
+  const { cards, setShowCreateModal, addCard, templateSearch, setTemplateSearch } = useStore(useShallow((state) => ({
+    cards: state.cards,
+    setShowCreateModal: state.setShowCreateModal,
+    addCard: state.addCard,
+    templateSearch: state.templateSearch,
+    setTemplateSearch: state.setTemplateSearch
+  })))
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({})
   const [sortMode, setSortMode] = useState<TemplateSortMode>(readStoredTemplateSortMode)
   const [templateUsage, setTemplateUsage] = useState<Map<string, TemplateUsage>>(() => new Map())
 
   useEffect(() => {
     let active = true
+    let refreshTimer: number | null = null
 
     async function loadTemplateUsage() {
       try {
@@ -47,11 +57,16 @@ export default function CardsView() {
 
     void loadTemplateUsage()
     const unsubscribe = window.api.onUsageUpdated(() => {
-      void loadTemplateUsage()
+      if (refreshTimer !== null) return
+      refreshTimer = window.setTimeout(() => {
+        refreshTimer = null
+        void loadTemplateUsage()
+      }, TEMPLATE_USAGE_REFRESH_DELAY_MS)
     })
 
     return () => {
       active = false
+      if (refreshTimer !== null) window.clearTimeout(refreshTimer)
       unsubscribe()
     }
   }, [])
@@ -70,7 +85,8 @@ export default function CardsView() {
     }
   }
 
-  const normalizedSearch = templateSearch.trim().toLowerCase()
+  const deferredTemplateSearch = useDeferredValue(templateSearch)
+  const normalizedSearch = deferredTemplateSearch.trim().toLowerCase()
   const sortedCards = useMemo(
     () => sortCardsByMode(cards, sortMode, templateUsage),
     [cards, sortMode, templateUsage]

@@ -102,7 +102,7 @@ function buildSummaryFromDailyRollups(dailyRollups: UsageDailyRollup[]): UsageSu
   return summary
 }
 
-function getSessionSortKey(session: UsagePersistedSession): string {
+function getSessionSortKey(session: Pick<UsagePersistedSession, 'lastRequestAt' | 'stoppedAt' | 'startedAt'>): string {
   return session.lastRequestAt ?? session.stoppedAt ?? session.startedAt
 }
 
@@ -160,8 +160,11 @@ function normalizePersistedSession(raw: unknown): UsagePersistedSession | null {
   const dailyRollups = Array.isArray(session.dailyRollups)
     ? session.dailyRollups.map(normalizeDailyRollup).filter((value): value is UsageDailyRollup => value !== null)
     : []
+  const status: UsageSessionStatus = session.status === 'running' || session.status === 'error'
+    ? session.status
+    : 'stopped'
 
-  return normalizeUsageSummaryRollup({
+  return normalizeUsageSummaryRollup<UsagePersistedSession>({
     launchId: session.launchId,
     templateId: session.templateId,
     templateName: session.templateName,
@@ -174,7 +177,7 @@ function normalizePersistedSession(raw: unknown): UsagePersistedSession | null {
     lastRequestAt: typeof session.lastRequestAt === 'string' ? session.lastRequestAt : undefined,
     lastEndpoint: typeof session.lastEndpoint === 'string' ? session.lastEndpoint : undefined,
     lastError: typeof session.lastError === 'string' ? session.lastError : undefined,
-    status: session.status === 'running' || session.status === 'error' ? session.status : 'stopped',
+    status,
     dailyRollups: sortDailyRollups(dailyRollups),
     requestCount: typeof session.requestCount === 'number' ? session.requestCount : 0,
     successCount: typeof session.successCount === 'number' ? session.successCount : 0,

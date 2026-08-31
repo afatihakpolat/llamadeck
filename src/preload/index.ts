@@ -72,7 +72,7 @@ const api = {
     ipcRenderer.on('model-output', (_e, data) => cb(data))
   },
   removeModelOutputListener: () => ipcRenderer.removeAllListeners('model-output'),
-  onModelExit: (cb: (data: { id: string; code: number | null; signal: string | null }) => void) => {
+  onModelExit: (cb: (data: { id: string; code: number | null; signal: string | null; pid?: number }) => void) => {
     ipcRenderer.removeAllListeners('model-exit')
     ipcRenderer.on('model-exit', (_e, data) => cb(data))
   },
@@ -138,6 +138,7 @@ if (process.contextIsolated) {
     console.error(error)
   }
 } else {
-  window.electron = electronAPI
-  window.api = api
+  const rendererWindow = window as typeof window & { electron: typeof electronAPI; api: typeof api }
+  rendererWindow.electron = electronAPI
+  rendererWindow.api = api
 }

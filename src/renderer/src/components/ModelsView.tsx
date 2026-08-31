@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react'
-import { useStore, ModelFileInfo, ModelDownloadInfo } from '../store/useStore'
+import { useShallow } from 'zustand/react/shallow'
+import { useStore } from '../store/useStore'
+import type { ModelFileInfo, ModelDownloadInfo } from '../store/useStore'
 import {
   HardDrive, Download, Trash, Pause, Play, X, Link, FolderOpen,
   Pencil, Check, AlertCircle, Loader2, RefreshCw, ChevronDown
@@ -86,7 +88,6 @@ function formatSpeed(bps?: number) {
   return `${mbps.toFixed(1)} MB/s`
 }
 function UrlDownloadModal({ onClose }: { onClose: () => void }) {
-  const { upsertModelDownload } = useStore()
   const [url, setUrl] = useState('')
   const [loading, setLoading] = useState(false)
   const [hfFiles, setHfFiles] = useState<{ name: string; size: number; downloadUrl: string }[]>([])
@@ -164,7 +165,7 @@ function UrlDownloadModal({ onClose }: { onClose: () => void }) {
   )
 }
 function DownloadRow({ dl }: { dl: ModelDownloadInfo }) {
-  const { removeModelDownload } = useStore()
+  const removeModelDownload = useStore((state) => state.removeModelDownload)
   const isPaused = dl.phase === 'paused'
   const isDone = dl.phase === 'done'
   const isErr = dl.phase === 'error'
@@ -364,7 +365,13 @@ function FolderTreeSection({
 }
 
 export default function ModelsView() {
-  const { models, setModels, modelDownloads, upsertModelDownload, paths } = useStore()
+  const { models, setModels, modelDownloads, upsertModelDownload, paths } = useStore(useShallow((state) => ({
+    models: state.models,
+    setModels: state.setModels,
+    modelDownloads: state.modelDownloads,
+    upsertModelDownload: state.upsertModelDownload,
+    paths: state.paths
+  })))
   const [showUrlModal, setShowUrlModal] = useState(false)
   const [loading, setLoading] = useState(false)
   const [collapsedFolders, setCollapsedFolders] = useState<Record<string, boolean>>({})

@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.6.4] - 2026-08-30
+
+### Fixed
+- Templates now remain marked as running when restarted immediately after stopping; late exit events from the previous process can no longer overwrite the new process state.
+- The Templates and LiteLLM pages remain responsive while loading and while models are producing output, with background status checks, log updates, usage refreshes, and the LiteLLM editor no longer blocking unrelated UI work.
+- Usage tracking no longer fails on valid model responses that contain timing metadata without token counts, and Usage Stats always receives a complete snapshot.
+
 ## [1.6.3] - 2026-08-23
 
 ### Added

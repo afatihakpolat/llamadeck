@@ -85,7 +85,7 @@ function asRecord(value: unknown): Record<string, unknown> | null {
     : null
 }
 
-function extractUsage(payload: unknown): ExtractedUsage {
+export function extractUsage(payload: unknown): ExtractedUsage {
   const record = asRecord(payload)
   if (!record) {
     return {
@@ -168,7 +168,7 @@ function extractUsage(payload: unknown): ExtractedUsage {
     cacheTokens: 0,
     completionTokens: 0,
     totalTokens: 0,
-    timings
+    timings: fallbackTimings
   }
 }
 

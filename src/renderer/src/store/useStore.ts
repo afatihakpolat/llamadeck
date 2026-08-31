@@ -84,7 +84,7 @@ interface AppStore {
   setTemplateSearch: (q: string) => void
   upsertModelDownload: (d: ModelDownloadInfo) => void
   removeModelDownload: (id: string) => void
-  appendModelOutput: (event: ModelOutputEvent) => void
+  appendModelOutputBatch: (events: ModelOutputEvent[]) => void
   clearModelOutput: (id: string) => void
   setSelectedModelOutputId: (id: string | null) => void
   focusModelOutput: (id: string) => void
@@ -144,15 +144,23 @@ export const useStore = create<AppStore>((set) => ({
   removeModelDownload: (id) => set((s) => {
     const next = { ...s.modelDownloads }; delete next[id]; return { modelDownloads: next }
   }),
-  appendModelOutput: (event) => set((s) => {
-    const nextEntries = [...(s.modelOutput[event.id] || []), event]
+  appendModelOutputBatch: (events) => set((s) => {
+    if (events.length === 0) return s
+
+    const nextOutput = { ...s.modelOutput }
+    const eventsByModel = new Map<string, ModelOutputEvent[]>()
+    for (const event of events) {
+      const modelEvents = eventsByModel.get(event.id)
+      if (modelEvents) modelEvents.push(event)
+      else eventsByModel.set(event.id, [event])
+    }
+    for (const [modelId, modelEvents] of eventsByModel) {
+      nextOutput[modelId] = [...(nextOutput[modelId] || []), ...modelEvents].slice(-400)
+    }
 
     return {
-      modelOutput: {
-        ...s.modelOutput,
-        [event.id]: nextEntries.slice(-400)
-      },
-      selectedModelOutputId: s.selectedModelOutputId || event.id
+      modelOutput: nextOutput,
+      selectedModelOutputId: s.selectedModelOutputId || events[0]?.id || null
     }
   }),
   clearModelOutput: (id) => set((s) => {
@@ -189,7 +197,9 @@ export const useStore = create<AppStore>((set) => ({
     }
   }),
   setCardStatus: (id, status, pid) => set((s) => ({
-    cards: s.cards.map(c => c.template.id === id ? { ...c, status, pid: pid ?? c.pid } : c)
+    cards: s.cards.map(c => c.template.id === id
+      ? { ...c, status, pid: status === 'running' ? (pid ?? c.pid) : undefined }
+      : c)
   })),
   toggleCardExpanded: (id) => set((s) => ({
     cards: s.cards.map(c => c.template.id === id ? { ...c, expanded: !c.expanded } : c)

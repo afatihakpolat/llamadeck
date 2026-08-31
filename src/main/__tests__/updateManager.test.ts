@@ -1,9 +1,10 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { EventEmitter } from 'events'
-import { mkdtempSync, rmSync, writeFileSync, mkdirSync } from 'fs'
+import { mkdtempSync, rmSync, writeFileSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
-import type { ProgressInfo, UpdateInfo } from 'electron-updater'
+import type { AppUpdater, ProgressInfo, UpdateInfo } from 'electron-updater'
+import type { ActiveWorkSnapshot } from '../activeWork'
 
 vi.mock('electron', () => ({
   app: {
@@ -59,36 +60,35 @@ afterEach(() => {
   rmSync(work, { recursive: true, force: true })
 })
 
-type ActiveWorkSnapshotLike = Parameters<typeof updateManager.checkForUpdates>[0] extends never
-  ? {
-      sourceUpdateJob: { cancelled: boolean; process: { pid?: number } } | null
-      cancelBackendDl: (() => void) | null
-      downloadTasks: Map<string, { phase: 'downloading' | 'paused' | 'done' | 'error' | 'cancelled' }>
-    }
-  : never
-
-function makeActiveWork(overrides: Partial<ActiveWorkSnapshotLike> = {}): ActiveWorkSnapshotLike {
+function makeActiveWork(overrides: Partial<ActiveWorkSnapshot> = {}): ActiveWorkSnapshot {
   return {
     sourceUpdateJob: null,
     cancelBackendDl: null,
     downloadTasks: new Map(),
     ...overrides
-  } as ActiveWorkSnapshotLike
+  }
 }
 
-function initWith(activeWork: ActiveWorkSnapshotLike = makeActiveWork()): Promise<void> {
+function initWith(activeWork: ActiveWorkSnapshot = makeActiveWork()): Promise<void> {
   return updateManager.initUpdateManager({
     broadcast: (channel, payload) => broadcasts.push({ channel, payload }),
     getCurrentVersion: () => '1.1.5',
     getActiveWork: () => activeWork,
     isAutoDownloadEnabled: () => autoDownloadEnabled,
     getSkippedVersion: () => skippedVersion,
-    autoUpdater: fakeUpdater as unknown as NonNullable<Parameters<typeof updateManager.initUpdateManager>[0]> extends infer D
-      ? D extends { autoUpdater?: infer A }
-        ? A
-        : never
-      : never
+    autoUpdater: fakeUpdater as unknown as AppUpdater
   })
+}
+
+function makeUpdateInfo(version: string, overrides: Partial<UpdateInfo> = {}): UpdateInfo {
+  return {
+    version,
+    files: [],
+    path: '',
+    sha512: '',
+    releaseDate: '2026-07-15',
+    ...overrides
+  }
 }
 
 describe('initUpdateManager', () => {
@@ -131,7 +131,7 @@ describe('event handling', () => {
   })
 
   it('transitions to available on update-available with version info', () => {
-    const info: UpdateInfo = { version: '1.2.0', releaseDate: '2026-07-15', releaseNotes: 'Bug fixes' }
+    const info = makeUpdateInfo('1.2.0', { releaseNotes: 'Bug fixes' })
     fakeUpdater.emit('update-available', info)
     const state = updateManager.getUpdateState()
     expect(state.status).toBe('available')
@@ -142,7 +142,7 @@ describe('event handling', () => {
   it('skips available broadcast when version matches skippedVersion', async () => {
     skippedVersion = '1.2.0'
     await initWith()
-    const info: UpdateInfo = { version: '1.2.0' }
+    const info = makeUpdateInfo('1.2.0')
     fakeUpdater.emit('update-available', info)
     const state = updateManager.getUpdateState()
     expect(state.status).toBe('not-available')
@@ -155,7 +155,7 @@ describe('event handling', () => {
   })
 
   it('transitions to downloading on download-progress', () => {
-    const progress: ProgressInfo = { percent: 42, bytesPerSecond: 1024, transferred: 512, total: 1024 }
+    const progress: ProgressInfo = { percent: 42, bytesPerSecond: 1024, transferred: 512, total: 1024, delta: 512 }
     fakeUpdater.emit('download-progress', progress)
     const state = updateManager.getUpdateState()
     expect(state.status).toBe('downloading')

@@ -243,6 +243,7 @@ export function buildUsageStatsSnapshot(
     templateRollups: Array.from(templateRollups.values()).sort((left, right) => {
       return right.totalTokens - left.totalTokens || right.requestCount - left.requestCount || left.templateName.localeCompare(right.templateName)
     }),
-    dailyRollups: Array.from(dailyRollups.values()).sort((left, right) => right.day.localeCompare(left.day))
+    dailyRollups: Array.from(dailyRollups.values()).sort((left, right) => right.day.localeCompare(left.day)),
+    sessionRollups: []
   }
 }

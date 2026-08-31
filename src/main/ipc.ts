@@ -5,7 +5,7 @@ import {
 } from 'fs'
 import { join, extname, basename, dirname, resolve, sep, relative } from 'path'
 import { homedir } from 'os'
-import { spawn, ChildProcess, execFileSync } from 'child_process'
+import { spawn, ChildProcess, execFile, execFileSync } from 'child_process'
 import { randomUUID } from 'crypto'
 import https from 'https'
 import http from 'http'
@@ -584,6 +584,13 @@ let liteLlmManagerSettings = loadLiteLlmManagerStoredSettings()
 let liteLlmProxyProcess: ChildProcess | null = null
 const liteLlmLogBuffer = new LiteLlmCliLogBuffer(2000)
 let latestLiteLlmVersionCache: { version: string | null; checkedAt: number } | null = null
+let latestLiteLlmVersionInFlight: Promise<string | null> | null = null
+let liteLlmInstallStatusCache: { status: LiteLlmInstallStatus; checkedAt: number } | null = null
+let liteLlmInstallStatusInFlight: Promise<LiteLlmInstallStatus> | null = null
+let liteLlmInstallStatusGeneration = 0
+const LITELLM_INSTALL_STATUS_CACHE_MS = 30_000
+const LITELLM_LATEST_VERSION_CACHE_MS = 5 * 60 * 1_000
+const LOCAL_COMMAND_TIMEOUT_MS = 10_000
 
 function syncLiteLlmSettingsToManagedProxy(): void {
   const managedBaseUrl = getManagedLiteLlmBaseUrl()
@@ -728,7 +735,25 @@ function waitForLiteLlmServerReady(baseUrl: string, child: ChildProcess, timeout
   })
 }
 
-function detectPythonRuntimeCommand(): PythonRuntimeCommand | null {
+function runCommandText(command: string, args: string[], timeoutMs = LOCAL_COMMAND_TIMEOUT_MS): Promise<string> {
+  return new Promise((resolveOutput, rejectOutput) => {
+    execFile(command, args, {
+      encoding: 'utf-8',
+      windowsHide: true,
+      timeout: timeoutMs,
+      maxBuffer: 4 * 1024 * 1024
+    }, (error, stdout) => {
+      if (error) {
+        rejectOutput(error)
+        return
+      }
+
+      resolveOutput(stdout.trim())
+    })
+  })
+}
+
+async function detectPythonRuntimeCommand(): Promise<PythonRuntimeCommand | null> {
   const candidates: Array<{ command: string; argsPrefix: string[] }> = [
     { command: 'py', argsPrefix: ['-3'] },
     { command: 'python', argsPrefix: [] },
@@ -737,11 +762,10 @@ function detectPythonRuntimeCommand(): PythonRuntimeCommand | null {
 
   for (const candidate of candidates) {
     try {
-      const versionOutput = execFileSync(candidate.command, [...candidate.argsPrefix, '-c', 'import sys; print(sys.version.split()[0])'], {
-        encoding: 'utf-8',
-        windowsHide: true,
-        stdio: ['ignore', 'pipe', 'pipe']
-      }).trim()
+      const versionOutput = await runCommandText(
+        candidate.command,
+        [...candidate.argsPrefix, '-c', 'import sys; print(sys.version.split()[0])']
+      )
 
       return {
         command: candidate.command,
@@ -766,23 +790,35 @@ function parseLiteLlmVersionFromPipShow(output: string): string | null {
 
 async function fetchLatestLiteLlmVersion(): Promise<string | null> {
   const now = Date.now()
-  if (latestLiteLlmVersionCache && now - latestLiteLlmVersionCache.checkedAt < 5 * 60 * 1000) {
+  if (latestLiteLlmVersionCache && now - latestLiteLlmVersionCache.checkedAt < LITELLM_LATEST_VERSION_CACHE_MS) {
     return latestLiteLlmVersionCache.version
   }
 
+  if (latestLiteLlmVersionInFlight) return latestLiteLlmVersionInFlight
+
+  const versionPromise = (async () => {
+    try {
+      const response = await fetchJson('https://pypi.org/pypi/litellm/json') as { info?: { version?: string } } | null
+      const version = typeof response?.info?.version === 'string' ? response.info.version.trim() : null
+      latestLiteLlmVersionCache = { version, checkedAt: Date.now() }
+      return version
+    } catch {
+      latestLiteLlmVersionCache = { version: null, checkedAt: Date.now() }
+      return null
+    }
+  })()
+  latestLiteLlmVersionInFlight = versionPromise
   try {
-    const response = await fetchJson('https://pypi.org/pypi/litellm/json') as { info?: { version?: string } } | null
-    const version = typeof response?.info?.version === 'string' ? response.info.version.trim() : null
-    latestLiteLlmVersionCache = { version, checkedAt: now }
-    return version
-  } catch {
-    latestLiteLlmVersionCache = { version: null, checkedAt: now }
-    return null
+    return await versionPromise
+  } finally {
+    if (latestLiteLlmVersionInFlight === versionPromise) {
+      latestLiteLlmVersionInFlight = null
+    }
   }
 }
 
-async function resolveLiteLlmInstallStatus(): Promise<LiteLlmInstallStatus> {
-  const runtime = detectPythonRuntimeCommand()
+async function resolveFreshLiteLlmInstallStatus(): Promise<LiteLlmInstallStatus> {
+  const runtime = await detectPythonRuntimeCommand()
   if (!runtime) {
     return {
       pythonCommand: null,
@@ -797,15 +833,40 @@ async function resolveLiteLlmInstallStatus(): Promise<LiteLlmInstallStatus> {
 
   let currentVersion: string | null = null
   try {
-    const showOutput = execFileSync(runtime.command, [...runtime.argsPrefix, '-m', 'pip', 'show', 'litellm'], {
-      encoding: 'utf-8',
-      windowsHide: true,
-      stdio: ['ignore', 'pipe', 'pipe']
-    })
+    const showOutput = await runCommandText(runtime.command, [...runtime.argsPrefix, '-m', 'pip', 'show', 'litellm'])
     currentVersion = parseLiteLlmVersionFromPipShow(showOutput)
   } catch {}
 
-  const latestVersion = currentVersion ? await fetchLatestLiteLlmVersion() : null
+  const latestVersionCacheIsFresh = Boolean(
+    latestLiteLlmVersionCache &&
+    Date.now() - latestLiteLlmVersionCache.checkedAt < LITELLM_LATEST_VERSION_CACHE_MS
+  )
+  const latestVersion = currentVersion && latestVersionCacheIsFresh
+    ? latestLiteLlmVersionCache?.version ?? null
+    : null
+  if (currentVersion && !latestVersionCacheIsFresh) {
+    void fetchLatestLiteLlmVersion().then((resolvedLatestVersion) => {
+      const cachedStatus = liteLlmInstallStatusCache
+      if (
+        !cachedStatus ||
+        cachedStatus.status.currentVersion !== currentVersion ||
+        cachedStatus.status.latestVersion === resolvedLatestVersion
+      ) return
+
+      liteLlmInstallStatusCache = {
+        ...cachedStatus,
+        status: {
+          ...cachedStatus.status,
+          latestVersion: resolvedLatestVersion,
+          hasUpdate: Boolean(
+            resolvedLatestVersion &&
+            compareLiteLlmVersions(currentVersion, resolvedLatestVersion) < 0
+          )
+        }
+      }
+      broadcastToRenderer('litellm-manager-changed', { at: new Date().toISOString() })
+    })
+  }
 
   return {
     pythonCommand: runtime.displayCommand,
@@ -816,6 +877,42 @@ async function resolveLiteLlmInstallStatus(): Promise<LiteLlmInstallStatus> {
     hasUpdate: Boolean(currentVersion && latestVersion && compareLiteLlmVersions(currentVersion, latestVersion) < 0),
     ...(currentVersion ? {} : { error: 'LiteLLM is not installed for the detected Python runtime.' })
   }
+}
+
+async function resolveLiteLlmInstallStatus(forceRefresh = false): Promise<LiteLlmInstallStatus> {
+  const now = Date.now()
+  if (
+    !forceRefresh &&
+    liteLlmInstallStatusCache &&
+    now - liteLlmInstallStatusCache.checkedAt < LITELLM_INSTALL_STATUS_CACHE_MS
+  ) {
+    return liteLlmInstallStatusCache.status
+  }
+
+  if (liteLlmInstallStatusInFlight) {
+    return liteLlmInstallStatusInFlight
+  }
+
+  const statusGeneration = liteLlmInstallStatusGeneration
+  const statusPromise = resolveFreshLiteLlmInstallStatus()
+  liteLlmInstallStatusInFlight = statusPromise
+  try {
+    const status = await statusPromise
+    if (statusGeneration === liteLlmInstallStatusGeneration) {
+      liteLlmInstallStatusCache = { status, checkedAt: Date.now() }
+    }
+    return status
+  } finally {
+    if (liteLlmInstallStatusInFlight === statusPromise) {
+      liteLlmInstallStatusInFlight = null
+    }
+  }
+}
+
+function invalidateLiteLlmInstallStatus(): void {
+  liteLlmInstallStatusGeneration += 1
+  liteLlmInstallStatusCache = null
+  liteLlmInstallStatusInFlight = null
 }
 
 function buildLiteLlmManagerSettingsSnapshot(): LiteLlmManagerSettings {
@@ -904,7 +1001,7 @@ function runCommandCapture(command: string, args: string[]): Promise<{ exitCode:
 }
 
 async function installOrUpdateLiteLlm(upgrade: boolean): Promise<{ success: true; snapshot: LiteLlmManagerSnapshot; output: string } | { success: false; error: string; output?: string; install: LiteLlmInstallStatus }> {
-  const runtime = detectPythonRuntimeCommand()
+  const runtime = await detectPythonRuntimeCommand()
   const install = await resolveLiteLlmInstallStatus()
   if (!runtime) {
     return { success: false, error: install.error || 'Python 3 was not found on this computer.', install }
@@ -916,12 +1013,13 @@ async function installOrUpdateLiteLlm(upgrade: boolean): Promise<{ success: true
 
   appendLiteLlmLog(`${runtime.displayCommand} ${args.join(' ')}`)
   const result = await runCommandCapture(runtime.command, args)
+  invalidateLiteLlmInstallStatus()
   if (result.exitCode !== 0) {
     return {
       success: false,
       error: upgrade ? 'LiteLLM update failed.' : 'LiteLLM installation failed.',
       output: result.output,
-      install: await resolveLiteLlmInstallStatus()
+      install: await resolveLiteLlmInstallStatus(true)
     }
   }
 
@@ -942,7 +1040,7 @@ async function startLiteLlmProxyProcess(): Promise<{ success: true; snapshot: Li
     return { success: false, error: install.error || 'LiteLLM is not installed.', snapshot: await buildLiteLlmManagerSnapshot() }
   }
 
-  const runtime = detectPythonRuntimeCommand()
+  const runtime = await detectPythonRuntimeCommand()
   if (!runtime) {
     return { success: false, error: 'Python 3 was not found on this computer.', snapshot: await buildLiteLlmManagerSnapshot() }
   }
@@ -1129,15 +1227,11 @@ function parseBuildNumber(value: string): number {
   return match ? parseInt(match[1], 10) : 0
 }
 
-function getRepoOriginUrl(repoDir?: string): string {
+async function getRepoOriginUrl(repoDir?: string): Promise<string> {
   if (!repoDir) return 'https://github.com/ggml-org/llama.cpp.git'
 
   try {
-    const remoteUrl = execFileSync('git', ['-C', repoDir, 'remote', 'get-url', 'origin'], {
-      encoding: 'utf-8',
-      windowsHide: true,
-      stdio: ['ignore', 'pipe', 'pipe']
-    }).trim()
+    const remoteUrl = await runCommandText('git', ['-C', repoDir, 'remote', 'get-url', 'origin'])
 
     return remoteUrl || 'https://github.com/ggml-org/llama.cpp.git'
   } catch {
@@ -1156,12 +1250,12 @@ function getRepoBrowserUrl(remoteUrl: string): string {
   return 'https://github.com/ggml-org/llama.cpp'
 }
 
-function getLatestGitTag(repoDir?: string): { tagName: string; url: string } {
-  const remoteUrl = getRepoOriginUrl(repoDir)
-  const output = execFileSync(
+async function getLatestGitTag(repoDir?: string): Promise<{ tagName: string; url: string }> {
+  const remoteUrl = await getRepoOriginUrl(repoDir)
+  const output = await runCommandText(
     'git',
     ['ls-remote', '--tags', '--refs', remoteUrl, 'refs/tags/b*'],
-    { encoding: 'utf-8', windowsHide: true, maxBuffer: 4 * 1024 * 1024 }
+    20_000
   )
 
   const tags = output
@@ -1439,6 +1533,7 @@ interface ModelProxyRuntime {
 
 const runningProcesses = new Map<string, ChildProcess>()
 const startingProcesses = new Set<string>()
+const stoppingProcesses = new Set<string>()
 const proxyRuntimes = new Map<string, ModelProxyRuntime>()
 const MODEL_OUTPUT_BUFFER_LIMIT = 2000
 interface ModelOutputBuffer {
@@ -1654,8 +1749,8 @@ function hasArchitectureMismatch(error: unknown, backendPath: string): boolean {
 }
 
 async function startRunningModel(opts: RunModelOptions): Promise<RunModelResult> {
-  if (runningProcesses.has(opts.id) || startingProcesses.has(opts.id)) {
-    return { success: false, error: 'Already running or starting' }
+  if (runningProcesses.has(opts.id) || startingProcesses.has(opts.id) || stoppingProcesses.has(opts.id)) {
+    return { success: false, error: 'Already running, starting, or stopping' }
   }
   const backendDir = getAppPaths().backend
   const exePath = join(opts.backendPath, opts.exe)
@@ -1709,6 +1804,8 @@ async function startRunningModel(opts: RunModelOptions): Promise<RunModelResult>
     proc.stdout?.on('data', (chunk: string) => emitOutput('stdout', chunk))
     proc.stderr?.on('data', (chunk: string) => emitOutput('stderr', chunk))
     proc.on('error', async (error: Error) => {
+      if (runningProcesses.get(opts.id) !== proc) return
+
       const message = hasArchitectureMismatch(error, opts.backendPath)
         ? 'Architecture mismatch: You are trying to run an ARM64 backend on an x64 system. Please delete this backend in Settings and download the x64 version.'
         : String(error)
@@ -1754,6 +1851,8 @@ async function startRunningModel(opts: RunModelOptions): Promise<RunModelResult>
     emitOutput('system', `Launching upstream: ${commandPreview}\n`)
     emitOutput('system', `Process started${proc.pid ? ` (pid ${proc.pid})` : ''}.\n`)
     proc.on('exit', async (code, signal) => {
+      if (runningProcesses.get(opts.id) !== proc) return
+
       runningProcesses.delete(opts.id)
       await stopProxyRuntime(opts.id)
       finalizeUsageSession(opts.id, code !== null && code !== 0 ? 'error' : signal ? 'error' : 'stopped')
@@ -1761,7 +1860,8 @@ async function startRunningModel(opts: RunModelOptions): Promise<RunModelResult>
       broadcastModelExit({
         id: opts.id,
         code,
-        signal
+        signal,
+        ...(proc.pid === undefined ? {} : { pid: proc.pid })
       })
     })
     if (opts.openBrowser) {
@@ -1788,13 +1888,30 @@ async function stopRunningModel(id: string): Promise<void> {
   const proc = runningProcesses.get(id)
   if (!proc) return
 
-  await stopProxyRuntime(id)
-  finalizeUsageSession(id, 'stopped')
+  stoppingProcesses.add(id)
   runningProcesses.delete(id)
-  if (typeof proc.pid === 'number') {
-    await killProcessTree(proc.pid)
-  } else {
-    proc.kill()
+  try {
+    await stopProxyRuntime(id)
+    finalizeUsageSession(id, 'stopped')
+    if (typeof proc.pid === 'number') {
+      await killProcessTree(proc.pid)
+    } else {
+      proc.kill()
+    }
+    broadcastModelOutput({
+      id,
+      stream: 'system',
+      text: 'Process stopped.\n',
+      timestamp: new Date().toISOString()
+    })
+    broadcastModelExit({
+      id,
+      code: 0,
+      signal: null,
+      ...(proc.pid === undefined ? {} : { pid: proc.pid })
+    })
+  } finally {
+    stoppingProcesses.delete(id)
   }
 }
 
@@ -2290,6 +2407,7 @@ interface DownloadTask {
 const downloadTasks = new Map<string, DownloadTask>()
 const broadcastTimes = new Map<string, number>()
 const BROADCAST_THROTTLE_MS = 200
+const JSON_REQUEST_TIMEOUT_MS = 15_000
 let sourceUpdateJob: SourceUpdateJob | null = null
 function canBroadcast(id: string): boolean {
   const now = Date.now()
@@ -2309,7 +2427,8 @@ function requestJson(url: string, options: { method?: 'GET' | 'POST'; headers?: 
       }
     }, (res) => {
       if ((res.statusCode === 301 || res.statusCode === 302) && res.headers.location) {
-        return requestJson(res.headers.location, options).then(resolve).catch(reject)
+        void requestJson(res.headers.location, options).then(resolve).catch(reject)
+        return
       }
 
       let data = ''
@@ -2337,6 +2456,9 @@ function requestJson(url: string, options: { method?: 'GET' | 'POST'; headers?: 
     })
 
     req.on('error', reject)
+    req.setTimeout(JSON_REQUEST_TIMEOUT_MS, () => {
+      req.destroy(new Error(`Request timed out after ${JSON_REQUEST_TIMEOUT_MS}ms`))
+    })
     if (options.body) {
       req.write(options.body)
     }
@@ -2612,7 +2734,7 @@ export function registerIpcHandlers(): void {
       return { success: false, error: String(err) }
     }
   })
-  ipcMain.handle('start-model-download', (event, opts: {
+  ipcMain.handle('start-model-download', (_event, opts: {
     url: string
     filename: string
     repoId?: string
@@ -2720,7 +2842,7 @@ export function registerIpcHandlers(): void {
     broadcastProgress(task, true)
     return { success: true }
   })
-  ipcMain.handle('cancel-model-download', (event, id: string) => {
+  ipcMain.handle('cancel-model-download', (_event, id: string) => {
     const task = downloadTasks.get(id)
     if (!task) return { success: false, error: 'Not found' }
     task.cancelFn?.()
@@ -2914,7 +3036,7 @@ export function registerIpcHandlers(): void {
   })
   ipcMain.handle('check-updates', async () => {
     try {
-      const latestTag = getLatestGitTag(getAppPaths().backend)
+      const latestTag = await getLatestGitTag(getAppPaths().backend)
       const latestNum = parseBuildNumber(latestTag.tagName)
       const backendDir = getAppPaths().backend
       const installedBackends = existsSync(backendDir) ? listBackendsFromDirectory(backendDir) : []
@@ -2975,7 +3097,7 @@ export function registerIpcHandlers(): void {
 
     if (!targetTagName) {
       try {
-        targetTagName = getLatestGitTag(repoDir).tagName
+        targetTagName = (await getLatestGitTag(repoDir)).tagName
       } catch (err) {
         return { success: false, error: String(err) }
       }

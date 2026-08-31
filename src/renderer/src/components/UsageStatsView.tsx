@@ -12,6 +12,7 @@ import type {
   UsageStatsSnapshot,
   UsageSummaryRollup
 } from '../../../shared/types'
+
 import {
   getAggregateCostBreakdown,
   getUsageCostBreakdown,
@@ -36,6 +37,8 @@ import {
   writeLlamaDeckStorage
 } from '../utils/storageMigration'
 import { PricingTab } from './PricingTab'
+
+const USAGE_STATS_REFRESH_DELAY_MS = 500
 
 type UsageStatsWindow = 'today' | '7d' | '30d' | 'month' | 'all' | 'custom'
 
@@ -613,11 +616,19 @@ export default function UsageStatsView() {
   }, [])
 
   useEffect(() => {
+    let refreshTimer: number | null = null
     const unsubscribe = window.api.onUsageUpdated(() => {
-      void loadSnapshot(queryRef.current)
+      if (refreshTimer !== null) return
+      refreshTimer = window.setTimeout(() => {
+        refreshTimer = null
+        void loadSnapshot(queryRef.current)
+      }, USAGE_STATS_REFRESH_DELAY_MS)
     })
 
-    return unsubscribe
+    return () => {
+      if (refreshTimer !== null) window.clearTimeout(refreshTimer)
+      unsubscribe()
+    }
   }, [])
 
   useEffect(() => {

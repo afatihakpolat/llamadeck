@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState } from 'react'
+import { useShallow } from 'zustand/react/shallow'
 import { useStore } from '../store/useStore'
 import {
   LLAMADECK_STORAGE_KEYS,
@@ -47,7 +48,21 @@ export default function UpdateBanner() {
     releaseInfo, updateDismissed, setUpdateDismissed,
     downloadProgress, setDownloadProgress, setBackends, backends,
     setActiveBackend, setCommandsSchema, setCards, setModels, setPaths, setReleaseInfo
-  } = useStore()
+  } = useStore(useShallow((state) => ({
+    releaseInfo: state.releaseInfo,
+    updateDismissed: state.updateDismissed,
+    setUpdateDismissed: state.setUpdateDismissed,
+    downloadProgress: state.downloadProgress,
+    setDownloadProgress: state.setDownloadProgress,
+    setBackends: state.setBackends,
+    backends: state.backends,
+    setActiveBackend: state.setActiveBackend,
+    setCommandsSchema: state.setCommandsSchema,
+    setCards: state.setCards,
+    setModels: state.setModels,
+    setPaths: state.setPaths,
+    setReleaseInfo: state.setReleaseInfo
+  })))
   const [updatingSource, setUpdatingSource] = useState(false)
   const notifPref = readLlamaDeckStorage(LLAMADECK_STORAGE_KEYS.updateNotification) || 'banner'
   const latestTagName = releaseInfo?.tagName?.trim() || ''
