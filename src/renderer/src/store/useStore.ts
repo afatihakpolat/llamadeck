@@ -2,6 +2,11 @@ import { create } from 'zustand'
 import type { AppView, Template, BackendVersion, CommandsSchema, ReleaseInfo, RunningStatus, ModelOutputEvent } from '../../../shared/types'
 import type { UpdatePreferences, UpdateState } from '../../../shared/update'
 import {
+  createAppNotification,
+  type AppNotification,
+  type AppNotificationInput
+} from '../utils/notifications'
+import {
   LLAMADECK_STORAGE_KEYS,
   readLlamaDeckStorage,
   removeLlamaDeckStorage,
@@ -66,6 +71,7 @@ interface AppStore {
   hubQuery: string
   hubResults: any[]
   hubSelectedModelId: string | null
+  notifications: AppNotification[]
   setView: (v: AppView) => void
   setThemeMode: (themeMode: ThemeMode) => void
   setShowCreateModal: (show: boolean, template?: Template | null) => void
@@ -93,6 +99,9 @@ interface AppStore {
   setHubQuery: (q: string) => void
   setHubResults: (r: any[]) => void
   setHubSelectedModelId: (id: string | null) => void
+  pushNotification: (notification: AppNotificationInput) => string
+  dismissNotification: (id: string) => void
+  clearNotifications: () => void
   addCard: (template: Template) => void
   updateCard: (id: string, template: Partial<Template>) => void
   removeCard: (id: string) => void
@@ -108,6 +117,7 @@ export const useStore = create<AppStore>((set) => ({
   appUpdateState: null, appUpdatePreferences: null,
   templateSearch: '', modelDownloads: {}, modelOutput: {}, selectedModelOutputId: null, hfDownloads: [],
   hubQuery: '', hubResults: [], hubSelectedModelId: null,
+  notifications: [],
   setView: (v) => set({ view: v }),
   setThemeMode: (themeMode) => {
     if (typeof window !== 'undefined') {
@@ -182,6 +192,22 @@ export const useStore = create<AppStore>((set) => ({
   setHubQuery: (q) => set({ hubQuery: q }),
   setHubResults: (r) => set({ hubResults: r }),
   setHubSelectedModelId: (id) => set({ hubSelectedModelId: id }),
+  pushNotification: (input) => {
+    const notification = createAppNotification(input)
+    set((state) => ({
+      notifications: [
+        ...state.notifications.filter((current) => (
+          current.title !== notification.title || current.message !== notification.message
+        )),
+        notification
+      ].slice(-5)
+    }))
+    return notification.id
+  },
+  dismissNotification: (id) => set((state) => ({
+    notifications: state.notifications.filter((notification) => notification.id !== id)
+  })),
+  clearNotifications: () => set({ notifications: [] }),
   addCard: (template) => set((s) => ({ cards: [...s.cards, { template, status: 'idle', expanded: false }] })),
   updateCard: (id, partial) => set((s) => ({
     cards: s.cards.map(c => c.template.id === id ? { ...c, template: { ...c.template, ...partial, updatedAt: new Date().toISOString() } } : c)

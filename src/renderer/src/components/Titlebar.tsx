@@ -106,7 +106,11 @@ export default function Titlebar({ onCheckUpdates }: Props) {
         setCardStatus(session.templateId, 'idle')
         setLiveSessions((current) => current.filter((other) => other.templateId !== session.templateId))
       } else {
-        alert(`Failed to stop: ${result.error || 'Unknown error'}`)
+        useStore.getState().pushNotification({
+          tone: 'danger',
+          title: 'Template could not stop',
+          message: result.error || session.templateName
+        })
       }
     } finally {
       markStopping(session.templateId, false)
@@ -148,11 +152,11 @@ export default function Titlebar({ onCheckUpdates }: Props) {
     })
 
     if (failures.length > 0) {
-      alert(
-        `Failed to stop ${failures.length} running template${failures.length > 1 ? 's' : ''} (${failures
-          .map((failure) => failure.error || 'Unknown error')
-          .join('; ')})`
-      )
+      useStore.getState().pushNotification({
+        tone: 'danger',
+        title: `${failures.length} running template${failures.length > 1 ? 's' : ''} could not stop`,
+        message: failures.map((failure) => failure.error || 'Unknown error').join('; ')
+      })
     }
   }
 

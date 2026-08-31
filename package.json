@@ -1,6 +1,6 @@
 {
   "name": "llamadeck",
-  "version": "1.6.5",
+  "version": "1.6.6",
   "description": "LlamaDeck — a GUI for llama.cpp",
   "main": "out/main/index.js",
   "homepage": "./",
@@ -9,6 +9,7 @@
     "build": "electron-vite build",
     "preview": "electron-vite preview",
     "package": "electron-vite build && electron-builder",
+    "test:package-smoke": "node scripts/smoke-packaged.mjs",
     "test": "vitest",
     "test:run": "vitest run",
     "test:coverage": "vitest run --coverage"

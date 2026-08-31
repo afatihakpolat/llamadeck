@@ -81,6 +81,7 @@ const api = {
     ipcRenderer.removeAllListeners('model-error')
     ipcRenderer.on('model-error', (_e, data) => cb(data))
   },
+  removeModelErrorListener: () => ipcRenderer.removeAllListeners('model-error'),
   onUsageUpdated: (cb: (data: { at: string }) => void) => {
     const listener = (_e: Electron.IpcRendererEvent, data: { at: string }) => cb(data)
     ipcRenderer.on('usage-updated', listener)

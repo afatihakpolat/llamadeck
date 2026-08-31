@@ -190,15 +190,15 @@ function DownloadRow({ dl }: { dl: ModelDownloadInfo }) {
 
   const showSpeed = dl.phase === 'downloading' && !pending && dl.speed && dl.speed > 0
   const statusLabel = pending === 'pausing'
-    ? 'Pausando…'
+    ? 'Pausing…'
     : pending === 'resuming'
-    ? 'Retomando…'
+    ? 'Resuming…'
     : isPaused
-    ? 'Pausado'
+    ? 'Paused'
     : isErr
-    ? 'Erro'
+    ? 'Failed'
     : isDone
-    ? 'Concluído'
+    ? 'Complete'
     : showSpeed
     ? formatSpeed(dl.speed)
     : `${dl.percent}%`
@@ -256,14 +256,26 @@ function ModelFileRow({ model, onDeleted }: { model: ModelFileInfo; onDeleted: (
     if (!confirm(`Delete "${model.name}"? This cannot be undone.`)) return
     const res = await window.api.deleteModel(model.path)
     if (res.success) onDeleted()
-    else alert('Delete failed: ' + res.error)
+    else {
+      useStore.getState().pushNotification({
+        tone: 'danger',
+        title: 'Model could not be deleted',
+        message: res.error || model.name
+      })
+    }
   }
 
   async function handleRename() {
     if (!newName.trim() || newName === model.name.replace(/\.[^.]+$/, '')) { setEditing(false); return }
     const res = await window.api.renameModel(model.path, newName.trim())
     if (res.success) { setEditing(false); onDeleted()  }
-    else alert('Rename failed: ' + res.error)
+    else {
+      useStore.getState().pushNotification({
+        tone: 'danger',
+        title: 'Model could not be renamed',
+        message: res.error || model.name
+      })
+    }
   }
 
   return (

@@ -92,18 +92,32 @@ function ModelCard({ card }: Props) {
       if (isRunning) {
         const res = await window.api.stopModel(card.template.id)
         if (res.success || res.error === 'Not running') setCardStatus(card.template.id, 'idle')
-        else alert(`Failed to stop: ${res.error}`)
+        else {
+          useStore.getState().pushNotification({
+            tone: 'danger',
+            title: 'Template could not stop',
+            message: res.error || card.template.name
+          })
+        }
         return
       }
 
       let targetBackend = preferredBackend
       if (!targetBackend && activeBackend) targetBackend = activeBackend
       if (!targetBackend || !targetBackend.exe) {
-        alert('Backend not found or has no executable.')
+        useStore.getState().pushNotification({
+          tone: 'warning',
+          title: 'Backend unavailable',
+          message: 'Choose an installed backend with a working executable before starting.'
+        })
         return
       }
       if (!resolvedModelPath?.trim()) {
-        alert('Model file is required.')
+        useStore.getState().pushNotification({
+          tone: 'warning',
+          title: 'Model file required',
+          message: 'Edit this template and choose a local model file.'
+        })
         return
       }
       const args = buildTemplateLaunchArgs(
@@ -124,13 +138,27 @@ function ModelCard({ card }: Props) {
         setCardStatus(card.template.id, 'running', res.pid)
         focusModelOutput(card.template.id)
       }
-      else { alert(`Failed to run: ${res.error}`); setCardStatus(card.template.id, 'error') }
+      else {
+        useStore.getState().pushNotification({
+          tone: 'danger',
+          title: 'Template could not start',
+          message: res.error || card.template.name
+        })
+        setCardStatus(card.template.id, 'error')
+      }
     } finally {
       setRunAction(null)
     }
   }
   async function handleDelete() {
-    if (isRunning) { alert('Please stop the model before deleting.'); return }
+    if (isRunning) {
+      useStore.getState().pushNotification({
+        tone: 'warning',
+        title: 'Stop the template first',
+        message: 'Running templates cannot be deleted.'
+      })
+      return
+    }
     if (confirm('Delete this template?')) {
       await window.api.deleteTemplate(card.template.id)
       removeCard(card.template.id)

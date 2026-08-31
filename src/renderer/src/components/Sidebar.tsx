@@ -3,6 +3,7 @@ import { useShallow } from 'zustand/react/shallow'
 import { useStore } from '../store/useStore'
 import { LayoutGrid, Settings, FolderOpen, HardDrive, Search, Globe, Terminal, BarChart3, Sparkles } from 'lucide-react'
 import type { BackendBuildMode } from '../../../shared/types'
+import { preloadAppView } from '../lazyViews'
 
 function getBuildModeLabel(buildMode: BackendBuildMode | null): string {
   if (buildMode === 'single') return 'Single'
@@ -35,6 +36,8 @@ export default function Sidebar() {
       <button
         className={`nav-item ${view === 'cards' ? 'active' : ''}`}
         onClick={() => setView('cards')}
+        onMouseEnter={() => preloadAppView('cards')}
+        onFocus={() => preloadAppView('cards')}
       >
         <LayoutGrid size={16} />
         My Templates
@@ -42,6 +45,8 @@ export default function Sidebar() {
       <button
         className={`nav-item ${view === 'models' ? 'active' : ''}`}
         onClick={() => setView('models')}
+        onMouseEnter={() => preloadAppView('models')}
+        onFocus={() => preloadAppView('models')}
       >
         <HardDrive size={16} />
         Models
@@ -49,6 +54,8 @@ export default function Sidebar() {
       <button
         className={`nav-item ${view === 'hub' ? 'active' : ''}`}
         onClick={() => setView('hub')}
+        onMouseEnter={() => preloadAppView('hub')}
+        onFocus={() => preloadAppView('hub')}
       >
         <Search size={16} />
         Model Hub
@@ -56,6 +63,8 @@ export default function Sidebar() {
       <button
         className={`nav-item ${view === 'settings' ? 'active' : ''}`}
         onClick={() => setView('settings')}
+        onMouseEnter={() => preloadAppView('settings')}
+        onFocus={() => preloadAppView('settings')}
       >
         <Settings size={16} />
         Settings
@@ -63,6 +72,8 @@ export default function Sidebar() {
       <button
         className={`nav-item ${view === 'litellm' ? 'active' : ''}`}
         onClick={() => setView('litellm')}
+        onMouseEnter={() => preloadAppView('litellm')}
+        onFocus={() => preloadAppView('litellm')}
       >
         <Globe size={16} />
         LiteLLM
@@ -70,6 +81,8 @@ export default function Sidebar() {
       <button
         className={`nav-item ${view === 'agent-skills' ? 'active' : ''}`}
         onClick={() => setView('agent-skills')}
+        onMouseEnter={() => preloadAppView('agent-skills')}
+        onFocus={() => preloadAppView('agent-skills')}
       >
         <Sparkles size={16} />
         Agent Skills
@@ -77,6 +90,8 @@ export default function Sidebar() {
       <button
         className={`nav-item ${view === 'live-output' ? 'active' : ''}`}
         onClick={() => setView('live-output')}
+        onMouseEnter={() => preloadAppView('live-output')}
+        onFocus={() => preloadAppView('live-output')}
       >
         <Terminal size={16} />
         Live View
@@ -84,6 +99,8 @@ export default function Sidebar() {
       <button
         className={`nav-item ${view === 'usage-stats' ? 'active' : ''}`}
         onClick={() => setView('usage-stats')}
+        onMouseEnter={() => preloadAppView('usage-stats')}
+        onFocus={() => preloadAppView('usage-stats')}
       >
         <BarChart3 size={16} />
         Usage Stats

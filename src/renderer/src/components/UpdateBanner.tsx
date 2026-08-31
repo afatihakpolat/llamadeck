@@ -106,10 +106,18 @@ export default function UpdateBanner() {
       } else if (res.cancelled) {
         return
       } else {
-        alert(`Source update failed: ${res.error}`)
+        useStore.getState().pushNotification({
+          tone: 'danger',
+          title: 'Source build failed',
+          message: res.error || 'The llama.cpp source build did not complete.'
+        })
       }
     } catch (error) {
-      alert(`Source update failed: ${String(error)}`)
+      useStore.getState().pushNotification({
+        tone: 'danger',
+        title: 'Source build failed',
+        message: error instanceof Error ? error.message : String(error)
+      })
     } finally {
       setUpdatingSource(false)
       setDownloadProgress(null)

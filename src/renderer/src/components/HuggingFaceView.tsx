@@ -128,7 +128,11 @@ export default function HuggingFaceView() {
     })
     if (!res.success) {
       removeHfDownload(file.name)
-      alert(`Download failed: ${res.error}`)
+      useStore.getState().pushNotification({
+        tone: 'danger',
+        title: 'Download failed',
+        message: res.error || `${file.name} could not be downloaded.`
+      })
     }
   }
 
@@ -276,11 +280,11 @@ export default function HuggingFaceView() {
                         </div>
                         <span className="hub-progress-label">
                           {dl?.phase === 'saving'
-                            ? 'Salvando...'
+                            ? 'Saving…'
                             : dl?.phase === 'creating_template'
-                            ? 'Criando template...'
+                            ? 'Creating template…'
                             : dl?.phase === 'paused'
-                            ? `Pausado • ${dl?.percent || 0}%`
+                            ? `Paused • ${dl?.percent || 0}%`
                             : `${dl?.percent || 0}%${dl?.speed ? ` • ${formatSpeed(dl.speed)}` : ''}`
                           }
                         </span>
@@ -330,10 +334,10 @@ export default function HuggingFaceView() {
           {hfDownloads.filter(d => d.phase !== 'done').map(dl => {
             const isPaused = dl.phase === 'paused'
             let statusText = `${dl.percent}%`
-            if (dl.phase === 'downloading') statusText = dl.speed ? `${dl.percent}% • ${formatSpeed(dl.speed)}` : `Baixando [${dl.percent}%]`
-            if (dl.phase === 'saving') statusText = 'Salvando em /models...'
-            if (dl.phase === 'creating_template') statusText = 'Criando template...'
-            if (isPaused) statusText = `Pausado • ${dl.percent}%`
+            if (dl.phase === 'downloading') statusText = dl.speed ? `${dl.percent}% • ${formatSpeed(dl.speed)}` : `Downloading • ${dl.percent}%`
+            if (dl.phase === 'saving') statusText = 'Saving to Models…'
+            if (dl.phase === 'creating_template') statusText = 'Creating template…'
+            if (isPaused) statusText = `Paused • ${dl.percent}%`
             return (
               <div key={dl.filename} className="hub-dl-strip-item">
                 {isPaused

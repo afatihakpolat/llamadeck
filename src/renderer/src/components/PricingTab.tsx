@@ -199,7 +199,11 @@ export function PricingTab({ appSettings, onAppSettingsChange }: PricingTabProps
       if (!result.success) {
         const message = `Failed to save app-wide pricing: ${result.error || 'Unknown error'}`
         setAppError(message)
-        alert(message)
+        useStore.getState().pushNotification({
+          tone: 'danger',
+          title: 'Pricing was not saved',
+          message
+        })
         return
       }
       setAppError(null)
@@ -207,7 +211,11 @@ export function PricingTab({ appSettings, onAppSettingsChange }: PricingTabProps
     } catch (saveError) {
       const message = saveError instanceof Error ? saveError.message : String(saveError)
       setAppError(message)
-      alert(message)
+      useStore.getState().pushNotification({
+        tone: 'danger',
+        title: 'Pricing was not saved',
+        message
+      })
     } finally {
       setSavingApp(false)
     }

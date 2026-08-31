@@ -5,23 +5,32 @@ import type { ThemeMode } from './store/useStore'
 import { readStoredActiveBackendName } from './store/useStore'
 import Titlebar from './components/Titlebar'
 import Sidebar from './components/Sidebar'
-import CardsView from './components/CardsView'
-import SettingsView from './components/SettingsView'
-import HuggingFaceView from './components/HuggingFaceView'
-import ModelsView from './components/ModelsView'
-import LiteLlmView from './components/LiteLlmView'
-import AgentSkillsView from './components/AgentSkillsView'
-import LiveOutputView from './components/LiveOutputView'
-import UsageStatsView from './components/UsageStatsView'
 import CreateModal from './components/CreateModal'
 import UpdateBanner from './components/UpdateBanner'
-import ChatWindow from './components/ChatWindow'
+import StartupStatusScreen from './components/StartupStatusScreen'
+import ViewLoading from './components/ViewLoading'
+import {
+  AgentSkillsView,
+  CardsView,
+  ChatWindow,
+  HuggingFaceView,
+  LiteLlmView,
+  LiveOutputView,
+  ModelsView,
+  SettingsView,
+  UsageStatsView
+} from './lazyViews'
 import { buildDefaultTemplate } from './utils/defaultTemplate'
 import {
   LLAMADECK_STORAGE_KEYS,
   readLlamaDeckStorage
 } from './utils/storageMigration'
 import { isCurrentModelExit } from './utils/modelLifecycle'
+import {
+  describeStartupFailure,
+  loadInitialAppSnapshot,
+  type StartupFailure
+} from './utils/appInitialization'
 import type { ModelOutputEvent, Template } from '../../shared/types'
 
 const MODEL_OUTPUT_FLUSH_INTERVAL_MS = 50
@@ -48,7 +57,11 @@ function applyTheme(themeMode: ThemeMode): void {
 }
 
 function MainApp() {
-  const [loading, setLoading] = React.useState(true)
+  const [initialization, setInitialization] = React.useState<{
+    status: 'loading' | 'ready' | 'error'
+    failure: StartupFailure | null
+  }>({ status: 'loading', failure: null })
+  const initializationRun = React.useRef(0)
 
   const {
     view, showCreateModal, activeBackend,
@@ -77,78 +90,105 @@ function MainApp() {
     setAppUpdatePreferences: state.setAppUpdatePreferences
   })))
 
-  useEffect(() => {
-    async function init() {
-      try {
-        const [paths, backendsData, modelsData, persistedActiveBackendName, templates, runningModels] = await Promise.all([
-          window.api.getPaths(),
-          window.api.listBackends(),
-          window.api.listModels(),
-          window.api.getActiveBackendName(),
-          window.api.listTemplates(),
-          window.api.listRunningModels()
-        ])
-        setPaths(paths)
-        setBackends(backendsData)
-        setModels(modelsData)
-        if (backendsData.length > 0) {
-          const storedActiveBackendName = persistedActiveBackendName ?? readStoredActiveBackendName()
-          const nextActiveBackend = (storedActiveBackendName
-            ? backendsData.find((backend) => backend.name === storedActiveBackendName)
-            : undefined) ?? backendsData[0]
+  const desktopApi = window.api as Window['api'] | undefined
 
-          setActiveBackend(nextActiveBackend)
-          const cmds = await window.api.getCommands(nextActiveBackend.name)
-          setCommandsSchema(cmds)
-        } else {
-          const cmds = await window.api.getCommands('')
-          setCommandsSchema(cmds)
-        }
-        const runningById = new Map(runningModels.map((runningModel) => [runningModel.id, runningModel]))
-        setCards(
-          (templates as Template[]).map((t) => ({
-            template: t,
-            status: runningById.has(t.id) ? 'running' : 'idle',
-            pid: runningById.get(t.id)?.pid,
-            expanded: false
-          }))
-        )
-      } catch (e) {
-        console.error('Init error:', e)
-      } finally {
-        setLoading(false)
-      }
-      void checkUpdates()
+  const checkUpdates = React.useCallback(async () => {
+    if (!desktopApi) return
+    setCheckingUpdate(true)
+    try {
+      const info = await desktopApi.checkUpdates()
+      setReleaseInfo(info)
+    } catch (error) {
+      console.warn('Failed to check llama.cpp releases:', error)
+    } finally {
+      setCheckingUpdate(false)
     }
-    init()
-    window.api.onModelError((data) => {
-      useStore.getState().setCardStatus(data.id, 'error')
-      alert(`Model execution error:\n\n${data.error}`)
-    })
-  }, [])
+  }, [desktopApi, setCheckingUpdate, setReleaseInfo])
+
+  const initializeApp = React.useCallback(async () => {
+    const runId = ++initializationRun.current
+    setInitialization({ status: 'loading', failure: null })
+
+    try {
+      const snapshot = await loadInitialAppSnapshot(desktopApi, readStoredActiveBackendName())
+      if (runId !== initializationRun.current) return
+
+      setPaths(snapshot.paths)
+      setBackends(snapshot.backends)
+      setModels(snapshot.models)
+      setActiveBackend(snapshot.activeBackend)
+      setCommandsSchema(snapshot.commandsSchema)
+
+      const runningById = new Map(
+        snapshot.runningModels.map((runningModel) => [runningModel.id, runningModel])
+      )
+      setCards(snapshot.templates.map((template: Template) => ({
+        template,
+        status: runningById.has(template.id) ? 'running' : 'idle',
+        pid: runningById.get(template.id)?.pid,
+        expanded: false
+      })))
+      setInitialization({ status: 'ready', failure: null })
+      void checkUpdates()
+    } catch (error) {
+      if (runId !== initializationRun.current) return
+      console.error('Initialization failed:', error)
+      setInitialization({ status: 'error', failure: describeStartupFailure(error) })
+    }
+  }, [
+    checkUpdates,
+    desktopApi,
+    setActiveBackend,
+    setBackends,
+    setCards,
+    setCommandsSchema,
+    setModels,
+    setPaths
+  ])
 
   useEffect(() => {
-    if (!activeBackend) return
-    void window.api.setActiveBackendName(activeBackend.name).then((result) => {
+    void initializeApp()
+  }, [initializeApp])
+
+  useEffect(() => {
+    if (!desktopApi) return
+
+    desktopApi.onModelError((data) => {
+      useStore.getState().setCardStatus(data.id, 'error')
+      useStore.getState().pushNotification({
+        tone: 'danger',
+        title: 'Model execution failed',
+        message: data.error
+      })
+    })
+
+    return () => desktopApi.removeModelErrorListener()
+  }, [desktopApi])
+
+  useEffect(() => {
+    if (!activeBackend || !desktopApi) return
+    void desktopApi.setActiveBackendName(activeBackend.name).then((result) => {
       if (!result.success) {
         console.warn('Failed to persist the active backend:', result.error)
       }
     })
-  }, [activeBackend])
+  }, [activeBackend, desktopApi])
 
   useEffect(() => {
-    window.api.onModelStarted((data) => {
+    if (!desktopApi) return
+    desktopApi.onModelStarted((data) => {
       useStore.getState().setCardStatus(data.id, 'running', data.pid)
     })
 
-    return () => window.api.removeModelStartedListener()
-  }, [])
+    return () => desktopApi.removeModelStartedListener()
+  }, [desktopApi])
 
   useEffect(() => {
-    return window.api.onTemplatesChanged(async () => {
+    if (!desktopApi) return
+    return desktopApi.onTemplatesChanged(async () => {
       const [templates, runningModels] = await Promise.all([
-        window.api.listTemplates(),
-        window.api.listRunningModels()
+        desktopApi.listTemplates(),
+        desktopApi.listRunningModels()
       ])
       const state = useStore.getState()
       const existingCards = new Map(state.cards.map((card) => [card.template.id, card]))
@@ -165,20 +205,22 @@ function MainApp() {
         }
       }))
     })
-  }, [])
+  }, [desktopApi])
 
   useEffect(() => {
-    return window.api.onActiveBackendChanged(async ({ name }) => {
-      const backends = await window.api.listBackends()
+    if (!desktopApi) return
+    return desktopApi.onActiveBackendChanged(async ({ name }) => {
+      const backends = await desktopApi.listBackends()
       const backend = backends.find((candidate) => candidate.name === name) ?? null
       const state = useStore.getState()
       state.setBackends(backends)
       state.setActiveBackend(backend)
-      state.setCommandsSchema(backend ? await window.api.getCommands(backend.name) : null)
+      state.setCommandsSchema(backend ? await desktopApi.getCommands(backend.name) : null)
     })
-  }, [])
+  }, [desktopApi])
 
   useEffect(() => {
+    if (!desktopApi) return
     let pendingEvents: ModelOutputEvent[] = []
     let flushTimer: number | null = null
 
@@ -191,7 +233,7 @@ function MainApp() {
       useStore.getState().appendModelOutputBatch(events)
     }
 
-    window.api.onModelOutput((data) => {
+    desktopApi.onModelOutput((data) => {
       pendingEvents.push(data)
       if (flushTimer === null) {
         flushTimer = window.setTimeout(flushPendingEvents, MODEL_OUTPUT_FLUSH_INTERVAL_MS)
@@ -199,14 +241,15 @@ function MainApp() {
     })
 
     return () => {
-      window.api.removeModelOutputListener()
+      desktopApi.removeModelOutputListener()
       if (flushTimer !== null) window.clearTimeout(flushTimer)
       flushPendingEvents()
     }
-  }, [])
+  }, [desktopApi])
 
   useEffect(() => {
-    window.api.onModelExit((data) => {
+    if (!desktopApi) return
+    desktopApi.onModelExit((data) => {
       const state = useStore.getState()
       const currentCard = state.cards.find((card) => card.template.id === data.id)
       if (!isCurrentModelExit(currentCard?.pid, data)) return
@@ -214,11 +257,12 @@ function MainApp() {
       state.setCardStatus(data.id, data.code && data.code !== 0 ? 'error' : 'idle')
     })
 
-    return () => window.api.removeModelExitListener()
-  }, [])
+    return () => desktopApi.removeModelExitListener()
+  }, [desktopApi])
 
   useEffect(() => {
-    window.api.onHfDownloadProgress(async (data) => {
+    if (!desktopApi) return
+    desktopApi.onHfDownloadProgress(async (data) => {
 
       upsertModelDownload({
         id: (data as any).id || data.filename,
@@ -237,7 +281,7 @@ function MainApp() {
         
         setHfDownload({ repoId: '', filename: data.filename, percent: 100, phase: 'saving' })
 
-        const models = await window.api.listModels()
+        const models = await desktopApi.listModels()
         useStore.getState().setModels(models)
 
         setHfDownload({ repoId: '', filename: data.filename, percent: 100, phase: 'creating_template' })
@@ -248,7 +292,7 @@ function MainApp() {
           cards.map(c => c.template),
           backend?.name || ''
         )
-        const res = await window.api.saveTemplate(template)
+        const res = await desktopApi.saveTemplate(template)
         if (res.success) add({ ...template, id: res.id })
 
         setHfDownload({ repoId: '', filename: data.filename, percent: 100, phase: 'done' })
@@ -264,16 +308,17 @@ function MainApp() {
         })
       }
     })
-    return () => window.api.removeHfDownloadListener()
-  }, [])
+    return () => desktopApi.removeHfDownloadListener()
+  }, [desktopApi, removeHfDownload, setHfDownload, upsertModelDownload])
 
   useEffect(() => {
-    window.api.onModelDownloadProgress(async (data: any) => {
+    if (!desktopApi) return
+    desktopApi.onModelDownloadProgress(async (data) => {
       
       if (data.repoId) return
       upsertModelDownload(data)
       if (data.phase === 'done') {
-        const models = await window.api.listModels()
+        const models = await desktopApi.listModels()
         useStore.getState().setModels(models)
         
         const { cards, activeBackend: backend, addCard: add } = useStore.getState()
@@ -283,54 +328,46 @@ function MainApp() {
           cards.map(c => c.template),
           backend?.name || ''
         )
-        const res = await window.api.saveTemplate(template)
+        const res = await desktopApi.saveTemplate(template)
         if (res.success) add({ ...template, id: res.id })
         setTimeout(() => removeModelDownload(data.id), 4000)
       }
     })
     
-    window.api.listModelDownloads().then(list => {
-      list.forEach((dl: any) => upsertModelDownload(dl))
+    desktopApi.listModelDownloads().then(list => {
+      list.forEach((download) => upsertModelDownload(download))
     })
-    return () => window.api.removeModelDownloadListener()
-  }, [])
+    return () => desktopApi.removeModelDownloadListener()
+  }, [desktopApi, removeModelDownload, upsertModelDownload])
 
   useEffect(() => {
-    if (!activeBackend) return
-    window.api.getCommands(activeBackend.name).then((cmds) => {
+    if (!activeBackend || !desktopApi) return
+    desktopApi.getCommands(activeBackend.name).then((cmds) => {
       setCommandsSchema(cmds)
     })
-  }, [activeBackend, setCommandsSchema])
+  }, [activeBackend, desktopApi, setCommandsSchema])
 
   useEffect(() => {
-    window.api.onDownloadProgress((data) => {
+    if (!desktopApi) return
+    desktopApi.onDownloadProgress((data) => {
       useStore.getState().setDownloadProgress(data)
     })
-    return () => window.api.removeDownloadListener()
-  }, [])
+    return () => desktopApi.removeDownloadListener()
+  }, [desktopApi])
 
   useEffect(() => {
-    void window.api.updateGetState().then((state) => {
+    if (!desktopApi) return
+    void desktopApi.updateGetState().then((state) => {
       setAppUpdateState(state as any)
     })
-    void window.api.updateGetPreferences().then((prefs) => {
+    void desktopApi.updateGetPreferences().then((prefs) => {
       setAppUpdatePreferences(prefs as any)
     })
-    const unsubscribe = window.api.onUpdateStateChanged((state) => {
+    const unsubscribe = desktopApi.onUpdateStateChanged((state) => {
       setAppUpdateState(state as any)
     })
     return unsubscribe
-  }, [setAppUpdateState, setAppUpdatePreferences])
-
-  async function checkUpdates() {
-    setCheckingUpdate(true)
-    try {
-      const info = await window.api.checkUpdates()
-      setReleaseInfo(info)
-    } finally {
-      setCheckingUpdate(false)
-    }
-  }
+  }, [desktopApi, setAppUpdateState, setAppUpdatePreferences])
 
   function renderView() {
     if (view === 'hub') return <HuggingFaceView />
@@ -343,17 +380,12 @@ function MainApp() {
     return <CardsView />
   }
 
-  if (loading) {
+  if (initialization.status !== 'ready') {
     return (
-      <div style={{
-        position: 'fixed', inset: 0, background: 'var(--bg)', zIndex: 9999,
-        display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-        color: 'var(--text)'
-      }}>
-        <img src="./icon.png" alt="LlamaDeck Icon" className="brand-logo-img" style={{ width: 128, height: 128, marginBottom: 24, imageRendering: 'crisp-edges' }} draggable={false} />
-        <div style={{ fontSize: 13, fontWeight: 700, letterSpacing: '0.18em', textTransform: 'uppercase', marginBottom: 12, color: 'var(--text-secondary)' }}>LlamaDeck</div>
-        <h2 style={{ fontSize: 18, fontWeight: 600, letterSpacing: '0.5px' }}>All AI-Glory to the Llama.cpp</h2>
-      </div>
+      <StartupStatusScreen
+        failure={initialization.failure}
+        onRetry={() => void initializeApp()}
+      />
     )
   }
 
@@ -364,7 +396,9 @@ function MainApp() {
       <div className="main-layout">
         <Sidebar />
         <main className="content">
-          {renderView()}
+          <React.Suspense fallback={<ViewLoading />}>
+            {renderView()}
+          </React.Suspense>
         </main>
       </div>
       {showCreateModal && <CreateModal />}
@@ -417,7 +451,11 @@ export default function App() {
   }, [themeMode])
 
   if (chatUrl) {
-    return <ChatWindow url={chatUrl} />
+    return (
+      <React.Suspense fallback={<StartupStatusScreen />}>
+        <ChatWindow url={chatUrl} />
+      </React.Suspense>
+    )
   }
 
   return <MainApp />

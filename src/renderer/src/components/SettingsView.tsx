@@ -122,7 +122,11 @@ export default function SettingsView() {
     const result = await window.api.saveAppWindowBehaviorSettings({ minimizeToTray })
     if (!result.success) {
       setLoadingWindowBehaviorSettings(false)
-      alert(`Failed to update window behavior: ${result.error || 'Unknown error'}`)
+      useStore.getState().pushNotification({
+        tone: 'danger',
+        title: 'Window behavior was not saved',
+        message: result.error || 'Unknown error'
+      })
       return
     }
 
@@ -172,7 +176,11 @@ export default function SettingsView() {
 
   async function handleChangeFolder(kind: FolderKind) {
     if (hasActiveDownloads) {
-      alert('Finish or cancel active downloads before changing storage folders.')
+      useStore.getState().pushNotification({
+        tone: 'warning',
+        title: 'Storage folders are busy',
+        message: 'Finish or cancel active downloads before changing storage folders.'
+      })
       return
     }
 
@@ -183,7 +191,11 @@ export default function SettingsView() {
     try {
       const result = await window.api.setAppFolder(kind, selectedPath)
       if (!result.success) {
-        alert(`Failed to update ${kind} folder: ${result.error || 'Unknown error'}`)
+        useStore.getState().pushNotification({
+          tone: 'danger',
+          title: `${kind === 'models' ? 'Models' : 'Backend'} folder was not changed`,
+          message: result.error || 'Unknown error'
+        })
         return
       }
 
@@ -207,7 +219,13 @@ export default function SettingsView() {
     if (res.success) {
       const updated = await window.api.listBackends()
       setBackends(updated)
-    } else alert('Delete failed: ' + res.error)
+    } else {
+      useStore.getState().pushNotification({
+        tone: 'danger',
+        title: 'Backend could not be deleted',
+        message: res.error || name
+      })
+    }
   }
 
   async function handleCheckUpdates() {
@@ -231,10 +249,18 @@ export default function SettingsView() {
       } else if (res.cancelled) {
         return
       } else {
-        alert(`Source update failed: ${res.error}`)
+        useStore.getState().pushNotification({
+          tone: 'danger',
+          title: 'Source build failed',
+          message: res.error || 'The llama.cpp source build did not complete.'
+        })
       }
     } catch (error) {
-      alert(`Source update failed: ${String(error)}`)
+      useStore.getState().pushNotification({
+        tone: 'danger',
+        title: 'Source build failed',
+        message: error instanceof Error ? error.message : String(error)
+      })
     } finally {
       setUpdatingSource(false)
       setDownloadProgress(null)

@@ -16,6 +16,12 @@ import {
   initUpdateManager
 } from './updateManager'
 import { startCliServer, type CliServerHandle } from './cliServer'
+import {
+  getPackagedSmokeResultPath,
+  isPackagedSmokeTest,
+  runPackagedSmokeProbe,
+  writePackagedSmokeResult
+} from './packagedSmoke'
 
 let isShuttingDown = false
 let mainWindow: BrowserWindow | null = null
@@ -23,6 +29,7 @@ let tray: Tray | null = null
 let cliServer: CliServerHandle | null = null
 const LIGHT_WINDOW_BACKGROUND = '#f3f6fb'
 const DARK_WINDOW_BACKGROUND = '#0b1220'
+const packagedSmokeTest = isPackagedSmokeTest()
 
 function getInitialWindowBackground(): string {
   return nativeTheme.shouldUseDarkColors ? DARK_WINDOW_BACKGROUND : LIGHT_WINDOW_BACKGROUND
@@ -112,7 +119,7 @@ function createWindow(): void {
     }
   })
   mainWindow.on('ready-to-show', () => {
-    mainWindow?.show()
+    if (!packagedSmokeTest) mainWindow?.show()
   })
   mainWindow.on('show', () => {
     destroyTray()
@@ -141,6 +148,41 @@ function createWindow(): void {
       event.preventDefault()
     }
   })
+  if (packagedSmokeTest) {
+    mainWindow.webContents.once('did-finish-load', () => {
+      const smokeWindow = mainWindow
+      if (!smokeWindow) {
+        app.exit(1)
+        return
+      }
+
+      void runPackagedSmokeProbe(smokeWindow, app.getVersion())
+        .then((result) => {
+          const resultPath = getPackagedSmokeResultPath()
+          if (resultPath) writePackagedSmokeResult(resultPath, result)
+          app.exit(0)
+        })
+        .catch((error) => {
+          const message = error instanceof Error ? error.stack || error.message : String(error)
+          console.error('[package-smoke] failed:', message)
+          try {
+            const resultPath = getPackagedSmokeResultPath()
+            if (resultPath) {
+              writePackagedSmokeResult(resultPath, {
+                ok: false,
+                version: app.getVersion(),
+                loadedViews: [],
+                apiMethods: [],
+                rootText: '',
+                error: message
+              })
+            }
+          } finally {
+            app.exit(1)
+          }
+        })
+    })
+  }
   if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
     mainWindow.loadURL(process.env['ELECTRON_RENDERER_URL'])
   } else {
@@ -176,7 +218,7 @@ app.whenReady().then(async () => {
   await initUpdateManager({ broadcast: broadcastToRenderer }).catch((err) => {
     console.warn('[update] init failed, in-app updates disabled:', err)
   })
-  if (getUpdatePreferences().checkOnLaunch && app.isPackaged) {
+  if (getUpdatePreferences().checkOnLaunch && app.isPackaged && !packagedSmokeTest) {
     setImmediate(() => {
       void checkForUpdates().catch((err) => {
         console.warn('[update] initial check failed:', err)
@@ -185,7 +227,7 @@ app.whenReady().then(async () => {
   }
   registerIpcHandlers()
   createWindow()
-  if (process.platform === 'win32') {
+  if (process.platform === 'win32' && !packagedSmokeTest) {
     cliServer = await startCliServer({
       userDataDir: USER_DATA_ROOT,
       handleRequest: createAppCliCommandHandler(showMainWindow)

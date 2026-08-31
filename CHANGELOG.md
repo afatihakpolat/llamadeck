@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.6.6] - 2026-08-30
+
+### Added
+- Startup failures now open a recovery screen that identifies which part of the local workspace failed and offers retry or interface reload without stopping running models.
+- Application errors now appear as accessible, non-blocking notifications that can be dismissed without interrupting other work.
+
+### Changed
+- Major pages now load only when opened and begin preloading when their navigation item is hovered or focused, reducing initial interface work while keeping navigation responsive.
+- Download progress and completion messages now use consistent English wording throughout Models and Model Hub.
+
+### Fixed
+- A failed startup can no longer leave LlamaDeck looking empty with the cause visible only in developer logs.
+- Runtime failures no longer block the entire interface behind native alert dialogs.
+
 ## [1.6.5] - 2026-08-30
 
 ### Fixed

@@ -94,8 +94,22 @@ export default function CreateModal() {
   }
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    if (!name.trim()) return alert('Name is required')
-    if (!modelPath.trim()) return alert('Model file is required')
+    if (!name.trim()) {
+      useStore.getState().pushNotification({
+        tone: 'warning',
+        title: 'Template needs a name',
+        message: 'Enter a name before saving this template.'
+      })
+      return
+    }
+    if (!modelPath.trim()) {
+      useStore.getState().pushNotification({
+        tone: 'warning',
+        title: 'Choose a model file',
+        message: 'Select a local model before saving this template.'
+      })
+      return
+    }
 
     const templateData: Partial<Template> = {
       name,

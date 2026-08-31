@@ -178,7 +178,13 @@ export default function CommandsEditor({ backendName }: { backendName: string })
       setSaved(true); setTimeout(() => setSaved(false), 2000)
       const updated = await window.api.getCommands(backendName)
       if (updated) setCommandsSchema(updated)
-    } else { alert('Save failed: ' + res.error) }
+    } else {
+      useStore.getState().pushNotification({
+        tone: 'danger',
+        title: 'Commands were not saved',
+        message: res.error || 'The backend command schema could not be saved.'
+      })
+    }
   }
   async function handleReset() {
     if (!confirm('Reset to current saved schema?')) return

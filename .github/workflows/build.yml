@@ -70,6 +70,10 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Smoke-test packaged Windows app
+        if: runner.os == 'Windows'
+        run: npm run test:package-smoke
+
       - name: Upload Artifacts to Release
         uses: softprops/action-gh-release@v2
         with:

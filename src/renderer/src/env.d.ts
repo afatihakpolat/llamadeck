@@ -92,6 +92,7 @@ interface LlamaCppApi {
   onModelExit: (cb: (data: ModelExitEvent) => void) => void
   removeModelExitListener: () => void
   onModelError: (cb: (data: { id: string; error: string }) => void) => void
+  removeModelErrorListener: () => void
   onUsageUpdated: (cb: (data: UsageUpdatedEvent) => void) => () => void
   removeUsageUpdatedListener: () => void
   checkUpdates: () => Promise<ReleaseInfo>

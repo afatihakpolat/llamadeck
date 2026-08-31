@@ -1,19 +1,27 @@
 import { app } from 'electron'
-import { join } from 'path'
+import { isAbsolute, join } from 'path'
 import {
   findLegacyUserDataDir,
   migrateLegacyUserData,
   repairMigratedUserData
 } from './userDataMigration'
 
+const PACKAGED_SMOKE_USER_DATA = process.env['LLAMADECK_SMOKE_USER_DATA']?.trim()
+if (PACKAGED_SMOKE_USER_DATA) {
+  if (!isAbsolute(PACKAGED_SMOKE_USER_DATA)) {
+    throw new Error('LLAMADECK_SMOKE_USER_DATA must be an absolute path.')
+  }
+  app.setPath('userData', PACKAGED_SMOKE_USER_DATA)
+}
+
 const CURRENT_USER_DATA_ROOT = app.getPath('userData')
-const LEGACY_USER_DATA_CANDIDATES = app.isPackaged
+const LEGACY_USER_DATA_CANDIDATES = app.isPackaged && !PACKAGED_SMOKE_USER_DATA
   ? [join(app.getPath('appData'), 'hexllama'), join(app.getPath('appData'), 'Hexllama')]
   : []
 
 let resolvedUserDataRoot = CURRENT_USER_DATA_ROOT
 
-if (app.isPackaged) {
+if (app.isPackaged && !PACKAGED_SMOKE_USER_DATA) {
   const repair = repairMigratedUserData(
     CURRENT_USER_DATA_ROOT,
     LEGACY_USER_DATA_CANDIDATES
