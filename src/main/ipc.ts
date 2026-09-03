@@ -321,6 +321,7 @@ try {
   if ($BuildFlavor -eq "cuda") {
     $cmakeArgs += @(
       "-DGGML_CUDA=ON",
+      "-DGGML_CUDA_FA_ALL_QUANTS=ON",
       "-DCMAKE_CUDA_HOST_COMPILER=$clPath"
     )
 

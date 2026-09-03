@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- CUDA source builds now compile Flash Attention support for all KV cache quantization types, so flash attention stays on GPU with quantized KV cache at the cost of longer build times.
+
 ## [1.6.6] - 2026-08-30
 
 ### Added
