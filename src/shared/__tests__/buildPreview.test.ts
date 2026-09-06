@@ -87,8 +87,18 @@ describe('previewSourceBuildCommands', () => {
     }))
     expect(preview.configureCommand).toContain('-DCMAKE_C_COMPILER=<clang-cl>')
     expect(preview.configureCommand).toContain('-DCMAKE_CXX_COMPILER=<clang-cl>')
-    expect(preview.configureCommand).toContain('-DCMAKE_CUDA_HOST_COMPILER=<clang-cl>')
+    // nvcc cannot use clang-cl as host compiler: CUDA host stays on MSVC.
+    expect(preview.configureCommand).toContain('-DCMAKE_CUDA_HOST_COMPILER=<cl.exe>')
     expect(preview.configureCommand).toContain('-DGGML_NATIVE=OFF -DGGML_AVX512=ON -DGGML_AVX512_BF16=ON -DGGML_AVX512_VNNI=ON -DGGML_AVX512_VBMI=ON')
+  })
+
+  it('uses clang-cl as CUDA host compiler only for non-CUDA builds (no host flag emitted)', () => {
+    const preview = previewSourceBuildCommands('b10819', baseOptions({
+      accelerator: 'cpu',
+      compiler: 'clang-cl'
+    }))
+    expect(preview.configureCommand).toContain('-DCMAKE_C_COMPILER=<clang-cl>')
+    expect(preview.configureCommand).not.toContain('CUDA_HOST_COMPILER')
   })
 })
 

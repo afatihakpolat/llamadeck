@@ -79,6 +79,9 @@ export function previewSourceBuildCommands(tagName: string, options: BackendBuil
   const flavor = resolveBuildFlavor(options.accelerator, options.enableRpc)
   const buildFolder = flavor === 'cuda' ? tagName : `${tagName}-${flavor}`
   const compilerDisplay = options.compiler === 'clang-cl' ? '<clang-cl>' : PREVIEW_CL_EXE
+  // nvcc cannot use clang-cl as its host compiler, so CUDA builds always
+  // use MSVC cl.exe there even when the main compiler is clang-cl.
+  const cudaHostDisplay = options.compiler === 'clang-cl' ? PREVIEW_CL_EXE : compilerDisplay
 
   const configureArgs = [
     'cmake', '-S', '.', '-B', buildFolder, '-G', 'Ninja',
@@ -92,7 +95,7 @@ export function previewSourceBuildCommands(tagName: string, options: BackendBuil
   }
 
   if (flavor.includes('cuda')) {
-    configureArgs.push('-DGGML_CUDA=ON', `-DCMAKE_CUDA_HOST_COMPILER=${compilerDisplay}`)
+    configureArgs.push('-DGGML_CUDA=ON', `-DCMAKE_CUDA_HOST_COMPILER=${cudaHostDisplay}`)
     if (options.faAllQuants) {
       configureArgs.push('-DGGML_CUDA_FA_ALL_QUANTS=ON')
     }

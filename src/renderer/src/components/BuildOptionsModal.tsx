@@ -359,7 +359,7 @@ export default function BuildOptionsModal() {
                   </select>
                   <div className="form-hint">
                     clang-cl requires LLVM on PATH; the Visual Studio C++ Build Tools are still required.
-                    With CUDA it also needs a recent CUDA toolkit for host-compiler support.
+                    With CUDA, the CUDA host compiler stays on MSVC cl.exe (nvcc requirement).
                   </div>
                 </div>
                 <div className="form-group">

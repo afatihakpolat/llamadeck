@@ -267,6 +267,12 @@ foreach ($compilerEnv in @("CC", "CXX", "CUDAHOSTCXX")) {
   Remove-Item "Env:$compilerEnv" -ErrorAction SilentlyContinue
 }
 
+# nvcc cannot use clang-cl as its host compiler (its compiler-ID check
+# fails), so CUDA builds always use MSVC cl.exe there even when the main
+# C/C++ compiler is clang-cl.
+$msvcClCommand = Get-Command cl.exe -ErrorAction SilentlyContinue
+$msvcClPath = if ($msvcClCommand) { $msvcClCommand.Source } else { '' }
+
 if ($BuildFlavor -notin @("cuda", "cpu", "vulkan", "cuda-rpc", "cpu-rpc", "vulkan-rpc")) {
   throw "Unsupported build flavor: $BuildFlavor"
 }
@@ -341,9 +347,16 @@ try {
   }
 
   if ($BuildFlavor -like "*cuda*") {
+    $cudaHostCompiler = $compilerPath
+    if ($Compiler -eq "clang-cl") {
+      if (-not $msvcClPath) {
+        throw "CUDA builds with clang-cl still need MSVC cl.exe as the CUDA host compiler. Install the Visual Studio C++ Build Tools."
+      }
+      $cudaHostCompiler = $msvcClPath
+    }
     $cmakeArgs += @(
       "-DGGML_CUDA=ON",
-      "-DCMAKE_CUDA_HOST_COMPILER=$compilerPath"
+      "-DCMAKE_CUDA_HOST_COMPILER=$cudaHostCompiler"
     )
     if ($FaAllQuants -eq "ON") {
       $cmakeArgs += "-DGGML_CUDA_FA_ALL_QUANTS=ON"
