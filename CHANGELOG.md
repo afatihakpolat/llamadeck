@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.8.0] - 2026-09-06
+
 ### Added
 - Source builds can now compile only llama-server instead of all llama.cpp tools, which is faster and preselected by default since LlamaDeck only runs llama-server.
 - The Build Options popup now previews the exact CMake configure and build commands, including the build folder, before compiling.
