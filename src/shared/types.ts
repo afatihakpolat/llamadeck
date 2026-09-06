@@ -3,8 +3,30 @@ export interface ModelFile {
   path: string
 }
 
-export type BackendBuildFlavor = 'cuda' | 'cpu'
+export type BackendAccelerator = 'cuda' | 'cpu' | 'vulkan'
+export type BackendBuildFlavor =
+  | 'cuda'
+  | 'cpu'
+  | 'vulkan'
+  | 'cuda-rpc'
+  | 'cpu-rpc'
+  | 'vulkan-rpc'
 export type BackendBuildMode = 'single' | 'parallel'
+export type BackendBuildType = 'Release' | 'RelWithDebInfo' | 'Debug'
+
+export interface BackendBuildOptions {
+  accelerator: BackendAccelerator
+  enableRpc: boolean
+  buildMode: BackendBuildMode
+  buildType: BackendBuildType
+  cudaArch: string
+  faAllQuants: boolean
+}
+
+export function resolveBuildFlavor(accelerator: BackendAccelerator, enableRpc: boolean): BackendBuildFlavor {
+  if (!enableRpc) return accelerator
+  return `${accelerator}-rpc` as BackendBuildFlavor
+}
 
 export interface BackendVersion {
   name: string

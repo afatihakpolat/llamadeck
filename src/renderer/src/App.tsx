@@ -6,6 +6,7 @@ import { readStoredActiveBackendName } from './store/useStore'
 import Titlebar from './components/Titlebar'
 import Sidebar from './components/Sidebar'
 import CreateModal from './components/CreateModal'
+import BuildOptionsModal from './components/BuildOptionsModal'
 import UpdateBanner from './components/UpdateBanner'
 import StartupStatusScreen from './components/StartupStatusScreen'
 import ViewLoading from './components/ViewLoading'
@@ -64,7 +65,7 @@ function MainApp() {
   const initializationRun = React.useRef(0)
 
   const {
-    view, showCreateModal, activeBackend,
+    view, showCreateModal, showBuildOptions, activeBackend,
     setBackends, setModels, setActiveBackend, setCommandsSchema,
     setCards, setPaths, setReleaseInfo, setCheckingUpdate,
     setHfDownload, removeHfDownload,
@@ -73,6 +74,7 @@ function MainApp() {
   } = useStore(useShallow((state) => ({
     view: state.view,
     showCreateModal: state.showCreateModal,
+    showBuildOptions: state.showBuildOptions,
     activeBackend: state.activeBackend,
     setBackends: state.setBackends,
     setModels: state.setModels,
@@ -402,6 +404,7 @@ function MainApp() {
         </main>
       </div>
       {showCreateModal && <CreateModal />}
+      {showBuildOptions && <BuildOptionsModal />}
     </div>
   )
 }

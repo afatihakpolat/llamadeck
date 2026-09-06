@@ -30,8 +30,6 @@ export function readBackendBuildMode(
   backendPath: string,
   flavor: BackendBuildFlavor
 ): BackendBuildMode | null {
-  if (flavor !== 'cuda') return null
-
   const metadataPath = join(backendPath, BUILD_METADATA_FILE)
   if (existsSync(metadataPath)) {
     try {
@@ -44,16 +42,22 @@ export function readBackendBuildMode(
     }
   }
 
+  // Preserve old behaviour: a CPU-only build with no metadata is reported as
+  // unknown rather than the cmake-cache "parallel" default, which would imply
+  // a scheduler override that CPU builds typically do not set.
+  if (flavor === 'cpu') return null
+
   return inferBuildModeFromCmakeCache(backendPath)
 }
 
 export function writeBackendBuildMetadata(
   backendPath: string,
-  buildMode: BackendBuildMode
+  buildMode: BackendBuildMode,
+  flavor: BackendBuildFlavor = 'cuda'
 ): void {
   const metadata = BackendBuildMetadataSchema.parse({
     version: 1,
-    flavor: 'cuda',
+    flavor,
     buildMode
   })
   const metadataPath = join(backendPath, BUILD_METADATA_FILE)

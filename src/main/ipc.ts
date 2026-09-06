@@ -33,6 +33,7 @@ import {
   type UsagePersistedSession
 } from './usageSessions'
 import { UsageSessionWriter } from './usageSessionWriter'
+import { resolveBuildFlavor } from '../shared/types'
 import type {
   AppWindowBehaviorSettings,
   BackendVersion,
@@ -58,6 +59,7 @@ import type {
   UsageUpdatedEvent
 } from '../shared/types'
 import {
+  BackendSourceBuildOptionsSchema,
   DeleteAgentSkillSourceInputSchema,
   InstallAgentSkillInputSchema,
   LiteLlmConfigTextSchema,
@@ -200,7 +202,8 @@ param(
   [string]$BuildFlavor = "cuda",
   [string]$CudaArch = "native",
   [string]$BuildType = "Release",
-  [string]$BuildMode = "parallel"
+  [string]$BuildMode = "parallel",
+  [string]$FaAllQuants = "ON"
 )
 
 $ErrorActionPreference = "Stop"
@@ -252,12 +255,12 @@ foreach ($compilerEnv in @("CC", "CXX", "CUDAHOSTCXX")) {
   Remove-Item "Env:$compilerEnv" -ErrorAction SilentlyContinue
 }
 
-if ($BuildFlavor -notin @("cuda", "cpu")) {
+if ($BuildFlavor -notin @("cuda", "cpu", "vulkan", "cuda-rpc", "cpu-rpc", "vulkan-rpc")) {
   throw "Unsupported build flavor: $BuildFlavor"
 }
 
 $requiredCommands = @("git", "cmake", "ninja")
-if ($BuildFlavor -eq "cuda") {
+if ($BuildFlavor -like "*cuda*") {
   $requiredCommands += "nvcc"
 }
 
@@ -290,7 +293,14 @@ try {
     throw "Could not derive a llama.cpp build tag from git."
   }
 
-  $buildName = if ($BuildFlavor -eq "cpu") { "$buildTag-cpu" } else { $buildTag }
+  $buildName = switch ($BuildFlavor) {
+    "cpu"       { "$buildTag-cpu" }
+    "vulkan"    { "$buildTag-vulkan" }
+    "cpu-rpc"   { "$buildTag-cpu-rpc" }
+    "cuda-rpc"  { "$buildTag-cuda-rpc" }
+    "vulkan-rpc" { "$buildTag-vulkan-rpc" }
+    default      { $buildTag }
+  }
   $targetBuildDir = Join-Path $RepoDir $buildName
   $serverExe = Join-Path $targetBuildDir "bin\llama-server.exe"
 
@@ -318,18 +328,27 @@ try {
     $cmakeArgs += "-DGGML_SCHED_MAX_COPIES=1"
   }
 
-  if ($BuildFlavor -eq "cuda") {
+  if ($BuildFlavor -like "*cuda*") {
     $cmakeArgs += @(
       "-DGGML_CUDA=ON",
-      "-DGGML_CUDA_FA_ALL_QUANTS=ON",
       "-DCMAKE_CUDA_HOST_COMPILER=$clPath"
     )
-
+    if ($FaAllQuants -eq "ON") {
+      $cmakeArgs += "-DGGML_CUDA_FA_ALL_QUANTS=ON"
+    }
     if ($CudaArch -and $CudaArch.Trim()) {
       $cmakeArgs += "-DCMAKE_CUDA_ARCHITECTURES=$CudaArch"
     }
   } else {
     $cmakeArgs += "-DGGML_CUDA=OFF"
+  }
+
+  if ($BuildFlavor -like "*vulkan*") {
+    $cmakeArgs += "-DGGML_VULKAN=ON"
+  }
+
+  if ($BuildFlavor -like "*rpc*") {
+    $cmakeArgs += "-DGGML_RPC=ON"
   }
 
   & cmake @cmakeArgs
@@ -1200,11 +1219,16 @@ function findBackendExecutable(dir: string, depth = 0): string | null {
 }
 
 function getBackendFlavor(name: string): BackendBuildFlavor {
-  return /-cpu$/i.test(name) ? 'cpu' : 'cuda'
+  if (/-vulkan-rpc$/i.test(name)) return 'vulkan-rpc'
+  if (/-cuda-rpc$/i.test(name)) return 'cuda-rpc'
+  if (/-cpu-rpc$/i.test(name)) return 'cpu-rpc'
+  if (/-vulkan$/i.test(name)) return 'vulkan'
+  if (/-cpu$/i.test(name)) return 'cpu'
+  return 'cuda'
 }
 
 function getBackendBaseName(name: string): string {
-  return name.replace(/-cpu$/i, '')
+  return name.replace(/-(vulkan-rpc|cuda-rpc|cpu-rpc|vulkan|cpu)$/i, '')
 }
 
 function getBackendDisplayName(basePath: string, fallbackName: string): string {
@@ -1338,7 +1362,8 @@ function getConfiguredCudaArch(repoDir: string): string {
 }
 
 function getSourceBuildName(tagName: string, flavor: BackendBuildFlavor): string {
-  return flavor === 'cpu' ? `${tagName}-cpu` : tagName
+  if (flavor === 'cuda') return tagName
+  return `${tagName}-${flavor}`
 }
 
 function removeFailedSourceBuild(repoDir: string, buildTagName: string): void {
@@ -3068,7 +3093,7 @@ export function registerIpcHandlers(): void {
       }
     } catch (err) { return { error: String(err) } }
   })
-  ipcMain.handle('update-backend-source', async (event, requestedTagName?: string, requestedFlavor?: BackendBuildFlavor) => {
+  ipcMain.handle('update-backend-source', async (event, requestedTagName?: string, requestedFlavorOrOptions?: BackendBuildFlavor | unknown) => {
     if (runningProcesses.size > 0) {
       return { success: false, error: 'Stop running model processes before updating the backend.' }
     }
@@ -3085,27 +3110,47 @@ export function registerIpcHandlers(): void {
       return { success: false, error: 'The configured backend folder must be a llama.cpp git repository root to build from source.' }
     }
 
-    const scriptPath = ensureSourceUpdateScript()
-  const buildFlavor: BackendBuildFlavor = requestedFlavor === 'cpu' ? 'cpu' : 'cuda'
-  const cudaArch = buildFlavor === 'cuda' ? getConfiguredCudaArch(repoDir) : ''
-    const buildType = process.env['HEXLLAMA_BUILD_TYPE']?.trim() || 'Release'
+    let buildFlavor: BackendBuildFlavor
+    let buildMode: BackendBuildMode
+    let buildType: 'Release' | 'RelWithDebInfo' | 'Debug'
+    let cudaArch = ''
+    let faAllQuants = true
 
-    let buildMode: BackendBuildMode = 'parallel'
-    if (buildFlavor === 'cuda') {
-      const choice = await dialog.showMessageBox({
-        type: 'question',
-        title: 'CUDA Build Mode',
-        message: 'How should the CUDA build run?',
-        detail: 'Single uses one scheduler copy at runtime, reducing memory use but potentially lowering concurrent throughput. Parallel uses the default scheduler copies for higher throughput with greater memory use. Both options build with CUDA.',
-        buttons: ['Single', 'Parallel', 'Cancel'],
-        defaultId: 1,
-        cancelId: 2
-      })
-      if (choice.response === 2) {
-        return { success: false, error: 'Source update cancelled by user.', cancelled: true }
+    if (requestedFlavorOrOptions && typeof requestedFlavorOrOptions === 'object') {
+      const parsed = BackendSourceBuildOptionsSchema.safeParse(requestedFlavorOrOptions)
+      if (!parsed.success) {
+        return { success: false, error: `Invalid build options: ${parsed.error.message}` }
       }
-      buildMode = choice.response === 0 ? 'single' : 'parallel'
+      const opts = parsed.data
+      const accelerator = opts.accelerator
+      buildFlavor = resolveBuildFlavor(accelerator, opts.enableRpc)
+      buildMode = opts.buildMode
+      buildType = opts.buildType
+      faAllQuants = opts.faAllQuants
+      const trimmedArch = opts.cudaArch.trim()
+      const allowedArch = /^[A-Za-z0-9_.;+\- ]*$/.test(trimmedArch)
+      cudaArch = accelerator === 'cuda' && trimmedArch && allowedArch
+        ? trimmedArch
+        : (accelerator === 'cuda' ? getConfiguredCudaArch(repoDir) : '')
+    } else if (typeof requestedFlavorOrOptions === 'string') {
+      // Backwards-compat: legacy string flavor argument.
+      const requestedString = requestedFlavorOrOptions as BackendBuildFlavor
+      buildFlavor = ['cuda', 'cpu', 'vulkan', 'cuda-rpc', 'cpu-rpc', 'vulkan-rpc'].includes(requestedString)
+        ? requestedString
+        : 'cuda'
+      buildMode = 'parallel'
+      buildType = (process.env['HEXLLAMA_BUILD_TYPE']?.trim() as 'Release' | 'RelWithDebInfo' | 'Debug' | undefined) || 'Release'
+      cudaArch = buildFlavor.includes('cuda') ? getConfiguredCudaArch(repoDir) : ''
+      faAllQuants = true
+    } else {
+      buildFlavor = 'cuda'
+      buildMode = 'parallel'
+      buildType = (process.env['HEXLLAMA_BUILD_TYPE']?.trim() as 'Release' | 'RelWithDebInfo' | 'Debug' | undefined) || 'Release'
+      cudaArch = getConfiguredCudaArch(repoDir)
+      faAllQuants = true
     }
+
+    const scriptPath = ensureSourceUpdateScript()
     let targetTagName = requestedTagName?.trim()
 
     if (!targetTagName) {
@@ -3129,7 +3174,17 @@ export function registerIpcHandlers(): void {
     return await new Promise<{ success: true; result: BackendUpdateResult } | { success: false; error: string; cancelled?: boolean }>((resolve) => {
       const child = spawn(
         'powershell.exe',
-        ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', scriptPath, '-RepoDir', repoDir, '-TargetRef', targetTagName, '-BuildFlavor', buildFlavor, '-CudaArch', cudaArch, '-BuildType', buildType, '-BuildMode', buildMode],
+        [
+          '-NoProfile', '-ExecutionPolicy', 'Bypass',
+          '-File', scriptPath,
+          '-RepoDir', repoDir,
+          '-TargetRef', targetTagName,
+          '-BuildFlavor', buildFlavor,
+          '-CudaArch', cudaArch,
+          '-BuildType', buildType,
+          '-BuildMode', buildMode,
+          '-FaAllQuants', faAllQuants ? 'ON' : 'OFF'
+        ],
         { windowsHide: true }
       )
 
@@ -3195,11 +3250,11 @@ export function registerIpcHandlers(): void {
           return
         }
 
-        if (buildFlavor === 'cuda' && !hadRunnableBuild) {
+        if (!hadRunnableBuild) {
           try {
-            writeBackendBuildMetadata(targetBuildPath, buildMode)
+            writeBackendBuildMetadata(targetBuildPath, buildMode, buildFlavor)
           } catch (error) {
-            console.warn('[backend-source-update] Could not save CUDA build mode:', error)
+            console.warn('[backend-source-update] Could not save build mode:', error)
           }
         }
 

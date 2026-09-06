@@ -57,6 +57,8 @@ interface AppStore {
   view: AppView
   themeMode: ThemeMode
   showCreateModal: boolean
+  showBuildOptions: boolean
+  buildOptionsTag: string | null
   editingTemplate: Template | null
   updateDismissed: boolean
   checkingUpdate: boolean
@@ -75,6 +77,7 @@ interface AppStore {
   setView: (v: AppView) => void
   setThemeMode: (themeMode: ThemeMode) => void
   setShowCreateModal: (show: boolean, template?: Template | null) => void
+  setShowBuildOptions: (show: boolean, tag?: string | null) => void
   setActiveBackend: (b: BackendVersion | null) => void
   setCommandsSchema: (s: CommandsSchema | null) => void
   setBackends: (b: BackendVersion[]) => void
@@ -112,7 +115,8 @@ interface AppStore {
 export const useStore = create<AppStore>((set) => ({
   cards: [], backends: [], models: [], activeBackend: null,
   commandsSchema: null, releaseInfo: null, paths: null,
-  view: 'cards', themeMode: getInitialThemeMode(), showCreateModal: false, editingTemplate: null,
+  view: 'cards', themeMode: getInitialThemeMode(), showCreateModal: false, showBuildOptions: false, buildOptionsTag: null,
+  editingTemplate: null,
   updateDismissed: false, checkingUpdate: false, downloadProgress: null,
   appUpdateState: null, appUpdatePreferences: null,
   templateSearch: '', modelDownloads: {}, modelOutput: {}, selectedModelOutputId: null, hfDownloads: [],
@@ -127,6 +131,7 @@ export const useStore = create<AppStore>((set) => ({
     set({ themeMode })
   },
   setShowCreateModal: (show, template = null) => set({ showCreateModal: show, editingTemplate: template }),
+  setShowBuildOptions: (show, tag = null) => set({ showBuildOptions: show, buildOptionsTag: tag }),
   setActiveBackend: (b) => {
     if (typeof window !== 'undefined') {
       if (b?.name) {

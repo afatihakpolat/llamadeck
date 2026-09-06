@@ -1,5 +1,7 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import { electronAPI } from '@electron-toolkit/preload'
+import type { BackendBuildFlavor, BackendBuildOptions } from '../shared/types'
+
 const api = {
   getAgentSkills: () => ipcRenderer.invoke('get-agent-skills'),
   importAgentSkill: () => ipcRenderer.invoke('import-agent-skill'),
@@ -93,7 +95,7 @@ const api = {
   removeUsageUpdatedListener: () => ipcRenderer.removeAllListeners('usage-updated'),
   checkUpdates: () => ipcRenderer.invoke('check-updates'),
   getAppVersion: () => ipcRenderer.invoke('get-app-version'),
-  updateBackendSource: (tagName?: string, flavor?: 'cuda' | 'cpu') => ipcRenderer.invoke('update-backend-source', tagName, flavor),
+  updateBackendSource: (tagName?: string, flavorOrOptions?: BackendBuildFlavor | BackendBuildOptions) => ipcRenderer.invoke('update-backend-source', tagName, flavorOrOptions),
   downloadRelease: (opts: object) => ipcRenderer.invoke('download-release', opts),
   cancelBackendDownload: () => ipcRenderer.invoke('cancel-backend-download'),
   onDownloadProgress: (callback: (data: { percent: number; phase: string }) => void) => {

@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'fs'
 import { join } from 'path'
-import { OverlaySchema, CommandSchema, StructuralSchema, ArgOverlaySchema } from '../schemas'
+import { BackendBuildMetadataSchema, BackendSourceBuildOptionsSchema, OverlaySchema, CommandSchema, StructuralSchema, ArgOverlaySchema } from '../schemas'
 import { parseHelpOutput } from '../commandsSchemaParser'
 
 describe('CommandSchema', () => {
@@ -70,5 +70,64 @@ describe('StructuralSchema', () => {
       ]
     }
     expect(() => StructuralSchema.parse(s)).not.toThrow()
+  })
+})
+
+describe('BackendBuildMetadataSchema', () => {
+  it('accepts every supported flavor', () => {
+    for (const flavor of ['cuda', 'cpu', 'vulkan', 'cuda-rpc', 'cpu-rpc', 'vulkan-rpc']) {
+      expect(() => BackendBuildMetadataSchema.parse({ version: 1, flavor, buildMode: 'parallel' })).not.toThrow()
+    }
+  })
+
+  it('rejects an unknown flavor', () => {
+    expect(() => BackendBuildMetadataSchema.parse({ version: 1, flavor: 'hip', buildMode: 'parallel' })).toThrow()
+  })
+})
+
+describe('BackendSourceBuildOptionsSchema', () => {
+  it('accepts a complete build-options payload', () => {
+    expect(() => BackendSourceBuildOptionsSchema.parse({
+      accelerator: 'cuda',
+      enableRpc: false,
+      buildMode: 'parallel',
+      buildType: 'Release',
+      cudaArch: 'native',
+      faAllQuants: true
+    })).not.toThrow()
+  })
+
+  it('rejects an unknown build type', () => {
+    expect(() => BackendSourceBuildOptionsSchema.parse({
+      accelerator: 'cuda',
+      enableRpc: false,
+      buildMode: 'parallel',
+      buildType: 'Fast',
+      cudaArch: '',
+      faAllQuants: false
+    })).toThrow()
+  })
+
+  it('trims cudaArch length limits', () => {
+    expect(() => BackendSourceBuildOptionsSchema.parse({
+      accelerator: 'cuda',
+      enableRpc: false,
+      buildMode: 'single',
+      buildType: 'RelWithDebInfo',
+      cudaArch: 'x'.repeat(129),
+      faAllQuants: false
+    })).toThrow()
+  })
+
+  it('rejects extra fields via strict()', () => {
+    expect(() => BackendSourceBuildOptionsSchema.parse({
+      accelerator: 'cpu',
+      enableRpc: true,
+      buildMode: 'parallel',
+      buildType: 'Release',
+      cudaArch: '',
+      faAllQuants: false,
+      extra: 'no'
+    })).toThrow()
   })
 })

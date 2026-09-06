@@ -37,10 +37,20 @@ export type CommandType = z.infer<typeof CommandTypeSchema>
 
 export const BackendBuildMetadataSchema = z.object({
   version: z.literal(1),
-  flavor: z.literal('cuda'),
+  flavor: z.enum(['cuda', 'cpu', 'vulkan', 'cuda-rpc', 'cpu-rpc', 'vulkan-rpc']),
   buildMode: z.enum(['single', 'parallel'])
 })
 export type BackendBuildMetadata = z.infer<typeof BackendBuildMetadataSchema>
+
+export const BackendSourceBuildOptionsSchema = z.object({
+  accelerator: z.enum(['cuda', 'cpu', 'vulkan']),
+  enableRpc: z.boolean(),
+  buildMode: z.enum(['single', 'parallel']),
+  buildType: z.enum(['Release', 'RelWithDebInfo', 'Debug']),
+  cudaArch: z.string().max(128),
+  faAllQuants: z.boolean()
+}).strict()
+export type BackendSourceBuildOptions = z.infer<typeof BackendSourceBuildOptionsSchema>
 
 // Per-command structural shape produced by the parser.
 export const CommandSchema = z.object({

@@ -4,7 +4,7 @@ import { useStore } from '../store/useStore'
 import { HardDrive, Download, Trash, RefreshCw, Loader2, ChevronDown, Terminal, Bell, BellOff, FolderOpen, Moon, Sun, Monitor } from 'lucide-react'
 import CommandsEditor from './CommandsEditor'
 import UpdateSettings from './UpdateSettings'
-import type { AppWindowBehaviorSettings, BackendBuildFlavor, BackendVersion, Template } from '../../../shared/types'
+import type { AppWindowBehaviorSettings, BackendBuildFlavor, BackendVersion } from '../../../shared/types'
 import type { ModelFileInfo, ThemeMode } from '../store/useStore'
 import {
   LLAMADECK_STORAGE_KEYS,
@@ -20,15 +20,16 @@ interface FilesystemSnapshot {
   backends: BackendVersion[]
 }
 
-interface BackendSourceUpdateResult {
-  snapshot: FilesystemSnapshot
-  templates: Template[]
-  activeBackendName: string
+function hasInstalledBuild(backends: BackendVersion[], tagName: string, flavor: BackendBuildFlavor): boolean {
+  if (!tagName) return false
+  const expectedBackendName = flavor === 'cuda' ? tagName : `${tagName}-${flavor}`
+  return backends.some((backend) => backend.name === expectedBackendName)
 }
 
-function hasInstalledBuild(backends: BackendVersion[], tagName: string, flavor: BackendBuildFlavor): boolean {
-  const expectedBackendName = flavor === 'cpu' ? `${tagName}-cpu` : tagName
-  return backends.some((backend) => backend.name === expectedBackendName)
+function getInstalledVariantsForTag(backends: BackendVersion[], tagName: string): BackendBuildFlavor[] {
+  if (!tagName) return []
+  const allFlavors: BackendBuildFlavor[] = ['cuda', 'cpu', 'vulkan', 'cuda-rpc', 'cpu-rpc', 'vulkan-rpc']
+  return allFlavors.filter((flavor) => hasInstalledBuild(backends, tagName, flavor))
 }
 
 function formatUpdateProgress(progress: { percent: number; phase: string } | null): string {
@@ -58,9 +59,9 @@ function getNotifPref(): 'banner' | 'manual' {
 export default function SettingsView() {
   const {
     backends, activeBackend, setActiveBackend, setCommandsSchema, setBackends,
-    setModels, setCards, paths, setPaths, modelDownloads,
-    releaseInfo, checkingUpdate, downloadProgress, setDownloadProgress, setCheckingUpdate, setReleaseInfo,
-    themeMode, setThemeMode
+    setModels, paths, setPaths, modelDownloads,
+    releaseInfo, checkingUpdate, downloadProgress, setCheckingUpdate, setReleaseInfo,
+    themeMode, setThemeMode, setShowBuildOptions
   } = useStore(useShallow((state) => ({
     backends: state.backends,
     activeBackend: state.activeBackend,
@@ -68,20 +69,18 @@ export default function SettingsView() {
     setCommandsSchema: state.setCommandsSchema,
     setBackends: state.setBackends,
     setModels: state.setModels,
-    setCards: state.setCards,
     paths: state.paths,
     setPaths: state.setPaths,
     modelDownloads: state.modelDownloads,
     releaseInfo: state.releaseInfo,
     checkingUpdate: state.checkingUpdate,
     downloadProgress: state.downloadProgress,
-    setDownloadProgress: state.setDownloadProgress,
     setCheckingUpdate: state.setCheckingUpdate,
     setReleaseInfo: state.setReleaseInfo,
     themeMode: state.themeMode,
-    setThemeMode: state.setThemeMode
+    setThemeMode: state.setThemeMode,
+    setShowBuildOptions: state.setShowBuildOptions
   })))
-  const [updatingSource, setUpdatingSource] = useState(false)
   const [expandedEditor, setExpandedEditor] = useState<string | null>(null)
   const [notifPref, setNotifPref] = useState<'banner' | 'manual'>(getNotifPref())
   const [appVersion, setAppVersion] = useState<string>('')
@@ -92,10 +91,8 @@ export default function SettingsView() {
   const [windowBehaviorSettings, setWindowBehaviorSettings] = useState<AppWindowBehaviorSettings>({ minimizeToTray: false })
   const [loadingWindowBehaviorSettings, setLoadingWindowBehaviorSettings] = useState(true)
   const latestTagName = releaseInfo?.tagName?.trim() || ''
-  const hasCpuBuild = latestTagName ? hasInstalledBuild(backends, latestTagName, 'cpu') : false
-  const hasCudaBuild = latestTagName ? hasInstalledBuild(backends, latestTagName, 'cuda') : false
-  const canBuildCpu = Boolean(latestTagName) && !hasCpuBuild
-  const canBuildCuda = Boolean(latestTagName) && !hasCudaBuild
+  const installedVariants = getInstalledVariantsForTag(backends, latestTagName)
+  const canBuildAny = Boolean(latestTagName) && installedVariants.length < 6
 
   useEffect(() => {
     void window.api.getAppWindowBehaviorSettings().then((settings) => {
@@ -106,7 +103,7 @@ export default function SettingsView() {
     })
   }, [])
 
-  const hasActiveDownloads = updatingSource || !!downloadProgress || Object.values(modelDownloads).some((download) => !['done', 'error', 'cancelled'].includes(download.phase))
+  const hasActiveDownloads = !!downloadProgress || Object.values(modelDownloads).some((download) => !['done', 'error', 'cancelled'].includes(download.phase))
 
   function handleNotifPref(pref: 'banner' | 'manual') {
     setNotifPref(pref)
@@ -148,30 +145,6 @@ export default function SettingsView() {
       : await window.api.getCommands('')
 
     setCommandsSchema(commands)
-  }
-
-  async function applyBackendUpdateResult(result: BackendSourceUpdateResult) {
-    const currentActiveBackend = useStore.getState().activeBackend
-
-    setPaths(result.snapshot.paths)
-    setModels(result.snapshot.models)
-    setBackends(result.snapshot.backends)
-    setCards(result.templates.map((template) => ({ template, status: 'idle', expanded: false })))
-
-    const nextActiveBackend = currentActiveBackend
-      ? result.snapshot.backends.find((backend) => backend.name === currentActiveBackend.name) ?? currentActiveBackend
-      : result.snapshot.backends.find((backend) => backend.name === result.activeBackendName) ?? result.snapshot.backends[0] ?? null
-
-    if (nextActiveBackend) {
-      setActiveBackend(nextActiveBackend)
-    }
-
-    const commands = nextActiveBackend
-      ? await window.api.getCommands(nextActiveBackend.name)
-      : await window.api.getCommands('')
-
-    setCommandsSchema(commands)
-    setReleaseInfo(await window.api.checkUpdates())
   }
 
   async function handleChangeFolder(kind: FolderKind) {
@@ -235,35 +208,6 @@ export default function SettingsView() {
       setReleaseInfo(info)
     } finally {
       setCheckingUpdate(false)
-    }
-  }
-
-  const handleSourceUpdate = async (flavor: BackendBuildFlavor) => {
-    if (!releaseInfo?.tagName) return
-
-    setUpdatingSource(true)
-    try {
-      const res = await window.api.updateBackendSource(releaseInfo.tagName, flavor)
-      if (res.success) {
-        await applyBackendUpdateResult(res.result)
-      } else if (res.cancelled) {
-        return
-      } else {
-        useStore.getState().pushNotification({
-          tone: 'danger',
-          title: 'Source build failed',
-          message: res.error || 'The llama.cpp source build did not complete.'
-        })
-      }
-    } catch (error) {
-      useStore.getState().pushNotification({
-        tone: 'danger',
-        title: 'Source build failed',
-        message: error instanceof Error ? error.message : String(error)
-      })
-    } finally {
-      setUpdatingSource(false)
-      setDownloadProgress(null)
     }
   }
 
@@ -505,25 +449,33 @@ export default function SettingsView() {
                 </div>
               </div>
               <div className="flex items-center gap-2 w-full">
-                {updatingSource || downloadProgress ? (
+                {downloadProgress ? (
                   <div className="text-sm flex items-center gap-3" style={{ color: 'var(--text-muted)' }}>
                     <Loader2 size={14} className="spin" />
                     {formatUpdateProgress(downloadProgress)}
-                    <button 
-                      className="btn btn-ghost btn-sm text-danger" 
+                    <button
+                      className="btn btn-ghost btn-sm text-danger"
                       onClick={() => { void window.api.cancelBackendDownload() }}
                       style={{ padding: '0 8px' }}
                     >
                       Cancel
                     </button>
                   </div>
-                ) : canBuildCpu || canBuildCuda ? (
-                  <>
-                    {canBuildCpu && <button className="btn btn-secondary btn-sm" onClick={() => void handleSourceUpdate('cpu')}>Build CPU Only</button>}
-                    {canBuildCuda && <button className="btn btn-primary btn-sm" onClick={() => void handleSourceUpdate('cuda')}>Build CUDA</button>}
-                  </>
-                ) : null
-                }
+                ) : canBuildAny ? (
+                  <div className="flex items-center gap-3" style={{ flexWrap: 'wrap' }}>
+                    <button
+                      className="btn btn-primary btn-sm"
+                      onClick={() => setShowBuildOptions(true, latestTagName)}
+                    >
+                      Build
+                    </button>
+                    {installedVariants.length > 0 && (
+                      <span className="form-hint">
+                        Installed: {installedVariants.map((flavor) => flavor.toUpperCase()).join(', ')}
+                      </span>
+                    )}
+                  </div>
+                ) : null}
               </div>
             </div>
           )
@@ -531,7 +483,7 @@ export default function SettingsView() {
           <div className="text-sm py-4" style={{ color: 'var(--text-muted)' }}>Click "Check Now" to query GitHub.</div>
         )}
         <div className="mt-4 pt-4 border-t">
-          <button className="btn btn-secondary w-full justify-center" onClick={handleCheckUpdates} disabled={checkingUpdate || updatingSource}>
+          <button className="btn btn-secondary w-full justify-center" onClick={handleCheckUpdates} disabled={checkingUpdate}>
             <RefreshCw size={14} className={checkingUpdate ? 'spin' : ''} /> Check Now
           </button>
         </div>
