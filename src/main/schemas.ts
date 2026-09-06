@@ -1,4 +1,9 @@
 import { z } from 'zod'
+import {
+  EXTRA_CMAKE_FLAG_PATTERN,
+  MAX_EXTRA_CMAKE_FLAG_LENGTH,
+  MAX_EXTRA_CMAKE_FLAGS
+} from '../shared/types'
 
 const MAX_LITELLM_CONFIG_CHARACTERS = 1024 * 1024
 
@@ -48,7 +53,12 @@ export const BackendSourceBuildOptionsSchema = z.object({
   buildMode: z.enum(['single', 'parallel']),
   buildType: z.enum(['Release', 'RelWithDebInfo', 'Debug']),
   cudaArch: z.string().max(128),
-  faAllQuants: z.boolean()
+  faAllQuants: z.boolean(),
+  serverOnly: z.boolean(),
+  compiler: z.enum(['cl', 'clang-cl']),
+  extraFlags: z.array(
+    z.string().regex(EXTRA_CMAKE_FLAG_PATTERN, 'Extra flags must look like -DNAME or -DNAME=VALUE.').max(MAX_EXTRA_CMAKE_FLAG_LENGTH)
+  ).max(MAX_EXTRA_CMAKE_FLAGS)
 }).strict()
 export type BackendSourceBuildOptions = z.infer<typeof BackendSourceBuildOptionsSchema>
 

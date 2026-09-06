@@ -93,7 +93,24 @@ describe('BackendSourceBuildOptionsSchema', () => {
       buildMode: 'parallel',
       buildType: 'Release',
       cudaArch: 'native',
-      faAllQuants: true
+      faAllQuants: true,
+      serverOnly: true,
+      compiler: 'cl',
+      extraFlags: []
+    })).not.toThrow()
+  })
+
+  it('accepts a server-only-off payload', () => {
+    expect(() => BackendSourceBuildOptionsSchema.parse({
+      accelerator: 'cpu',
+      enableRpc: false,
+      buildMode: 'single',
+      buildType: 'Debug',
+      cudaArch: '',
+      faAllQuants: false,
+      serverOnly: false,
+      compiler: 'cl',
+      extraFlags: []
     })).not.toThrow()
   })
 
@@ -104,7 +121,10 @@ describe('BackendSourceBuildOptionsSchema', () => {
       buildMode: 'parallel',
       buildType: 'Fast',
       cudaArch: '',
-      faAllQuants: false
+      faAllQuants: false,
+      serverOnly: true,
+      compiler: 'cl',
+      extraFlags: []
     })).toThrow()
   })
 
@@ -115,7 +135,10 @@ describe('BackendSourceBuildOptionsSchema', () => {
       buildMode: 'single',
       buildType: 'RelWithDebInfo',
       cudaArch: 'x'.repeat(129),
-      faAllQuants: false
+      faAllQuants: false,
+      serverOnly: true,
+      compiler: 'cl',
+      extraFlags: []
     })).toThrow()
   })
 
@@ -127,7 +150,95 @@ describe('BackendSourceBuildOptionsSchema', () => {
       buildType: 'Release',
       cudaArch: '',
       faAllQuants: false,
+      serverOnly: true,
+      compiler: 'cl',
+      extraFlags: [],
       extra: 'no'
+    })).toThrow()
+  })
+
+  it('rejects a non-boolean serverOnly', () => {
+    expect(() => BackendSourceBuildOptionsSchema.parse({
+      accelerator: 'cuda',
+      enableRpc: false,
+      buildMode: 'parallel',
+      buildType: 'Release',
+      cudaArch: 'native',
+      faAllQuants: true,
+      serverOnly: 'yes',
+      compiler: 'cl',
+      extraFlags: []
+    })).toThrow()
+  })
+
+  it('rejects a missing serverOnly via strict()', () => {
+    expect(() => BackendSourceBuildOptionsSchema.parse({
+      accelerator: 'cuda',
+      enableRpc: false,
+      buildMode: 'parallel',
+      buildType: 'Release',
+      cudaArch: 'native',
+      faAllQuants: true,
+      compiler: 'cl',
+      extraFlags: []
+    })).toThrow()
+  })
+
+  it('accepts clang-cl with extra AVX512 flags', () => {
+    expect(() => BackendSourceBuildOptionsSchema.parse({
+      accelerator: 'cuda',
+      enableRpc: false,
+      buildMode: 'parallel',
+      buildType: 'Release',
+      cudaArch: 'native',
+      faAllQuants: true,
+      serverOnly: true,
+      compiler: 'clang-cl',
+      extraFlags: ['-DGGML_NATIVE=OFF', '-DGGML_AVX512=ON', '-DGGML_AVX512_BF16=ON', '-DGGML_AVX512_VNNI=ON', '-DGGML_AVX512_VBMI=ON']
+    })).not.toThrow()
+  })
+
+  it('rejects an unknown compiler', () => {
+    expect(() => BackendSourceBuildOptionsSchema.parse({
+      accelerator: 'cuda',
+      enableRpc: false,
+      buildMode: 'parallel',
+      buildType: 'Release',
+      cudaArch: 'native',
+      faAllQuants: true,
+      serverOnly: true,
+      compiler: 'gcc',
+      extraFlags: []
+    })).toThrow()
+  })
+
+  it('rejects malformed extra flags', () => {
+    for (const extraFlags of [['--config', 'Release'], ['-DGOOD=1', 'rm -rf /'], ['-DGOOD=1', '-D BAD'], ['-DGOOD=1', '"-DQUOTED"']]) {
+      expect(() => BackendSourceBuildOptionsSchema.parse({
+        accelerator: 'cuda',
+        enableRpc: false,
+        buildMode: 'parallel',
+        buildType: 'Release',
+        cudaArch: 'native',
+        faAllQuants: true,
+        serverOnly: true,
+        compiler: 'cl',
+        extraFlags
+      })).toThrow()
+    }
+  })
+
+  it('rejects more than 32 extra flags', () => {
+    expect(() => BackendSourceBuildOptionsSchema.parse({
+      accelerator: 'cuda',
+      enableRpc: false,
+      buildMode: 'parallel',
+      buildType: 'Release',
+      cudaArch: 'native',
+      faAllQuants: true,
+      serverOnly: true,
+      compiler: 'cl',
+      extraFlags: Array.from({ length: 33 }, (_, i) => `-DFLAG${i}=ON`)
     })).toThrow()
   })
 })

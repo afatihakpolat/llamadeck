@@ -39,6 +39,7 @@ import type {
   BackendVersion,
   BackendBuildFlavor,
   BackendBuildMode,
+  BackendCompiler,
   CommandParam,
   LiteLlmInstallStatus,
   LiteLlmLogLevel,
@@ -203,7 +204,10 @@ param(
   [string]$CudaArch = "native",
   [string]$BuildType = "Release",
   [string]$BuildMode = "parallel",
-  [string]$FaAllQuants = "ON"
+  [string]$FaAllQuants = "ON",
+  [string]$ServerOnly = "ON",
+  [string]$Compiler = "cl",
+  [string]$ExtraFlagsCsv = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -240,17 +244,25 @@ function Import-VsDevShell {
   }
 }
 
-if (-not (Get-Command cl.exe -ErrorAction SilentlyContinue)) {
+if ($Compiler -notin @("cl", "clang-cl")) {
+  throw "Unsupported compiler: $Compiler"
+}
+
+$compilerExe = if ($Compiler -eq "clang-cl") { "clang-cl.exe" } else { "cl.exe" }
+if (-not (Get-Command $compilerExe -ErrorAction SilentlyContinue)) {
   Write-Phase "environment" 5 "Loading Visual Studio build environment"
   Import-VsDevShell
 }
 
-$clCommand = Get-Command cl.exe -ErrorAction SilentlyContinue
-if (-not $clCommand) {
+$compilerCommand = Get-Command $compilerExe -ErrorAction SilentlyContinue
+if (-not $compilerCommand) {
+  if ($Compiler -eq "clang-cl") {
+    throw "Could not find clang-cl.exe in PATH. Install LLVM and ensure clang-cl is on PATH. The Visual Studio C++ Build Tools are still required."
+  }
   throw "Could not load cl.exe into PATH after importing the Visual Studio build environment."
 }
 
-$clPath = $clCommand.Source
+$compilerPath = $compilerCommand.Source
 foreach ($compilerEnv in @("CC", "CXX", "CUDAHOSTCXX")) {
   Remove-Item "Env:$compilerEnv" -ErrorAction SilentlyContinue
 }
@@ -320,8 +332,8 @@ try {
     "-B", $targetBuildDir,
     "-G", "Ninja",
     "-DCMAKE_BUILD_TYPE=$BuildType",
-    "-DCMAKE_C_COMPILER=$clPath",
-    "-DCMAKE_CXX_COMPILER=$clPath"
+    "-DCMAKE_C_COMPILER=$compilerPath",
+    "-DCMAKE_CXX_COMPILER=$compilerPath"
   )
 
   if ($BuildMode -eq "single") {
@@ -331,7 +343,7 @@ try {
   if ($BuildFlavor -like "*cuda*") {
     $cmakeArgs += @(
       "-DGGML_CUDA=ON",
-      "-DCMAKE_CUDA_HOST_COMPILER=$clPath"
+      "-DCMAKE_CUDA_HOST_COMPILER=$compilerPath"
     )
     if ($FaAllQuants -eq "ON") {
       $cmakeArgs += "-DGGML_CUDA_FA_ALL_QUANTS=ON"
@@ -351,11 +363,26 @@ try {
     $cmakeArgs += "-DGGML_RPC=ON"
   }
 
+  if ($ExtraFlagsCsv -and $ExtraFlagsCsv.Trim()) {
+    foreach ($flag in $ExtraFlagsCsv.Split(',')) {
+      $trimmedFlag = "$flag".Trim()
+      if (-not $trimmedFlag) { continue }
+      if ($trimmedFlag -notmatch '^-D[A-Za-z0-9_]+(=[A-Za-z0-9_.;+:/\\-]*?)?$') {
+        throw "Invalid extra CMake flag: $trimmedFlag. Expected -DNAME or -DNAME=VALUE."
+      }
+      $cmakeArgs += $trimmedFlag
+    }
+  }
+
   & cmake @cmakeArgs
   if ($LASTEXITCODE -ne 0) { throw "CMake configure failed." }
 
   Write-Phase "building" 72 "Building $buildName"
-  & cmake --build $targetBuildDir --config $BuildType -j
+  if ($ServerOnly -eq "ON") {
+    & cmake --build $targetBuildDir --config $BuildType --target llama-server -j
+  } else {
+    & cmake --build $targetBuildDir --config $BuildType -j
+  }
   if ($LASTEXITCODE -ne 0) { throw "Build failed." }
 
   if (-not (Test-Path $serverExe)) {
@@ -3115,6 +3142,9 @@ export function registerIpcHandlers(): void {
     let buildType: 'Release' | 'RelWithDebInfo' | 'Debug'
     let cudaArch = ''
     let faAllQuants = true
+    let serverOnly = true
+    let compiler: BackendCompiler = 'cl'
+    let extraFlags: string[] = []
 
     if (requestedFlavorOrOptions && typeof requestedFlavorOrOptions === 'object') {
       const parsed = BackendSourceBuildOptionsSchema.safeParse(requestedFlavorOrOptions)
@@ -3127,6 +3157,9 @@ export function registerIpcHandlers(): void {
       buildMode = opts.buildMode
       buildType = opts.buildType
       faAllQuants = opts.faAllQuants
+      serverOnly = opts.serverOnly
+      compiler = opts.compiler
+      extraFlags = opts.extraFlags
       const trimmedArch = opts.cudaArch.trim()
       const allowedArch = /^[A-Za-z0-9_.;+\- ]*$/.test(trimmedArch)
       cudaArch = accelerator === 'cuda' && trimmedArch && allowedArch
@@ -3142,12 +3175,14 @@ export function registerIpcHandlers(): void {
       buildType = (process.env['HEXLLAMA_BUILD_TYPE']?.trim() as 'Release' | 'RelWithDebInfo' | 'Debug' | undefined) || 'Release'
       cudaArch = buildFlavor.includes('cuda') ? getConfiguredCudaArch(repoDir) : ''
       faAllQuants = true
+      serverOnly = false
     } else {
       buildFlavor = 'cuda'
       buildMode = 'parallel'
       buildType = (process.env['HEXLLAMA_BUILD_TYPE']?.trim() as 'Release' | 'RelWithDebInfo' | 'Debug' | undefined) || 'Release'
       cudaArch = getConfiguredCudaArch(repoDir)
       faAllQuants = true
+      serverOnly = false
     }
 
     const scriptPath = ensureSourceUpdateScript()
@@ -3183,7 +3218,10 @@ export function registerIpcHandlers(): void {
           '-CudaArch', cudaArch,
           '-BuildType', buildType,
           '-BuildMode', buildMode,
-          '-FaAllQuants', faAllQuants ? 'ON' : 'OFF'
+          '-FaAllQuants', faAllQuants ? 'ON' : 'OFF',
+          '-ServerOnly', serverOnly ? 'ON' : 'OFF',
+          '-Compiler', compiler,
+          '-ExtraFlagsCsv', extraFlags.join(',')
         ],
         { windowsHide: true }
       )

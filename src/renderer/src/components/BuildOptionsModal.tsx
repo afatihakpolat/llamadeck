@@ -8,9 +8,10 @@ import type {
   BackendBuildMode,
   BackendBuildOptions,
   BackendBuildType,
+  BackendCompiler,
   BackendVersion
 } from '../../../shared/types'
-import { resolveBuildFlavor } from '../../../shared/types'
+import { parseExtraCmakeFlags, previewSourceBuildCommands, resolveBuildFlavor } from '../../../shared/types'
 
 const ALL_FLAVORS: BackendBuildFlavor[] = [
   'cuda', 'cpu', 'vulkan', 'cuda-rpc', 'cpu-rpc', 'vulkan-rpc'
@@ -64,10 +65,30 @@ export default function BuildOptionsModal() {
   const [buildType, setBuildType] = useState<BackendBuildType>('Release')
   const [cudaArch, setCudaArch] = useState('native')
   const [faAllQuants, setFaAllQuants] = useState(true)
+  const [serverOnly, setServerOnly] = useState(true)
+  const [compiler, setCompiler] = useState<BackendCompiler>('cl')
+  const [extraFlagsText, setExtraFlagsText] = useState('')
+  const [showPreview, setShowPreview] = useState(true)
   const [building, setBuilding] = useState(false)
 
   const tag = (buildOptionsTag || releaseInfo?.tagName || '').trim()
   const selectedFlavor = resolveBuildFlavor(accelerator, enableRpc)
+  const parsedExtraFlags = useMemo(() => parseExtraCmakeFlags(extraFlagsText), [extraFlagsText])
+  const effectiveOptions: BackendBuildOptions = useMemo(() => ({
+    accelerator,
+    enableRpc,
+    buildMode,
+    buildType,
+    cudaArch: accelerator === 'cuda' ? cudaArch.trim() : '',
+    faAllQuants: accelerator === 'cuda' && faAllQuants,
+    serverOnly,
+    compiler,
+    extraFlags: parsedExtraFlags.flags
+  }), [accelerator, enableRpc, buildMode, buildType, cudaArch, faAllQuants, serverOnly, compiler, parsedExtraFlags])
+  const preview = useMemo(
+    () => (tag ? previewSourceBuildCommands(tag, effectiveOptions) : null),
+    [tag, effectiveOptions]
+  )
   const comboAlreadyInstalled = useMemo(
     () => hasInstalledFlavor(backends, tag, selectedFlavor),
     [backends, tag, selectedFlavor]
@@ -86,6 +107,10 @@ export default function BuildOptionsModal() {
     setBuildType('Release')
     setCudaArch('native')
     setFaAllQuants(true)
+    setServerOnly(true)
+    setCompiler('cl')
+    setExtraFlagsText('')
+    setShowPreview(true)
     setBuilding(false)
   }, [showBuildOptions])
 
@@ -123,16 +148,9 @@ export default function BuildOptionsModal() {
   }
 
   async function handleBuild() {
-    if (!tag || comboAlreadyInstalled || building) return
+    if (!tag || comboAlreadyInstalled || building || parsedExtraFlags.invalid.length > 0) return
 
-    const options: BackendBuildOptions = {
-      accelerator,
-      enableRpc,
-      buildMode,
-      buildType,
-      cudaArch: accelerator === 'cuda' ? cudaArch.trim() : '',
-      faAllQuants: accelerator === 'cuda' && faAllQuants
-    }
+    const options = effectiveOptions
 
     setBuilding(true)
     try {
@@ -241,6 +259,19 @@ export default function BuildOptionsModal() {
             <div className="form-hint">{buildModeHint(buildMode)}</div>
           </div>
 
+          <div className="form-group">
+            <label className="form-label">Build target</label>
+            <label className="checkbox-row" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <input
+                type="checkbox"
+                checked={serverOnly}
+                onChange={(event) => setServerOnly(event.target.checked)}
+              />
+              <span>Build only llama-server (faster, recommended)</span>
+            </label>
+            <div className="form-hint">LlamaDeck only runs llama-server.exe. Uncheck to also build CLI tools and benchmarks (slower).</div>
+          </div>
+
           {installedVariants.length > 0 && (
             <div className="form-group">
               <label className="form-label">Already installed for {tag}</label>
@@ -258,6 +289,36 @@ export default function BuildOptionsModal() {
               This combination is already installed for {tag}. Choose a different accelerator or RPC toggle to build a new variant.
             </div>
           )}
+
+          <div className="collapsible-section">
+            <button
+              type="button"
+              className="collapsible-toggle"
+              onClick={() => setShowPreview(!showPreview)}
+            >
+              <span>Command preview</span>
+              <ChevronDown
+                size={14}
+                style={{ marginLeft: 'auto', transform: showPreview ? 'rotate(180deg)' : 'none', transition: 'transform 180ms' }}
+              />
+            </button>
+            {showPreview && preview && (
+              <div className="collapsible-body">
+                <div className="form-hint" style={{ marginBottom: 8 }}>
+                  Build folder: <code>{preview.buildFolder}</code>
+                </div>
+                <pre
+                  className="form-textarea mono"
+                  style={{ fontSize: 11, whiteSpace: 'pre-wrap', wordBreak: 'break-all', margin: 0 }}
+                >
+                  {preview.configureCommand}{'\n'}{preview.buildCommand}
+                </pre>
+                <div className="form-hint" style={{ marginTop: 8 }}>
+                  Compiler paths and an empty CUDA architecture are filled in by LlamaDeck before invoking the build.
+                </div>
+              </div>
+            )}
+          </div>
 
           <div className="collapsible-section">
             <button
@@ -287,6 +348,21 @@ export default function BuildOptionsModal() {
                   <div className="form-hint">Release is the default and recommended for normal use.</div>
                 </div>
                 <div className="form-group">
+                  <label className="form-label">Compiler</label>
+                  <select
+                    className="form-select"
+                    value={compiler}
+                    onChange={(event) => setCompiler(event.target.value as BackendCompiler)}
+                  >
+                    <option value="cl">MSVC cl.exe (Recommended)</option>
+                    <option value="clang-cl">clang-cl (LLVM)</option>
+                  </select>
+                  <div className="form-hint">
+                    clang-cl requires LLVM on PATH; the Visual Studio C++ Build Tools are still required.
+                    With CUDA it also needs a recent CUDA toolkit for host-compiler support.
+                  </div>
+                </div>
+                <div className="form-group">
                   <label className="form-label">CUDA architecture</label>
                   <input
                     type="text"
@@ -299,6 +375,27 @@ export default function BuildOptionsModal() {
                   <div className="form-hint">
                     Leave as <code>native</code> for auto-detection. Use a comma-separated list (e.g. <code>75;86;89</code>) to target specific GPUs.
                   </div>
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Extra CMake flags (one per line)</label>
+                  <textarea
+                    className="form-textarea mono"
+                    rows={4}
+                    value={extraFlagsText}
+                    onChange={(event) => setExtraFlagsText(event.target.value)}
+                    placeholder={'-DGGML_NATIVE=OFF\n-DGGML_AVX512=ON\n-DGGML_AVX512_BF16=ON'}
+                    style={{ fontSize: 12 }}
+                    spellCheck={false}
+                  />
+                  {parsedExtraFlags.invalid.length > 0 ? (
+                    <div className="form-hint" style={{ color: 'var(--danger)' }}>
+                      Ignored until fixed: {parsedExtraFlags.invalid.join(', ')}. Use -DNAME or -DNAME=VALUE.
+                    </div>
+                  ) : (
+                    <div className="form-hint">
+                      Appended after the generated flags. Lines starting with <code>#</code> are comments.
+                    </div>
+                  )}
                 </div>
                 <div className="form-group mb-0">
                   <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -330,7 +427,7 @@ export default function BuildOptionsModal() {
             type="button"
             className="btn btn-primary"
             onClick={() => { void handleBuild() }}
-            disabled={building || !tag || comboAlreadyInstalled}
+            disabled={building || !tag || comboAlreadyInstalled || parsedExtraFlags.invalid.length > 0}
           >
             {building ? <Loader2 size={14} className="spin" /> : null}
             {building ? 'Building…' : 'Build'}

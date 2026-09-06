@@ -13,6 +13,7 @@ export type BackendBuildFlavor =
   | 'vulkan-rpc'
 export type BackendBuildMode = 'single' | 'parallel'
 export type BackendBuildType = 'Release' | 'RelWithDebInfo' | 'Debug'
+export type BackendCompiler = 'cl' | 'clang-cl'
 
 export interface BackendBuildOptions {
   accelerator: BackendAccelerator
@@ -21,11 +22,107 @@ export interface BackendBuildOptions {
   buildType: BackendBuildType
   cudaArch: string
   faAllQuants: boolean
+  serverOnly: boolean
+  // C/C++ compiler for CMAKE_C/CXX_COMPILER (and CUDA host compiler).
+  compiler: BackendCompiler
+  // Additional -D cmake flags, one per entry, appended after generated flags.
+  extraFlags: string[]
+}
+
+// Allowed shape of a single extra cmake flag: -DNAME or -DNAME=VALUE.
+// The charset excludes spaces, quotes, and shell metacharacters so flags
+// can travel as separate process args without injection risk. Commas are
+// excluded because the IPC layer comma-joins the list for PowerShell.
+export const EXTRA_CMAKE_FLAG_PATTERN = /^-D[A-Za-z0-9_]+(=[A-Za-z0-9_.;+:/\\-]*?)?$/
+export const MAX_EXTRA_CMAKE_FLAGS = 32
+export const MAX_EXTRA_CMAKE_FLAG_LENGTH = 256
+
+// Splits free-form textarea input into lines, dropping blanks and
+// `#` comments, and partitions entries into valid flags vs rejects.
+export function parseExtraCmakeFlags(text: string): { flags: string[]; invalid: string[] } {
+  const flags: string[] = []
+  const invalid: string[] = []
+  for (const line of text.split(/\r?\n/)) {
+    const trimmed = line.trim()
+    if (!trimmed || trimmed.startsWith('#')) continue
+    // Mirror the schema limits so rejects surface in the modal hint,
+    // not as an IPC validation error after clicking Build.
+    if (trimmed.length <= MAX_EXTRA_CMAKE_FLAG_LENGTH && EXTRA_CMAKE_FLAG_PATTERN.test(trimmed)) flags.push(trimmed)
+    else invalid.push(trimmed)
+  }
+  // No truncation here: over-limit lists are rejected by schema validation
+  // so the user sees an error instead of silently dropped flags.
+  return { flags, invalid }
 }
 
 export function resolveBuildFlavor(accelerator: BackendAccelerator, enableRpc: boolean): BackendBuildFlavor {
   if (!enableRpc) return accelerator
   return `${accelerator}-rpc` as BackendBuildFlavor
+}
+
+// Placeholders used by the build-command preview for values that only
+// resolve on the build machine (VS toolchain path, detected CUDA arch).
+export const PREVIEW_CL_EXE = '<cl.exe>'
+export const PREVIEW_RESOLVED_CUDA_ARCH = '<resolved-at-launch>'
+
+export interface SourceBuildPreview {
+  buildFolder: string
+  configureCommand: string
+  buildCommand: string
+}
+
+// Pure renderer-side mirror of the cmake invocations assembled by the
+// PowerShell build script (src/main/ipc.ts SOURCE_UPDATE_SCRIPT).
+// Takes the effective options as sent to update-backend-source
+// (cudaArch trimmed, faAllQuants already gated on CUDA by the caller).
+export function previewSourceBuildCommands(tagName: string, options: BackendBuildOptions): SourceBuildPreview {
+  const flavor = resolveBuildFlavor(options.accelerator, options.enableRpc)
+  const buildFolder = flavor === 'cuda' ? tagName : `${tagName}-${flavor}`
+  const compilerDisplay = options.compiler === 'clang-cl' ? '<clang-cl>' : PREVIEW_CL_EXE
+
+  const configureArgs = [
+    'cmake', '-S', '.', '-B', buildFolder, '-G', 'Ninja',
+    `-DCMAKE_BUILD_TYPE=${options.buildType}`,
+    `-DCMAKE_C_COMPILER=${compilerDisplay}`,
+    `-DCMAKE_CXX_COMPILER=${compilerDisplay}`
+  ]
+
+  if (options.buildMode === 'single') {
+    configureArgs.push('-DGGML_SCHED_MAX_COPIES=1')
+  }
+
+  if (flavor.includes('cuda')) {
+    configureArgs.push('-DGGML_CUDA=ON', `-DCMAKE_CUDA_HOST_COMPILER=${compilerDisplay}`)
+    if (options.faAllQuants) {
+      configureArgs.push('-DGGML_CUDA_FA_ALL_QUANTS=ON')
+    }
+    const arch = options.cudaArch.trim()
+    configureArgs.push(`-DCMAKE_CUDA_ARCHITECTURES=${arch || PREVIEW_RESOLVED_CUDA_ARCH}`)
+  } else {
+    configureArgs.push('-DGGML_CUDA=OFF')
+  }
+
+  if (flavor.includes('vulkan')) {
+    configureArgs.push('-DGGML_VULKAN=ON')
+  }
+
+  if (flavor.includes('rpc')) {
+    configureArgs.push('-DGGML_RPC=ON')
+  }
+
+  configureArgs.push(...options.extraFlags)
+
+  const buildArgs = ['cmake', '--build', buildFolder, '--config', options.buildType]
+  if (options.serverOnly) {
+    buildArgs.push('--target', 'llama-server')
+  }
+  buildArgs.push('-j')
+
+  return {
+    buildFolder,
+    configureCommand: configureArgs.join(' '),
+    buildCommand: buildArgs.join(' ')
+  }
 }
 
 export interface BackendVersion {
