@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.7.0] - 2026-09-06
+
 ### Added
 - Source builds now use a single Build button with a Build Options popup to pick CPU, CUDA, or Vulkan, optional RPC backend, single vs parallel scheduler mode, and advanced build type / CUDA architecture / Flash Attention settings with recommended defaults preselected.
 
