@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.8.1] - 2026-09-06
+
+### Fixed
+- CUDA source builds with the clang-cl compiler no longer fail during compiler detection. The CUDA host compiler now stays on MSVC cl.exe, which nvcc requires, while C and C++ code still compiles with clang-cl.
+
 ## [1.8.0] - 2026-09-06
 
 ### Added
