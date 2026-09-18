@@ -216,6 +216,16 @@ function Write-Phase([string]$Phase, [int]$Percent, [string]$Message) {
   Write-Output "HEXLLAMA_PROGRESS|$Phase|$Percent|$Message"
 }
 
+function Get-VsInstallPath {
+  $vsInstallerRoot = [System.Environment]::GetFolderPath('ProgramFilesX86')
+  $vswhereExe = Join-Path $vsInstallerRoot "Microsoft Visual Studio\Installer\vswhere.exe"
+  if (-not (Test-Path $vswhereExe)) { return '' }
+  $installLines = @(& $vswhereExe -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath 2>$null | Where-Object { "$_".Trim() })
+  if ($installLines.Count -eq 0) { return '' }
+  $firstInstall = $installLines[0]
+  return "$firstInstall".Trim()
+}
+
 function Import-VsDevShell {
   $vsInstallerRoot = [System.Environment]::GetFolderPath('ProgramFilesX86')
   $vswhere = Join-Path $vsInstallerRoot "Microsoft Visual Studio\Installer\vswhere.exe"
@@ -224,7 +234,7 @@ function Import-VsDevShell {
     throw "Could not find vswhere.exe. Install Visual Studio Build Tools 2022 with the C++ workload."
   }
 
-  $vsInstallPath = & $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+  $vsInstallPath = Get-VsInstallPath
 
   if (-not $vsInstallPath) {
     throw "Could not find Visual Studio C++ Build Tools. Install 'Desktop development with C++'."
@@ -235,13 +245,47 @@ function Import-VsDevShell {
     throw "Could not find vcvars64.bat at: $vcvars"
   }
 
-  $vcvarsCommand = '"' + $vcvars + '" >nul && set'
+  # Trailing '|| exit /b 1' propagates a vcvars failure: without it the
+  # exit code would come from 'set' (always 0) and a broken environment
+  # import would continue silently.
+  $vcvarsCommand = '"' + $vcvars + '" >nul && set || exit /b 1'
 
-  cmd /d /s /c $vcvarsCommand | ForEach-Object {
+  $vsShellOutput = cmd /d /s /c $vcvarsCommand 2>&1
+  if ($LASTEXITCODE -ne 0) {
+    $detail = ($vsShellOutput | ForEach-Object { "$_".Trim() } | Where-Object { $_ } | Select-Object -First 5) -join ' | '
+    throw "Visual Studio build environment setup failed: $detail"
+  }
+  # Only stdout KEY=VALUE lines are imported; stderr records are excluded
+  # so batch error text can never pollute the process environment.
+  $vsShellOutput | Where-Object { $_ -isnot [System.Management.Automation.ErrorRecord] } | ForEach-Object {
     if ($_ -match "^(.*?)=(.*)$") {
       [System.Environment]::SetEnvironmentVariable($matches[1], $matches[2], "Process")
     }
   }
+}
+
+# Locates clang-cl.exe without relying on PATH: the VS-bundled LLVM is not
+# on PATH by default, so check the VS install layout first, then a
+# standalone LLVM install, before falling back to PATH lookup.
+function Get-VsClangClPath {
+  $vsInstallPath = Get-VsInstallPath
+  if ($vsInstallPath) {
+    foreach ($subPath in @("VC\Tools\Llvm\x64\bin\clang-cl.exe", "VC\Tools\Llvm\bin\clang-cl.exe")) {
+      $candidate = Join-Path $vsInstallPath $subPath
+      if (Test-Path $candidate) { return $candidate }
+    }
+  }
+  $programFiles = [System.Environment]::GetFolderPath('ProgramFiles')
+  $standalone = Join-Path $programFiles "LLVM\bin\clang-cl.exe"
+  if (Test-Path $standalone) { return $standalone }
+  return ''
+}
+
+function Get-CompilerPath([string]$ExeName) {
+  $found = Get-Command $ExeName -ErrorAction SilentlyContinue
+  if ($found) { return $found.Source }
+  if ($ExeName -eq "clang-cl.exe") { return Get-VsClangClPath }
+  return ''
 }
 
 if ($Compiler -notin @("cl", "clang-cl")) {
@@ -249,20 +293,18 @@ if ($Compiler -notin @("cl", "clang-cl")) {
 }
 
 $compilerExe = if ($Compiler -eq "clang-cl") { "clang-cl.exe" } else { "cl.exe" }
-if (-not (Get-Command $compilerExe -ErrorAction SilentlyContinue)) {
+$compilerPath = Get-CompilerPath $compilerExe
+if (-not $compilerPath) {
   Write-Phase "environment" 5 "Loading Visual Studio build environment"
   Import-VsDevShell
+  $compilerPath = Get-CompilerPath $compilerExe
 }
-
-$compilerCommand = Get-Command $compilerExe -ErrorAction SilentlyContinue
-if (-not $compilerCommand) {
+if (-not $compilerPath) {
   if ($Compiler -eq "clang-cl") {
-    throw "Could not find clang-cl.exe in PATH. Install LLVM and ensure clang-cl is on PATH. The Visual Studio C++ Build Tools are still required."
+    throw "Could not find clang-cl.exe. Install the 'C++ Clang tools for Windows' component via the Visual Studio Installer (or LLVM) and ensure the Visual Studio C++ Build Tools are present."
   }
   throw "Could not load cl.exe into PATH after importing the Visual Studio build environment."
 }
-
-$compilerPath = $compilerCommand.Source
 foreach ($compilerEnv in @("CC", "CXX", "CUDAHOSTCXX")) {
   Remove-Item "Env:$compilerEnv" -ErrorAction SilentlyContinue
 }

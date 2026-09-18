@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- clang-cl source builds no longer fail with "Could not find clang-cl.exe" when using the Visual Studio-bundled LLVM, which is never on PATH. The build now locates it via the Visual Studio installation and reports the real setup error if the build environment fails to load.
+
 ## [1.8.1] - 2026-09-06
 
 ### Fixed
