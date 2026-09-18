@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.8.3] - 2026-09-18
+
 ### Fixed
 - clang-cl source builds no longer skip the Visual Studio environment setup when clang-cl is found outside PATH, which had broken CUDA host-compiler detection. The setup is now only skipped inside an existing VS dev environment.
 
