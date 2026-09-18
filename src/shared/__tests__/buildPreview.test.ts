@@ -16,6 +16,7 @@ function baseOptions(overrides: Partial<BackendBuildOptions> = {}): BackendBuild
     serverOnly: true,
     compiler: 'cl',
     extraFlags: [],
+    cpuAvx512Bundle: false,
     ...overrides
   }
 }
@@ -99,6 +100,21 @@ describe('previewSourceBuildCommands', () => {
     }))
     expect(preview.configureCommand).toContain('-DCMAKE_C_COMPILER=<clang-cl>')
     expect(preview.configureCommand).not.toContain('CUDA_HOST_COMPILER')
+  })
+
+  it('appends the AVX512 bundle before manual extra flags', () => {
+    const preview = previewSourceBuildCommands('b10819', baseOptions({
+      cpuAvx512Bundle: true,
+      extraFlags: ['-DGGML_CUDA_FA_ALL_QUANTS=OFF']
+    }))
+    const bundle = '-DGGML_NATIVE=OFF -DGGML_AVX512=ON -DGGML_AVX512_BF16=ON -DGGML_AVX512_VNNI=ON -DGGML_AVX512_VBMI=ON'
+    expect(preview.configureCommand).toContain(`${bundle} -DGGML_CUDA_FA_ALL_QUANTS=OFF`)
+  })
+
+  it('omits bundle flags when the bundle is off', () => {
+    const preview = previewSourceBuildCommands('b10819', baseOptions())
+    expect(preview.configureCommand).not.toContain('GGML_AVX512')
+    expect(preview.configureCommand).not.toContain('GGML_NATIVE')
   })
 })
 

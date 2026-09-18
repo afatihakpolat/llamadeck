@@ -96,7 +96,8 @@ describe('BackendSourceBuildOptionsSchema', () => {
       faAllQuants: true,
       serverOnly: true,
       compiler: 'cl',
-      extraFlags: []
+      extraFlags: [],
+      cpuAvx512Bundle: false
     })).not.toThrow()
   })
 
@@ -110,7 +111,8 @@ describe('BackendSourceBuildOptionsSchema', () => {
       faAllQuants: false,
       serverOnly: false,
       compiler: 'cl',
-      extraFlags: []
+      extraFlags: [],
+      cpuAvx512Bundle: false
     })).not.toThrow()
   })
 
@@ -124,7 +126,8 @@ describe('BackendSourceBuildOptionsSchema', () => {
       faAllQuants: false,
       serverOnly: true,
       compiler: 'cl',
-      extraFlags: []
+      extraFlags: [],
+      cpuAvx512Bundle: false
     })).toThrow()
   })
 
@@ -138,7 +141,8 @@ describe('BackendSourceBuildOptionsSchema', () => {
       faAllQuants: false,
       serverOnly: true,
       compiler: 'cl',
-      extraFlags: []
+      extraFlags: [],
+      cpuAvx512Bundle: false
     })).toThrow()
   })
 
@@ -153,6 +157,7 @@ describe('BackendSourceBuildOptionsSchema', () => {
       serverOnly: true,
       compiler: 'cl',
       extraFlags: [],
+      cpuAvx512Bundle: false,
       extra: 'no'
     })).toThrow()
   })
@@ -167,7 +172,8 @@ describe('BackendSourceBuildOptionsSchema', () => {
       faAllQuants: true,
       serverOnly: 'yes',
       compiler: 'cl',
-      extraFlags: []
+      extraFlags: [],
+      cpuAvx512Bundle: false
     })).toThrow()
   })
 
@@ -180,7 +186,8 @@ describe('BackendSourceBuildOptionsSchema', () => {
       cudaArch: 'native',
       faAllQuants: true,
       compiler: 'cl',
-      extraFlags: []
+      extraFlags: [],
+      cpuAvx512Bundle: false
     })).toThrow()
   })
 
@@ -194,7 +201,8 @@ describe('BackendSourceBuildOptionsSchema', () => {
       faAllQuants: true,
       serverOnly: true,
       compiler: 'clang-cl',
-      extraFlags: ['-DGGML_NATIVE=OFF', '-DGGML_AVX512=ON', '-DGGML_AVX512_BF16=ON', '-DGGML_AVX512_VNNI=ON', '-DGGML_AVX512_VBMI=ON']
+      extraFlags: ['-DGGML_NATIVE=OFF', '-DGGML_AVX512=ON', '-DGGML_AVX512_BF16=ON', '-DGGML_AVX512_VNNI=ON', '-DGGML_AVX512_VBMI=ON'],
+      cpuAvx512Bundle: false
     })).not.toThrow()
   })
 
@@ -208,7 +216,8 @@ describe('BackendSourceBuildOptionsSchema', () => {
       faAllQuants: true,
       serverOnly: true,
       compiler: 'gcc',
-      extraFlags: []
+      extraFlags: [],
+      cpuAvx512Bundle: false
     })).toThrow()
   })
 
@@ -223,7 +232,8 @@ describe('BackendSourceBuildOptionsSchema', () => {
         faAllQuants: true,
         serverOnly: true,
         compiler: 'cl',
-        extraFlags
+        extraFlags,
+        cpuAvx512Bundle: false
       })).toThrow()
     }
   })
@@ -238,7 +248,38 @@ describe('BackendSourceBuildOptionsSchema', () => {
       faAllQuants: true,
       serverOnly: true,
       compiler: 'cl',
-      extraFlags: Array.from({ length: 33 }, (_, i) => `-DFLAG${i}=ON`)
+      extraFlags: Array.from({ length: 33 }, (_, i) => `-DFLAG${i}=ON`),
+      cpuAvx512Bundle: false
+    })).toThrow()
+  })
+
+  it('accepts the AVX512 CPU bundle flag', () => {
+    expect(() => BackendSourceBuildOptionsSchema.parse({
+      accelerator: 'cuda',
+      enableRpc: false,
+      buildMode: 'parallel',
+      buildType: 'Release',
+      cudaArch: 'native',
+      faAllQuants: true,
+      serverOnly: true,
+      compiler: 'clang-cl',
+      extraFlags: [],
+      cpuAvx512Bundle: true
+    })).not.toThrow()
+  })
+
+  it('rejects a non-boolean cpuAvx512Bundle', () => {
+    expect(() => BackendSourceBuildOptionsSchema.parse({
+      accelerator: 'cuda',
+      enableRpc: false,
+      buildMode: 'parallel',
+      buildType: 'Release',
+      cudaArch: 'native',
+      faAllQuants: true,
+      serverOnly: true,
+      compiler: 'cl',
+      extraFlags: [],
+      cpuAvx512Bundle: 'yes'
     })).toThrow()
   })
 })

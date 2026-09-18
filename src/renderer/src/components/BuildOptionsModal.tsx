@@ -11,7 +11,7 @@ import type {
   BackendCompiler,
   BackendVersion
 } from '../../../shared/types'
-import { parseExtraCmakeFlags, previewSourceBuildCommands, resolveBuildFlavor } from '../../../shared/types'
+import { CPU_AVX512_BUNDLE_FLAGS, parseExtraCmakeFlags, previewSourceBuildCommands, resolveBuildFlavor } from '../../../shared/types'
 
 const ALL_FLAVORS: BackendBuildFlavor[] = [
   'cuda', 'cpu', 'vulkan', 'cuda-rpc', 'cpu-rpc', 'vulkan-rpc'
@@ -68,6 +68,7 @@ export default function BuildOptionsModal() {
   const [serverOnly, setServerOnly] = useState(true)
   const [compiler, setCompiler] = useState<BackendCompiler>('cl')
   const [extraFlagsText, setExtraFlagsText] = useState('')
+  const [cpuAvx512Bundle, setCpuAvx512Bundle] = useState(false)
   const [showPreview, setShowPreview] = useState(true)
   const [building, setBuilding] = useState(false)
 
@@ -83,8 +84,9 @@ export default function BuildOptionsModal() {
     faAllQuants: accelerator === 'cuda' && faAllQuants,
     serverOnly,
     compiler,
-    extraFlags: parsedExtraFlags.flags
-  }), [accelerator, enableRpc, buildMode, buildType, cudaArch, faAllQuants, serverOnly, compiler, parsedExtraFlags])
+    extraFlags: parsedExtraFlags.flags,
+    cpuAvx512Bundle
+  }), [accelerator, enableRpc, buildMode, buildType, cudaArch, faAllQuants, serverOnly, compiler, parsedExtraFlags, cpuAvx512Bundle])
   const preview = useMemo(
     () => (tag ? previewSourceBuildCommands(tag, effectiveOptions) : null),
     [tag, effectiveOptions]
@@ -110,6 +112,7 @@ export default function BuildOptionsModal() {
     setServerOnly(true)
     setCompiler('cl')
     setExtraFlagsText('')
+    setCpuAvx512Bundle(false)
     setShowPreview(true)
     setBuilding(false)
   }, [showBuildOptions])
@@ -374,6 +377,21 @@ export default function BuildOptionsModal() {
                   />
                   <div className="form-hint">
                     Leave as <code>native</code> for auto-detection. Use a comma-separated list (e.g. <code>75;86;89</code>) to target specific GPUs.
+                  </div>
+                </div>
+                <div className="form-group">
+                  <label className="form-label">CPU performance preset</label>
+                  <label className="checkbox-row" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <input
+                      type="checkbox"
+                      checked={cpuAvx512Bundle}
+                      onChange={(event) => setCpuAvx512Bundle(event.target.checked)}
+                    />
+                    <span>AVX512 bundle (fast CPU mmproj)</span>
+                  </label>
+                  <div className="form-hint">
+                    Appends <code>{CPU_AVX512_BUNDLE_FLAGS.join(' ')}</code> before your flags below,
+                    so manual entries win on conflicts. Needs a CPU with AVX512.
                   </div>
                 </div>
                 <div className="form-group">

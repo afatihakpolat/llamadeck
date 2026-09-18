@@ -58,7 +58,8 @@ export const BackendSourceBuildOptionsSchema = z.object({
   compiler: z.enum(['cl', 'clang-cl']),
   extraFlags: z.array(
     z.string().regex(EXTRA_CMAKE_FLAG_PATTERN, 'Extra flags must look like -DNAME or -DNAME=VALUE.').max(MAX_EXTRA_CMAKE_FLAG_LENGTH)
-  ).max(MAX_EXTRA_CMAKE_FLAGS)
+  ).max(MAX_EXTRA_CMAKE_FLAGS),
+  cpuAvx512Bundle: z.boolean()
 }).strict()
 export type BackendSourceBuildOptions = z.infer<typeof BackendSourceBuildOptionsSchema>
 

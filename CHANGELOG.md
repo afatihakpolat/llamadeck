@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - clang-cl source builds no longer fail with "Could not find clang-cl.exe" when using the Visual Studio-bundled LLVM, which is never on PATH. The build now locates it via the Visual Studio installation and reports the real setup error if the build environment fails to load.
+- The Build Options popup has a one-click AVX512 CPU performance bundle (NATIVE=OFF plus AVX512 extensions) for fast CPU mmproj, applied before manual extra flags so they win on conflicts.
 
 ## [1.8.1] - 2026-09-06
 

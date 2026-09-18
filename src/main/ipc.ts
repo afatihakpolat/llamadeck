@@ -33,7 +33,7 @@ import {
   type UsagePersistedSession
 } from './usageSessions'
 import { UsageSessionWriter } from './usageSessionWriter'
-import { resolveBuildFlavor } from '../shared/types'
+import { CPU_AVX512_BUNDLE_FLAGS, resolveBuildFlavor } from '../shared/types'
 import type {
   AppWindowBehaviorSettings,
   BackendVersion,
@@ -3214,7 +3214,8 @@ export function registerIpcHandlers(): void {
       faAllQuants = opts.faAllQuants
       serverOnly = opts.serverOnly
       compiler = opts.compiler
-      extraFlags = opts.extraFlags
+      // Bundle first so manual extra flags override it on conflicts.
+      extraFlags = [...(opts.cpuAvx512Bundle ? CPU_AVX512_BUNDLE_FLAGS : []), ...opts.extraFlags]
       const trimmedArch = opts.cudaArch.trim()
       const allowedArch = /^[A-Za-z0-9_.;+\- ]*$/.test(trimmedArch)
       cudaArch = accelerator === 'cuda' && trimmedArch && allowedArch

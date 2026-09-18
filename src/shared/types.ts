@@ -27,7 +27,21 @@ export interface BackendBuildOptions {
   compiler: BackendCompiler
   // Additional -D cmake flags, one per entry, appended after generated flags.
   extraFlags: string[]
+  // One-click preset for fast CPU inference (e.g. mmproj): appends
+  // CPU_AVX512_BUNDLE_FLAGS before extraFlags so manual entries win.
+  cpuAvx512Bundle: boolean
 }
+
+// Preset cmake flags for CPUs with AVX512: portable baseline (NATIVE=OFF)
+// plus explicit AVX512 extensions. Single source of truth used by the
+// modal hint, the command preview, and the main-process IPC handler.
+export const CPU_AVX512_BUNDLE_FLAGS: readonly string[] = [
+  '-DGGML_NATIVE=OFF',
+  '-DGGML_AVX512=ON',
+  '-DGGML_AVX512_BF16=ON',
+  '-DGGML_AVX512_VNNI=ON',
+  '-DGGML_AVX512_VBMI=ON'
+]
 
 // Allowed shape of a single extra cmake flag: -DNAME or -DNAME=VALUE.
 // The charset excludes spaces, quotes, and shell metacharacters so flags
@@ -113,6 +127,9 @@ export function previewSourceBuildCommands(tagName: string, options: BackendBuil
     configureArgs.push('-DGGML_RPC=ON')
   }
 
+  if (options.cpuAvx512Bundle) {
+    configureArgs.push(...CPU_AVX512_BUNDLE_FLAGS)
+  }
   configureArgs.push(...options.extraFlags)
 
   const buildArgs = ['cmake', '--build', buildFolder, '--config', options.buildType]
