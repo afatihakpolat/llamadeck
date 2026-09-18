@@ -294,7 +294,15 @@ if ($Compiler -notin @("cl", "clang-cl")) {
 
 $compilerExe = if ($Compiler -eq "clang-cl") { "clang-cl.exe" } else { "cl.exe" }
 $compilerPath = Get-CompilerPath $compilerExe
-if (-not $compilerPath) {
+$needsVsShell = -not $compilerPath
+if ((-not $needsVsShell) -and ($Compiler -eq "clang-cl")) {
+  # clang-cl still needs the VS environment (INCLUDE/LIB) and, for CUDA
+  # builds, MSVC cl.exe as the nvcc host compiler. Skip the import only
+  # when already inside a VS dev environment.
+  $inVsEnv = Get-Command cl.exe -ErrorAction SilentlyContinue
+  if ((-not $inVsEnv) -or (-not $env:INCLUDE)) { $needsVsShell = $true }
+}
+if ($needsVsShell) {
   Write-Phase "environment" 5 "Loading Visual Studio build environment"
   Import-VsDevShell
   $compilerPath = Get-CompilerPath $compilerExe
