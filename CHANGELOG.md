@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.8.4] - 2026-10-09
+
+### Added
+- LiteLLM can now listen on network interfaces, including `0.0.0.0` for access from other devices, while keeping loopback as the default.
+
 ## [1.8.3] - 2026-09-18
 
 ### Fixed

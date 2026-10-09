@@ -74,6 +74,7 @@ import { generateCommandsSchema } from './commandsSchemaGenerator'
 import { readBackendBuildMode, writeBackendBuildMetadata } from './backendBuildMetadata'
 import { hasActiveWork } from './activeWork'
 import { saveLiteLlmConfigFile } from './liteLlmConfigFile'
+import { buildManagedLiteLlmBaseUrl, normalizeLiteLlmHost } from '../shared/liteLlmEndpoint'
 import { validateLiteLlmConfig, type LiteLlmConfigValidation } from '../shared/liteLlmConfig'
 import {
   LiteLlmCliLogBuffer,
@@ -573,19 +574,6 @@ function normalizeLiteLlmBaseUrl(value: string): string {
   return trimmedValue.replace(/\/+$/, '')
 }
 
-function normalizeLiteLlmHost(value: string): string {
-  const trimmedValue = value.trim()
-  if (!trimmedValue) {
-    throw new Error('LiteLLM host is required')
-  }
-
-  if (!['127.0.0.1', 'localhost'].includes(trimmedValue)) {
-    throw new Error('LiteLLM host must stay on loopback: use 127.0.0.1 or localhost.')
-  }
-
-  return '127.0.0.1'
-}
-
 function normalizeLiteLlmPort(value: number): number {
   if (!Number.isInteger(value) || value < 1 || value > 65535) {
     throw new Error('LiteLLM port must be between 1 and 65535')
@@ -600,12 +588,8 @@ function normalizeLiteLlmLogLevel(value: LiteLlmLogLevel): LiteLlmLogLevel {
     : 'info'
 }
 
-function buildManagedLiteLlmBaseUrl(settings: Pick<LiteLlmManagerStoredSettings, 'host' | 'port'>): string {
-  return `http://${settings.host}:${settings.port}`
-}
-
 function getManagedLiteLlmBaseUrl(): string {
-  return buildManagedLiteLlmBaseUrl({ host: '127.0.0.1', port: liteLlmManagerSettings.port })
+  return buildManagedLiteLlmBaseUrl(liteLlmManagerSettings)
 }
 
 function loadLiteLlmStoredSettings(): LiteLlmStoredSettings {

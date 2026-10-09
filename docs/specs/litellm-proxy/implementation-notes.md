@@ -8,7 +8,7 @@
 - Runtime host, port, and log-level edits are rejected while the proxy is running to avoid mismatching the saved local URL and the live process.
 - Managed proxy startup waits for a LiteLLM-shaped `/v1/models` response before reporting success.
 - The default generated LiteLLM config intentionally omits a master key so a fresh local install works immediately without hidden authorization coupling.
-- Hexllama always talks to the managed LiteLLM proxy through loopback and normalizes the saved host to `127.0.0.1`.
+- The managed LiteLLM host defaults to `127.0.0.1` and accepts IP addresses or hostnames, including `0.0.0.0` for all IPv4 interfaces and `::` for all IPv6 interfaces. The selected host is saved and passed to LiteLLM's `--host` option. LlamaDeck connects through `127.0.0.1` for `0.0.0.0`, through `::1` for `::`, and through the selected host for a specific interface. `localhost` retains its existing normalization to `127.0.0.1`.
 - The template editor is now local-only; LiteLLM is served from its own page rather than represented as a template provider.
 - Template load/save/import now normalize template JSON to strip removed LiteLLM-only fields so older exports cannot resurrect the deleted provider path.
 - Cards without a valid local model path now surface missing configuration instead of appearing ready to launch.

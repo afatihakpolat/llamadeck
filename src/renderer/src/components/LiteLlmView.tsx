@@ -2,16 +2,13 @@ import React, { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import { RefreshCw, Loader2, Download, Upload, Play, Square, Save, Terminal, FileText, Package, AlertCircle, Braces, CheckCircle2, RotateCcw } from 'lucide-react'
 import type { LiteLlmLogLevel, LiteLlmManagerSnapshot, LiteLlmModelEntry } from '../../../shared/types'
 import type { LiteLlmConfigValidation } from '../../../shared/liteLlmConfig'
+import { buildManagedLiteLlmBaseUrl } from '../../../shared/liteLlmEndpoint'
 
 const LiteLlmConfigEditor = lazy(() => import('./LiteLlmConfigEditor'))
 const LITELLM_EDITOR_IDLE_TIMEOUT_MS = 500
 
 type BusyAction = 'refresh' | 'save-runtime' | 'save-config' | 'reload-config' | 'install' | 'update' | 'start' | 'stop' | 'test' | 'models' | null
 type StatusMessage = { tone: 'muted' | 'success' | 'danger'; text: string }
-
-function buildLocalBaseUrl(port: number): string {
-  return `http://127.0.0.1:${port}`
-}
 
 export default function LiteLlmView() {
   const [manager, setManager] = useState<LiteLlmManagerSnapshot | null>(null)
@@ -245,8 +242,13 @@ export default function LiteLlmView() {
     }
   }
 
-  const localBaseUrl = buildLocalBaseUrl(port)
-  const activeLocalBaseUrl = buildLocalBaseUrl(manager?.settings.port ?? port)
+  let localBaseUrl: string | null = null
+  try {
+    localBaseUrl = buildManagedLiteLlmBaseUrl({ host, port })
+  } catch {
+    // An incomplete host draft is validated when the runtime settings are saved.
+  }
+  const activeLocalBaseUrl = manager ? buildManagedLiteLlmBaseUrl(manager.settings) : null
   const install = manager?.install
   const currentConfigValidation = configValidation?.source === configText ? configValidation.result : null
   const configValidationPending = currentConfigValidation === null
@@ -291,7 +293,7 @@ export default function LiteLlmView() {
                 onChange={(event) => { setHost(event.target.value); setManagerDraftDirty(true); managerDraftDirtyRef.current = true }}
                 placeholder="127.0.0.1"
               />
-              <div className="form-hint">Loopback only. Use `127.0.0.1` or `localhost`.</div>
+              <div className="form-hint">Use 127.0.0.1 for this computer, 0.0.0.0 (IPv4) or :: (IPv6) for all interfaces, or a local IP address or hostname. Other devices connect using this computer's network IP and port.</div>
             </div>
             <div className="form-group">
               <label className="form-label">Port</label>
@@ -330,8 +332,8 @@ export default function LiteLlmView() {
             </div>
           </div>
           <div className="settings-row-sub mono">Config file: {manager?.settings.configPath || 'Loading...'}</div>
-          <div className="settings-row-sub">LlamaDeck is currently using the saved local proxy URL {activeLocalBaseUrl}</div>
-          {managerDraftDirty && localBaseUrl !== activeLocalBaseUrl && (
+          <div className="settings-row-sub">LlamaDeck is currently using the saved local proxy URL {activeLocalBaseUrl ?? 'Loading...'}</div>
+          {managerDraftDirty && localBaseUrl && localBaseUrl !== activeLocalBaseUrl && (
             <div className="settings-row-sub">Unsaved runtime draft would switch the local proxy URL to {localBaseUrl}</div>
           )}
           <div className="flex gap-2" style={{ flexWrap: 'wrap' }}>
